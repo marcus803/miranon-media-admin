@@ -135,7 +135,20 @@ export function AnmalansBetalningar({
               är dyrare. Se `RegistreraYta` § `REGISTRERA_TRIGGER_ID` för
               kontraktet och för varför inkorgens/panelens instanser lämnar
               propen utelämnad. */}
-          {rad !== null && <RegistreraYta rad={rad} triggerId={REGISTRERA_TRIGGER_ID} />}
+          {/* [TASK-402.2 AC #4] `etikett="Registrera inbetalning"` — ORDLISTA
+              § Inbetalning, formbyte 3. Anmälans betalningsyta är en av de
+              TVÅ ytor kortet pekar ut (den andra är personkortet,
+              `PersonBetalningar.tsx`); inkorgens EGEN knapp
+              (`BetalningsInkorg.tsx`) och panelens (`PanelBetalningar.tsx`,
+              Åtgärds-sidan) är UTANFÖR detta korts scope och behåller
+              `RegistreraYta`s default-etikett — se PR-kroppen § Fynd. */}
+          {rad !== null && (
+            <RegistreraYta
+              rad={rad}
+              etikett="Registrera inbetalning"
+              triggerId={REGISTRERA_TRIGGER_ID}
+            />
+          )}
           {/* [TASK-368.3] `triggerId` sätts BARA här: avbokningssteget längre
               ned på anmälans sida skickar Lotta hit i ett tryck när det finns
               inbetalningar att betala tillbaka. Se `AterbetalningsYta` §

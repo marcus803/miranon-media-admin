@@ -93,13 +93,27 @@ export type RegistreringsUtfall = {
   kvittens: string;
 };
 
-type Props = {
+/**
+ * [TASK-402.2 AC #3] De ifyllda fältens RÅVÄRDEN i `redigera`-läget — INGEN
+ * server har validerat dem ännu (den skarpa registreringen sker senare, i
+ * bulk, se `lage`s eget docblock). Skiljer sig från `RegistreringsUtfall`
+ * på just den punkten: det finns inget `inbetalningId` eftersom ingenting
+ * registrerats.
+ */
+export type RedigeringsVarden = {
+  belopp: string;
+  betalsatt: Betalsatt;
+  datum: string;
+  notering: string;
+  medKvitto: boolean;
+};
+
+type PropsGemensamt = {
   rad: InkorgsRad;
   idag: string;
   betalsatt: Betalsatt;
   onBetalsatt: (b: Betalsatt) => void;
   onAvbryt: () => void;
-  onKlar: (utfall: RegistreringsUtfall) => void;
   /**
    * Hårlinjen mot innehållet ovanför. Default PÅ — den bär avgränsningen i de
    * konsumenter där formuläret fälls ut under något annat utan egen ram
@@ -112,6 +126,46 @@ type Props = {
    */
   visaAvdelare?: boolean;
 };
+
+/**
+ * [TASK-402.2 AC #3] Formulärets LÄGE, som en DISKRIMINERAD UNION i stället
+ * för två oberoende optionella props — TypeScript kan då tvinga fram rätt
+ * callback vid call site i stället för att lita på en runtime-vakt i
+ * `spara()`.
+ *
+ * `'registrera'` (default, `lage` utelämnad) är inkorgens EGNA väg, HELT
+ * OFÖRÄNDRAD: submit anropar den skarpa registrerings-mutationen
+ * (`useRegistreraInbetalning`) och knapparna är "Registrera" / "Registrera
+ * och skicka" / "Avbryt"; `onKlar` är obligatorisk.
+ *
+ * `'redigera'` är DET DELADE LÄGET bekräftelsestegets radformulär
+ * återanvänder (TASK-402.3, facit `tasks/sessions/bilagor/
+ * s121-bekraftelsesteget-konvergens/facit.json` § `RadFormular` — se även
+ * DEV-konsumenten `/dev/registrera-form-redigera`): samma fält i samma
+ * ordning, samma utfallsruta, samma fördröjning och autofokus — men INGET
+ * serveranrop görs här. Knapparna blir "Klar"/"Avbryt"; "Registrera och
+ * skicka" försvinner (facit har ingen tredje knapp i radformuläret —
+ * bulkstegets EGNA "Registrera och skicka N kvitton" äger den handlingen).
+ * `onRedigeringKlar` är obligatorisk, `onKlar` otillgänglig.
+ *
+ * "Avbryt" behöver ingen egen återställningslogik i NÅGOTDERA läget:
+ * konsumenten monterar formuläret villkorat (`{oppen && <RegistreraForm
+ * …/>}`, samma mönster `BetalningsradKort`/`RegistreraYta` redan bär), så en
+ * stängning avmonterar all lokal fältstate — nästa öppning startar om från
+ * `rad`/anroparens värden, alltså redan en fullständig återställning.
+ */
+type Props =
+  | (PropsGemensamt & {
+      lage?: 'registrera';
+      onKlar: (utfall: RegistreringsUtfall) => void;
+      onRedigeringKlar?: never;
+    })
+  | (PropsGemensamt & {
+      lage: 'redigera';
+      onKlar?: never;
+      /** Anropas när Lotta trycker Klar (submit eller Enter i beloppsfältet). */
+      onRedigeringKlar: (varden: RedigeringsVarden) => void;
+    });
 
 /**
  * [TASK-346.6 AC #3, PRD § Inkorgen och formuläret] Registreringsformuläret,
@@ -179,15 +233,16 @@ type Props = {
  * KLARTEXT i kvittensen i stället för att kvittera tyst — se `noteringsnot`.
  * Efter deployen är den grenen död kod som aldrig träffas.
  */
-export function RegistreraForm({
-  rad,
-  idag,
-  betalsatt,
-  onBetalsatt,
-  onAvbryt,
-  onKlar,
-  visaAvdelare = true,
-}: Props) {
+export function RegistreraForm(props: Props) {
+  /* [TASK-402.2] `lage`/`onKlar`/`onRedigeringKlar` LÄSES FRÅN `props`
+     DIREKT i `spara()` nedan, INTE ur destrukturerade lokala kopior — det är
+     det enda sättet TypeScript behåller den diskriminerade unionens
+     korrelation (property access på SAMMA objekt narrowar, en destrukturerad
+     kopia gör det inte). `lage` destruktureras ändå HÄR MED ETT DEFAULT-VÄRDE
+     för JSX-jämförelser (`lage === 'redigera'`), där bara STRÄNGEN jämförs —
+     ingen callback-typ är i spel där. */
+  const { rad, idag, betalsatt, onBetalsatt, onAvbryt, visaAvdelare = true } = props;
+  const lage = props.lage ?? 'registrera';
   /* ═══════════════════════════════════════════════════════════════════════
    * INGA SNABBVAL — FÄLTET ÄR FÖRIFYLLT MED RESTEN (Marcus dom 2026-09-01)
    * ═══════════════════════════════════════════════════════════════════════
@@ -474,6 +529,19 @@ export function RegistreraForm({
 
   async function spara(skickaNu: boolean) {
     if (!kanSpara || talet === null) return;
+
+    /* [TASK-402.2 AC #3] `redigera`-LÄGET GÖR INGET SERVERANROP. Klar lämnar
+       bara de ifyllda RÅVÄRDENA till anroparen — den skarpa registreringen
+       sker senare, i bulk, via inkorgens BEFINTLIGA registreringsväg (samma
+       `useRegistreraInbetalning`, ett anrop per rad — PRD § "Körningen är
+       ett steg"). `skickaNu` är meningslös här (ingen "Registrera och
+       skicka"-knapp finns i detta läge, se `lage`s docblock) och ignoreras
+       med avsikt. */
+    if (props.lage === 'redigera') {
+      props.onRedigeringKlar({ belopp, betalsatt, datum, notering, medKvitto });
+      return;
+    }
+
     /* TOM NOTERING SKICKAS INTE ALLS. Servern gör visserligen `''` → NULL
        (`lasNotering`), men en utelämnad nyckel gör payloaden IDENTISK med den
        före fältet fanns — vilket är exakt vad "bakåtkompatibelt" ska betyda,
@@ -530,7 +598,7 @@ export function RegistreraForm({
         ? ' Noteringen sparades INTE. Den delen är inte utrullad än.'
         : '';
 
-    onKlar({
+    props.onKlar({
       inbetalningId: resultat.inbetalning.id,
       namn: rad.namn,
       belopp: sparat,
@@ -548,6 +616,10 @@ export function RegistreraForm({
 
   // ⌘/Ctrl+Enter = registrera OCH skicka (AC #3, PRD berättelse 9). Fångas på
   // formuläret och inte per fält: genvägen ska fungera var markören än står.
+  // [TASK-402.2] I `redigera`-läget FINNS INGEN "och skicka"-knapp (se
+  // `lage`s docblock) — `spara(true)` grenar till `onRedigeringKlar` precis
+  // som `spara(false)` gör, så genvägen blir en ofarlig synonym till Klar i
+  // stället för att stängas av helt.
   //
   // ESC = AVBRYT, samma väg ut som knappen (granskningsfynd runda 1). Ett
   // formulär som öppnas på plats och tar fokus MÅSTE gå att lämna med
@@ -925,17 +997,28 @@ VIKT UPP, INTE STORLEK UPP (Marcus 2026-09-01: *"Borde inte
           nära knappraden som fälten låg varandra, och lästes som en del av
           handlingszonen. */}
       <div className="flex flex-wrap gap-2 pt-2">
-        <Button type="submit" isDisabled={!kanSpara} isLoading={registrera.isPending}>
-          Registrera
-        </Button>
+        {/* [TASK-402.2 AC #3] `redigera`-LÄGET: KNAPPEN HETER "Klar" OCH
+            "Registrera och skicka" FINNS INTE — facit
+            (`s121-bekraftelsesteget-konvergens/facit.json` § `RadFormular`)
+            bär bara Klar/Avbryt; `isLoading` läser aldrig `registrera` här
+            eftersom den mutationen aldrig anropas i detta läge (se `spara`). */}
         <Button
-          intent="secondary"
-          emphasis="outline"
+          type="submit"
           isDisabled={!kanSpara}
-          onPress={() => void spara(true)}
+          isLoading={lage === 'registrera' && registrera.isPending}
         >
-          Registrera och skicka
+          {lage === 'redigera' ? 'Klar' : 'Registrera'}
         </Button>
+        {lage === 'registrera' && (
+          <Button
+            intent="secondary"
+            emphasis="outline"
+            isDisabled={!kanSpara}
+            onPress={() => void spara(true)}
+          >
+            Registrera och skicka
+          </Button>
+        )}
         <Button intent="ghost" onPress={onAvbryt}>
           Avbryt
         </Button>

@@ -17,11 +17,20 @@ const REGION = 'Registrerat nu';
  *
  * [AMENDERAD TASK-393, Marcus fynd S121] Den synliga texten OCH aria-label
  * bar tidigare ordet "alla" ("Förhandsgranska alla N kvitton") — knappen
- * lyder nu ALLTID "Förhandsgranska" med N i ett upphöjt räknarchip, samma
+ * lydde en tid "Förhandsgranska" med N i ett upphöjt räknarchip, samma
  * form som ett-kvitto-knappen och `FilterRad`s hörn-badge
- * (`RaknarChip`-primitiven). Denna svit är UPPDATERAD att asertera den nya
- * formen, inte omskriven — beteendet (fönster, kombinerat dokument, tak 30,
- * oberoende av radknapparna) som beskrivs nedan är HELT ORÖRT av TASK-393.
+ * (`RaknarChip`-primitiven).
+ *
+ * [AMENDERAD IGEN, TASK-402.2, Marcus fynd S121 facit-lås] Chippet är RIVET:
+ * den synliga texten är nu ALLTID bara "Förhandsgranska" (ordagrant, utan
+ * något tal) — antalet bärs UTESLUTANDE av `aria-label` ("Förhandsgranska N
+ * kvitton"/"Förhandsgranska N kvitto"), som redan hade räkneformen och därför
+ * är OFÖRÄNDRAD av denna ändring. `RaknarChip`-primitiven SJÄLV är orörd
+ * (TASK-402.2 AC #5) — det är bara DENNA knapps bruk av den som försvinner.
+ * Denna svit är UPPDATERAD att asertera den chip-lösa formen, inte omskriven
+ * — beteendet (fönster, kombinerat dokument, tak 30, oberoende av
+ * radknapparna) som beskrivs nedan är HELT ORÖRT av vare sig TASK-393 eller
+ * TASK-402.2.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * VARFÖR STAGING-E2E OCH INTE ACCEPTANCE-KLASSEN (samma ADR-086-divergens
@@ -41,12 +50,13 @@ const REGION = 'Registrerat nu';
  * ═══════════════════════════════════════════════════════════════════════════
  * VAD SVITEN BEVISAR
  * ═══════════════════════════════════════════════════════════════════════════
- * A. AC #1 (TASK-393): knappen lyder ALLTID "Förhandsgranska" + räknarchip,
- *    för N = 1 OCH N ≥ 2 — ordet "alla" finns varken i synlig text eller
- *    aria-label, i NÅGOT läge. Vid N ≥ 2 finns den kombinerade knappen
- *    BREDVID "Skicka N kvitton"; vid N = 1 finns bara den ensamma knappen
- *    (samma ett-kvitto-form som TASK-353, nu med samma etikett-form som
- *    N ≥ 2-fallet).
+ * A. AC #1 (TASK-393, chippet rivet TASK-402.2): knappen lyder ALLTID bara
+ *    "Förhandsgranska" (synlig text, utan tal), för N = 1 OCH N ≥ 2 — ordet
+ *    "alla" finns varken i synlig text eller aria-label, i NÅGOT läge, och
+ *    aria-label bär räkneformen precis som förut. Vid N ≥ 2 finns den
+ *    kombinerade knappen BREDVID "Skicka N kvitton"; vid N = 1 finns bara
+ *    den ensamma knappen (samma ett-kvitto-form som TASK-353, nu med samma
+ *    etikett-form som N ≥ 2-fallet).
  * B. AC #2/#3: klicket öppnar fönstret SYNKRONT med laddningssida; medan
  *    "alla"-anropet hänger är VARJE radknapp ÄNDÅ enabled (S116 beslut 5,
  *    "Oberoende") — och tvärtom: en radknapps eget anrop blockerar inte
@@ -283,7 +293,9 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
 
     const allaKnapp = page.getByRole('button', { name: 'Förhandsgranska 3 kvitton' });
     await expect(allaKnapp).toBeVisible();
-    await expect(allaKnapp).toHaveText('Förhandsgranska 3');
+    // [TASK-402.2] Chippet är rivet — den synliga texten bär inget tal
+    // längre, bara `aria-label` (redan bevisat via `getByRole`s `name` ovan).
+    await expect(allaKnapp).toHaveText('Förhandsgranska');
 
     // Bredvid "Skicka 3 kvitton" — samma knapprad.
     await expect(page.getByRole('button', { name: 'Skicka 3 kvitton' })).toBeVisible();
@@ -300,7 +312,7 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
     ).toBeVisible();
   });
 
-  test('AC #1/#4 (TASK-393): N = 1 visar EN "Förhandsgranska"-knapp med räknarchip "1", singular aria-label', async ({
+  test('AC #1/#4 (TASK-393, chipplöst sedan TASK-402.2): N = 1 visar EN "Förhandsgranska"-knapp, singular aria-label', async ({
     page,
   }) => {
     await mockaGrund(page, 1);
@@ -315,12 +327,12 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
     await expect(page.getByRole('button', { name: /^Förhandsgranska/ })).toHaveCount(1);
 
     // AC #4: singular ("kvitto", inte "kvitton") — det tillgängliga namnet
-    // är nu räknarformen, INTE längre personnamnet
-    // ("Förhandsgranska kvittot till {namn}"), se `BetalningsInkorg.tsx`s
-    // AMENDERAD TASK-393-kommentar vid ensamKandidat-knappen för skälet.
+    // är räknarformen, INTE personnamnet ("Förhandsgranska kvittot till
+    // {namn}"), se `RegistreratNuBlock.tsx`s `ensamKandidat`-knapp för
+    // skälet. [TASK-402.2] Den synliga texten bär inget tal (chippet rivet).
     const knapp = page.getByRole('button', { name: 'Förhandsgranska 1 kvitto' });
     await expect(knapp).toBeVisible();
-    await expect(knapp).toHaveText('Förhandsgranska 1');
+    await expect(knapp).toHaveText('Förhandsgranska');
 
     await expect(page.getByRole('button', { name: 'Skicka 1 kvitto' })).toBeVisible();
   });
@@ -384,7 +396,8 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
     });
     await expect.poll(() => fonsterAlla.url()).toBe(PREVIEW_URL_ALLA);
     await expect(allaKnapp).toBeEnabled();
-    await expect(allaKnapp).toHaveText('Förhandsgranska 3');
+    // [TASK-402.2] Chippet är rivet — texten bär inget tal.
+    await expect(allaKnapp).toHaveText('Förhandsgranska');
   });
 
   test('AC #2: ett STÄNGT fönster hanteras UTAN FEL när svaret kommer sent', async ({
@@ -537,14 +550,14 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
     await expect.poll(() => fonsterAlla.url()).toBe(PREVIEW_URL_ALLA);
   });
 
-  test('AC #4 (TASK-393): axe 0 fel på granskningsblocket med räknarchippet synligt, N ≥ 2', async ({
+  test('AC #4 (TASK-393): axe 0 fel på granskningsblocket, kombinerade knappen synlig, N ≥ 2', async ({
     page,
   }) => {
-    // N = 3: den kombinerade knappens `RaknarChip` visar "3" — samma
-    // house-mönster som `betalningar-inkorg-utskicksflode.staging.test.ts`s
-    // "axe: 0 fel på granskningsblocket"-test (TASK-362), scopat till SAMMA
-    // region. Ett-kvitto-fallets chip ("1") täcks redan av DET testet
-    // (`enSamKo`-läget bär numera också ett `RaknarChip`).
+    // N = 3: den kombinerade knappen visar "Förhandsgranska" (utan tal sedan
+    // TASK-402.2, `aria-label` bär räkneformen) — samma house-mönster som
+    // `betalningar-inkorg-utskicksflode.staging.test.ts`s "axe: 0 fel på
+    // granskningsblocket"-test (TASK-362), scopat till SAMMA region.
+    // Ett-kvitto-fallet täcks redan av DET testet.
     await mockaGrund(page, 3);
     await page.goto('/mer/betalningar');
 
@@ -588,9 +601,9 @@ test.describe('TASK-370.4/TASK-393 — den kombinerade förhandsgranskningen i b
    * samma `section[aria-label="${REGION}"]`-scope, och verifiera att
    * `AxeBuilder` faktiskt rapporterar den. `aria-label` ensam räcker inte —
    * ARIA:s namnberäkning faller tillbaka till knappens textinnehåll
-   * ("Förhandsgranska", chippets siffra är `aria-hidden`) om bara
-   * attributet tas bort. Både attributet OCH allt barninnehåll måste bort
-   * för att knappen genuint ska sakna ett tillgängligt namn.
+   * ("Förhandsgranska", numera ren text sedan TASK-402.2 rev räknarchippet)
+   * om bara attributet tas bort. Både attributet OCH allt barninnehåll måste
+   * bort för att knappen genuint ska sakna ett tillgängligt namn.
    */
   test('AC #4 (TASK-393) NEGATIV KONTROLL: axe-scopet FÄLLER på en verklig button-name-överträdelse', async ({
     page,

@@ -126,7 +126,10 @@ export function PersonBetalningar({ person }: { person: PersonDetail }) {
                 {rad.forfallen ? ' · förfallen' : ''}
               </span>
             </div>
-            <RegistreraYta rad={rad} />
+            {/* [TASK-402.2 AC #4] `etikett="Registrera inbetalning"` —
+                personkortet är en av de TVÅ ytor kortet pekar ut, se
+                `AnmalansBetalningar.tsx`s motsvarande kommentar. */}
+            <RegistreraYta rad={rad} etikett="Registrera inbetalning" />
           </div>
         ))}
       </div>
