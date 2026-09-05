@@ -15,7 +15,7 @@ import type { OppenBetalning } from '@/domain/schemas';
  * Raderna är litteraler i `OppenBetalning`-form, samma kontrakt som
  * `useOppnaBetalningar` levererar. Ingen läsning ur basen, ingen mutation.
  *
- * EVENTNAMNEN BÄR ORTEN ("RIM 1, Skövde") — så ser `eventNamn` ut i datat
+ * EVENTNAMNEN ÄR FULLA ("Resor i medvetandet 1, Skövde") — så ser `eventNamn` ut i datat
  * (inkorgen visar "Fjärrskådning, ZZ-GRANSKNING-S113B · 2026-09-07"), och
  * rubriken ska läsa exakt som där (Marcus varv 4/5: *"Lotta måste känna
  * igen sig"*). Utan orten såg gruppens rubrik kortare ut än inkorgens.
@@ -23,7 +23,7 @@ import type { OppenBetalning } from '@/domain/schemas';
  * ═══════════════════════════════════════════════════════════════════════════
  * BERÄTTELSEN I RADER
  * ═══════════════════════════════════════════════════════════════════════════
- *   • RIM 1 (pris 2 500, avgift 1 000, 20 sep): FYRA som redan betalat
+ *   • Resor i medvetandet 1, Skövde (pris 2 500, avgift 1 000, 20 sep): FYRA som redan betalat
  *     avgiften och nu betalat resten 1 500 — Anna, Björn, Cecilia, David.
  *     Cecilia har passerad deadline (förfallen). Plus TVÅ nya som betalat
  *     avgiften 1 000 — Erik (obekräftad anmälan, normalt för en ny) och Fatima.
@@ -78,7 +78,7 @@ function rad(
 
 const RIM = {
   eventId: 'rec-event-rim1',
-  eventNamn: 'RIM 1, Skövde',
+  eventNamn: 'Resor i medvetandet 1, Skövde',
   eventStartdatum: '2026-09-20',
   eventTyp: 'Kurs',
   gallandePris: 2500,

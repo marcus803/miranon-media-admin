@@ -59,6 +59,8 @@ export type BekraftelseRad = {
    * står kvar i listan, vit, och räknas ingenstans.
    */
   markerad: boolean;
+  /** Notering, som i inkorgens formulär (varv 6). Ren text, ingen persistens. */
+  notering: string;
   /**
    * Satt när det SENASTE bulk-beloppsvalet inte gick ihop för raden (avgiften
    * redan betald, eller en föreläsning utan fack). Raden får ingen siffra utan
@@ -265,6 +267,7 @@ function byggRader(oppna: readonly OppenBetalning[], idag: string, betalsatt: Be
       datum: idag,
       medKvitto: true,
       markerad: true,
+      notering: '',
       ejGenomforbar: null,
       utfall: null,
     };
@@ -307,6 +310,7 @@ export type BekraftelsestegModell = {
   sattRadKvitto: (nyckel: string, medKvitto: boolean) => void;
   /** Markera/avmarkera en rad (varv 5). */
   sattRadMarkerad: (nyckel: string, markerad: boolean) => void;
+  sattRadNotering: (nyckel: string, notering: string) => void;
   /** Kör den simulerade registreringen, en rad i taget (beslut 4). */
   registrera: () => void;
   /** Återställ till redigeringsläget (ny körning). */
@@ -405,6 +409,12 @@ export function useBekraftelsesteg(
     );
   }, []);
 
+  const sattRadNotering = useCallback((nyckel: string, notering: string) => {
+    setRader((tidigare) =>
+      tidigare.map((rad) => (rad.nyckel === nyckel ? { ...rad, notering } : rad)),
+    );
+  }, []);
+
   const registrera = useCallback(() => {
     // Ögonblicksbild av vilka rader som körs, tagen FÖRE loopen ur den
     // synkront speglade refen — så loopen inte påverkas av utfalls-
@@ -458,6 +468,7 @@ export function useBekraftelsesteg(
     sattRadDatum,
     sattRadKvitto,
     sattRadMarkerad,
+    sattRadNotering,
     registrera,
     aterstall,
   };
