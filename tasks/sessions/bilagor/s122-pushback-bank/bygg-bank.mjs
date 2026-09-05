@@ -63,7 +63,10 @@ fs.writeFileSync(path.join(DIR, 'steg4-bank.json'), JSON.stringify(enriched, nul
 
 // ---------- Hjälpfunktioner för markdown-tabellrender ----------
 function escapeCell(s) {
-  let out = s.replace(/\|/g, '\\|');
+  // Backslash escapas FÖRST, sedan pipe — annars läser markdown en
+  // inledande backslash i citatet som escape av vår egen pipe-escape
+  // (CodeQL js/incomplete-sanitization, fångat på PR #2352).
+  let out = s.replace(/\\/g, '\\\\').replace(/\|/g, '\\|');
   // Bara URL:er (MD034) fälls annars — omslut med <...> (CommonMark-
   // autolink-syntax). Detta ändrar INTE den lästa texten (URL:en visas
   // identisk), det är strukturell markdown-markup, inte en textändring —
