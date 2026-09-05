@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-05 19:02'
+updated_date: '2026-09-05 19:19'
 labels:
   - ready-for-agent
 dependencies:
@@ -44,3 +45,9 @@ Bekräftelsesteget på /mer/betalningar/registrera renderar variant C:s form ovi
 - [ ] #5 Promoveringsgrinden grön: ariaSnapshot-par (variant-läget FÖRE flippen mot den promoverade ytan EFTER) utan skillnad, och visual-baslinjen omtagen på den godkända ytan efter Marcus stämpel (ADR-103 B4)
 - [ ] #6 Staging-skarpbevis: tio rader registrerade via steget mot staging med kvitton köade, inbetalningarna verifierade i Postgres och basens spegel
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+FÖRKRAV (S121 paus 3, 2026-09-05): samma som 402.2 — prototypgrenen proto/s121-bekraftelsesteget (draft-PR #2325) måste vara landad på main (eller vara skivans bas). AC #10 (Marcus granskning desktop + iPad) är ett Marcus-moment: i AFK byggs allt annat och skivan lämnas med AC #10 öppet och en granskningsvy (dev-server-adress + facit-bilder) i kortets notes.
+<!-- SECTION:NOTES:END -->
