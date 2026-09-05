@@ -3,10 +3,10 @@ id: TASK-402.2
 title: >-
   Skiva: Prefaktorering — inkorgens 'Registrerat nu'-block och radformulär som
   delade komponenter, med de tre formbytena
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 22:11'
+updated_date: '2026-09-05 22:54'
 labels:
   - ready-for-agent
 dependencies: []
@@ -110,3 +110,9 @@ Ingen ytterligare handoff behövs — skivan är komplett från byggagentens sid
 
 RUNDA 2 2026-09-05 22:11 UTC: fynd 1-3 (review-agentens utlåtande, granskad SHA 71f40c5e) rättade — SHA 0372f854. Fynd 1: facit-skärmdumparna i tasks/sessions/bilagor/task-402.2-facit-jamforelse/ regenererade mot SHA 0372f854 (samma metod: mockade nätverksanrop via page.route, egen lokal dev-server port 5174, staging-semaforen; desktop 1440x900 @2x). RGB vid (1700,460): efter Registrera = rgb(251,243,224) (TON_AKTIV, korrekt guld), efter Registrera och skicka = rgb(245,245,243) (TON_VILA). Ingen avvikelse mot facit, ingen AMENDERING behövs. Fynd 2: stale default-fokus-kommentarer i RegistreratNuBlock.tsx och betalningar-inkorg-utskicksflode.staging.test.ts rättade (dialogen sjalv far fokus, inte Behall) - ingen kodandring, testets assertion var redan korrekt. Fynd 3: OmbokningsKvitto.tsx TillBetalning-knappens text 'Registrera betalning' -> 'Registrera inbetalning' (orkestrerarens beslut), motsvarande assertion i anmalan-ombokning.acceptance.test.ts uppdaterad. Grindar grona: typecheck/biome/build/langa-streck 0; test:api 1 fel (opaverkat, forhandsexisterande, generate-event-attachment.staging.test.ts, annan modul); acceptance-filen 19/19; alla tre e2e-filer 24/24. PR #2360 fortsatt draft.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landad som PR #2360 → main 364f75b9 (2026-09-05 22:39 UTC). AFK-proveniens: S121 resume 3 (Marcus mandat vid paus 3), bygg-agent Sonnet 5 i egen worktree; checkpoint på Marcus order vid ~65 % kontext (d27b2675 + HANDOVER i notes), slutförd i samma session (71f40c5e). Review-loopen: runda 1 risk medel, tre fynd (DoD #4-bilder tagna före vila-fixen, två fokus-kommentarer, OmbokningsKvitto-etikett) → fix-agent (0372f854, 68b7daad: bilder regenererade med RGB-bevis 251,243,224 aktiv / 245,245,243 vila) → runda 2 risk låg, 0 fynd, AC #1–#6 håller; review-loop-beslut exit 0, backstopp exit 0. Kö-CI grön; post-merge run 33996542511 grön attempt 1 (staging 11m46s mot 12-min-taket → TASK-404). Levererat: RegistreratNuBlock.tsx (delat block), RegistreraForm redigera-läge (diskriminerad union) + DEV-route /dev/registrera-form-redigera, räknarchip bort från Förhandsgranska, Ångra via husets dialog, etiketten Registrera inbetalning på anmälans betalningsyta, personkortet och OmbokningsKvitto. Lokalt: api-pure 1669/1669, staging-e2e 24/24 (tre filer), typecheck/biome/build/långa-streck 0. Bokförda fynd: TASK-405 (etiketten på övriga ytor), Modal-hörnradie rounded-2xl lokal på användningen (kandidat utan kort). Sessionsdok S121 Del 6 §6.3.
+<!-- SECTION:FINAL_SUMMARY:END -->

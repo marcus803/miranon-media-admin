@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-05 21:05'
+updated_date: '2026-09-05 22:53'
 labels:
   - ready-for-human
 dependencies: []
@@ -31,3 +32,9 @@ Mätt 2026-09-05 (S121 resume 3): post-merge-körningen 33989193147 på main 5c7
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+INSTANS 2 (2026-09-05 22:52 UTC): post-merge run 33996542511 på main 364f75b9 (#2360, TASK-402.2 som lade till två staging-e2e-fall): Staging (API + E2E) grön i attempt 1 men 22:40:28→22:52:14Z = 11m46s — 14 sekunder från taket. Marginalen krymper per skiva; 402.3 lägger till fler fall.
+<!-- SECTION:NOTES:END -->
