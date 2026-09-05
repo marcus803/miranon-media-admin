@@ -236,17 +236,60 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
       }}
     >
       <header className="flex flex-col gap-1 px-4">
-        <h1 className="font-semibold text-3xl">Registrera betalningar</h1>
+        <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
         <p className="text-small text-text-secondary">
           {plural(rader.length, 'betalning', 'betalningar')} i{' '}
           {plural(antalEvent, 'event', 'event')}
         </p>
       </header>
 
-      {/* ═══ BELOPPET — förslaget per rad, bulkvalen som treval (val B) ═══ */}
+      {/* ═══ REGISTRERINGSFÖRSLAG — appens förslag per rad, ÖVERST (varv 3) ═══
+          Marcus 2026-09-05: listan är innehållet; Lotta går igenom den
+          uppifrån och ned och trycker på beloppet för att ändra. */}
+      <section aria-labelledby={klarId} className="flex flex-col gap-4">
+        <div className="flex flex-col gap-1.5">
+          <SektionsRubrik id={klarId} antal={klarhogen.length}>
+            Registreringsförslag
+          </SektionsRubrik>
+          <p className="px-4 text-small text-text-secondary">
+            Baserat på inbetalningshistoriken så föreslår appen inbetalningsbelopp, gå igenom listan
+            och kolla så det stämmer, tryck på beloppet för att ändra.
+          </p>
+        </div>
+        {klarhogen.length === 0 ? (
+          <p className="px-4 text-small text-text-secondary">Ingen rad har ett belopp än.</p>
+        ) : (
+          klaraGrupper.map((grupp) => (
+            <div key={grupp.eventId} className="flex flex-col gap-2">
+              <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
+              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+                {grupp.rader.map((rad) => (
+                  <KlarRad key={rad.nyckel} rad={rad} modell={modell} />
+                ))}
+              </ul>
+            </div>
+          ))
+        )}
+      </section>
+
+      {/* ═══ BEHÖVER DIN HAND — bara när något faktiskt behöver henne ═══ */}
+      {handhogen.length > 0 && (
+        <section aria-labelledby={handId} className="flex flex-col gap-3">
+          <SektionsRubrik id={handId} antal={handhogen.length}>
+            Behöver din hand
+          </SektionsRubrik>
+          <ul className="flex flex-col gap-2 rounded-2xl bg-bg-muted p-2">
+            {handhogen.map((rad) => (
+              <HandKort key={rad.nyckel} rad={rad} modell={modell} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ═══ ÄNDRA FÖR ALLA — bulkvalen som verktyg under listan (val B) ═══ */}
       <section aria-labelledby={valId} className="flex flex-col gap-3">
         <h2 id={valId} className="px-4 font-semibold text-lg">
-          Vad betalade de?
+          Ändra för alla
         </h2>
         <div className="flex flex-col gap-4 rounded-2xl bg-bg-muted p-4">
           <RadioGroup
@@ -300,45 +343,6 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
             />
           </div>
         </div>
-      </section>
-
-      {/* ═══ BEHÖVER DIN HAND — inkorgens kortgrammatik ═══ */}
-      <section aria-labelledby={handId} className="flex flex-col gap-3">
-        <SektionsRubrik id={handId} antal={handhogen.length}>
-          Behöver din hand
-        </SektionsRubrik>
-        {handhogen.length === 0 ? (
-          <p className="px-4 text-small text-text-secondary">
-            Alla rader har ett belopp. Inget behöver dig här.
-          </p>
-        ) : (
-          <ul className="flex flex-col gap-2 rounded-2xl bg-bg-muted p-2">
-            {handhogen.map((rad) => (
-              <HandKort key={rad.nyckel} rad={rad} modell={modell} />
-            ))}
-          </ul>
-        )}
-      </section>
-
-      {/* ═══ KLARA ATT REGISTRERA — per event, komprimerade rader ═══ */}
-      <section aria-labelledby={klarId} className="flex flex-col gap-4">
-        <SektionsRubrik id={klarId} antal={klarhogen.length}>
-          Klara att registrera
-        </SektionsRubrik>
-        {klarhogen.length === 0 ? (
-          <p className="px-4 text-small text-text-secondary">Inga rader är klara än.</p>
-        ) : (
-          klaraGrupper.map((grupp) => (
-            <div key={grupp.eventId} className="flex flex-col gap-2">
-              <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
-              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
-                {grupp.rader.map((rad) => (
-                  <KlarRad key={rad.nyckel} rad={rad} modell={modell} />
-                ))}
-              </ul>
-            </div>
-          ))
-        )}
       </section>
 
       {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
@@ -536,7 +540,11 @@ function HandKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelseste
   );
 }
 
-/** En komprimerad "klar" rad — en rad per person, utfällbar för ändring. */
+/**
+ * En förslagsrad — en rad per person. BELOPPET ÄR KNAPPEN (Marcus varv 3:
+ * *"tryck på beloppet för att ändra"*): raden i övrigt är läsning, beloppet
+ * fäller ut redigeraren med radens egna kandidater som förslag.
+ */
 function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: BekraftelsestegModell }) {
   const [oppen, setOppen] = useState(false);
   const panelId = useId();
@@ -545,13 +553,7 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
 
   return (
     <li className="flex flex-col">
-      <button
-        type="button"
-        aria-expanded={oppen}
-        aria-controls={oppen ? panelId : undefined}
-        onClick={() => setOppen((v) => !v)}
-        className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-left"
-      >
+      <div className="flex items-center gap-3 px-3 py-2.5">
         <InitialAvatar namn={rad.inkorg.namn} />
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate font-medium text-body">{rad.inkorg.namn}</span>
@@ -561,19 +563,30 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
           </span>
         </span>
         <span className="flex shrink-0 flex-col items-end gap-0.5">
-          <span className="font-medium text-body tabular-nums">
+          <button
+            type="button"
+            aria-expanded={oppen}
+            aria-controls={oppen ? panelId : undefined}
+            aria-label={`Ändra belopp för ${rad.inkorg.namn}`}
+            onClick={() => setOppen((v) => !v)}
+            className={`-mr-2 inline-flex min-h-8 items-center gap-1 rounded-lg border px-2 font-medium text-body tabular-nums motion-safe:transition-colors ${
+              oppen
+                ? 'border-border-strong bg-bg-emphasized'
+                : 'border-border bg-surface hover:border-border-strong'
+            }`}
+          >
             {belopp === null ? 'Ogiltigt belopp' : `${visaKronor(belopp)} kr`}
-          </span>
+            <ChevronDown
+              aria-hidden="true"
+              size={16}
+              className={`shrink-0 text-text-secondary motion-safe:transition-transform ${
+                oppen ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
           <RadSammanfattning rad={rad} />
         </span>
-        <ChevronDown
-          aria-hidden="true"
-          size={18}
-          className={`shrink-0 text-text-secondary motion-safe:transition-transform ${
-            oppen ? 'rotate-180' : ''
-          }`}
-        />
-      </button>
+      </div>
       {oppen && (
         <div className="px-3 pb-3 pl-15">
           <RadRedigerare id={panelId} rad={rad} modell={modell} visaBelopp />
@@ -610,7 +623,7 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1 px-4">
-        <h1 className="font-semibold text-3xl">Registrera betalningar</h1>
+        <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
         <p
           ref={statusRef}
           tabIndex={-1}
