@@ -1,7 +1,17 @@
 import { ChevronDown, CircleCheck, Info, type LucideIcon, TriangleAlert, X } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button as AriaButton, Checkbox } from 'react-aria-components';
-import { Button, Input, MessageBox, RaknarChip, Select, SelectItem } from '@/components/primitives';
+import {
+  Button,
+  Dialog,
+  DialogTrigger,
+  Input,
+  MessageBox,
+  Modal,
+  RaknarChip,
+  Select,
+  SelectItem,
+} from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { VALBARA_BETALSATT } from '@/domain/schemas';
 import { beloppsFel, normaliseraBeloppKlient, visaKronor } from '../belopp-inmatning';
@@ -189,14 +199,17 @@ function kortKlass(vald: boolean): string {
 }
 
 /**
- * "Förhandsgranska" + upphöjt räknarchip — inkorgens `ForhandsgranskaEtikett`
- * (`TASK-393`), tecken för tecken inklusive det explicita blanksteget.
+ * "Förhandsgranska" + räknarchip — inkorgens `ForhandsgranskaEtikett`
+ * (`TASK-393`) med det explicita blanksteget, men chippet är INTE längre
+ * upphöjt och bär den neutrala vita tonen (varv 16, Marcus: *"inte upphöjt
+ * längre, sedan vill jag ha det som ett vanligt chips i typ vitt"*). Inkorgen
+ * byter till samma form vid promoveringen.
  */
 function ForhandsgranskaEtikett({ antal }: { antal: number }) {
   return (
     <>
       {'Förhandsgranska '}
-      <RaknarChip antal={antal} className="relative -top-1 min-w-6 tabular-nums" />
+      <RaknarChip antal={antal} ton="neutral" className="min-w-6 tabular-nums" />
     </>
   );
 }
@@ -500,7 +513,6 @@ function RegistreratNu({
   modell: BekraftelsestegModell;
   rader: BekraftelseRad[];
 }) {
-  const [angraNyckel, setAngraNyckel] = useState<string | null>(null);
   const [bekraftelseSynlig, setBekraftelseSynlig] = useState(true);
   const lagen = new Map(rader.map((r) => [r.nyckel, kvittolage(r)] as const));
   const blockAktivt = rader.some((r) => !(lagen.get(r.nyckel)?.vila ?? true));
@@ -536,7 +548,6 @@ function RegistreratNu({
       >
         {rader.map((rad) => {
           const lage = lagen.get(rad.nyckel) ?? kvittolage(rad);
-          const angrarDenna = angraNyckel === rad.nyckel;
           const belopp = radbelopp(rad) ?? 0;
           return (
             <li key={rad.nyckel} className="py-2">
@@ -572,36 +583,55 @@ function RegistreratNu({
                       Skicka igen
                     </Button>
                   )}
-                  {lage.kanAngra && !angrarDenna && (
-                    <Button
-                      intent="ghost"
-                      size="sm"
-                      aria-label={`Ångra registreringen för ${rad.inkorg.namn}`}
-                      onPress={() => setAngraNyckel(rad.nyckel)}
-                    >
-                      Ångra
-                    </Button>
+                  {lage.kanAngra && (
+                    /* ÅNGRA I DIALOG (varv 16, Marcus: *"jag vill nog att det
+                       kommer upp en dialog istället, det tror jag är proffsigare
+                       och snyggare"*) — husets `DialogTrigger`/`Modal`/`Dialog`
+                       (ADR-044), samma form som Dialog-docblockets
+                       "Ta bort anmälan?"-exempel. Inkorgens inline-fråga
+                       ("Ångra registreringen? Inbetalningen raderas." med två
+                       knappar i raden) är riven här; inkorgen byter vid
+                       promoveringen. Fokus landar i dialogen (react-arias
+                       default, så rubriken läses upp), Tab når Behåll först,
+                       och Escape/klick utanför stänger. */
+                    <DialogTrigger>
+                      <Button
+                        intent="ghost"
+                        size="sm"
+                        aria-label={`Ångra registreringen för ${rad.inkorg.namn}`}
+                      >
+                        Ångra
+                      </Button>
+                      <Modal isDismissable>
+                        <Dialog
+                          size="sm"
+                          title="Ångra registreringen?"
+                          actions={({ close }) => (
+                            <>
+                              <Button intent="ghost" onPress={close}>
+                                Behåll
+                              </Button>
+                              <Button
+                                intent="danger"
+                                onPress={() => {
+                                  modell.angra(rad.nyckel);
+                                  close();
+                                }}
+                              >
+                                Ja, ångra
+                              </Button>
+                            </>
+                          )}
+                        >
+                          {`Inbetalningen på ${visaKronor(belopp)} kr för ${rad.inkorg.namn} raderas${
+                            rad.medKvitto ? ', och kvittot skickas inte' : ''
+                          }.`}
+                        </Dialog>
+                      </Modal>
+                    </DialogTrigger>
                   )}
                 </span>
               </div>
-              {angrarDenna && (
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <span className="text-caption">Ångra registreringen? Inbetalningen raderas.</span>
-                  <Button
-                    intent="danger"
-                    size="sm"
-                    onPress={() => {
-                      modell.angra(rad.nyckel);
-                      setAngraNyckel(null);
-                    }}
-                  >
-                    Ja, ångra
-                  </Button>
-                  <Button intent="ghost" size="sm" onPress={() => setAngraNyckel(null)}>
-                    Behåll
-                  </Button>
-                </div>
-              )}
             </li>
           );
         })}
