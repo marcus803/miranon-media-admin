@@ -343,6 +343,12 @@ export type BekraftelsestegModell = {
    * exakt som inkorgens `vidRegistrerad` gör vid `resultat.skickaNu`.
    */
   registrera: (skickaNu: boolean) => void;
+  /**
+   * Körningens räkning medan `fas === 'registrerar'` (varv 15): hur många av
+   * batchens rader som är avgjorda. `null` utanför en körning. Vyn visar den
+   * som "Registrerar 3 av 10 …" — NN/g:s beskrivande räkning.
+   */
+  korning: { totalt: number; klara: number } | null;
   /** Köar alla väntande kvitton till utskicksjobbet ("Skicka N kvitton"). */
   skickaKvitton: () => void;
   /** Ångra en registrering — raden går tillbaka till listan (inkorgens Ångra). */
@@ -366,6 +372,7 @@ export function useBekraftelsesteg(
     byggRader(oppna, idag, startBetalsatt),
   );
   const [fas, setFas] = useState<Fas>('redigera');
+  const [korning, setKorning] = useState<{ totalt: number; klara: number } | null>(null);
   const [aktivGenvag, setAktivGenvag] = useState<Beloppsgenvag | null>('forslag');
   const [batchBetalsatt, setBatchBetalsatt] = useState<Betalsatt>(startBetalsatt);
   const [batchDatum, setBatchDatum] = useState(idag);
@@ -486,6 +493,7 @@ export function useBekraftelsesteg(
       const attKora = raderRef.current.filter(arRegistrerbar).map((r) => r.nyckel);
       if (attKora.length === 0) return;
       setFas('registrerar');
+      setKorning({ totalt: attKora.length, klara: 0 });
       const reducerad = prefersReducedMotion();
       void (async () => {
         for (const nyckel of attKora) {
@@ -511,7 +519,9 @@ export function useBekraftelsesteg(
               };
             }),
           );
+          setKorning((k) => (k ? { ...k, klara: k.klara + 1 } : k));
         }
+        setKorning(null);
         setFas('klart');
         // Nästa tick: refen speglar state först efter renderingen, annars
         // missar jobbet den sist registrerade raden (mätt: Johan blev kvar
@@ -585,6 +595,7 @@ export function useBekraftelsesteg(
     jobbIdRef.current = null;
     felUtlostRef.current = false;
     setRader(byggRader(oppna, idag, batchBetalsatt));
+    setKorning(null);
     setFas('redigera');
     setAktivGenvag('forslag');
   }, [oppna, idag, batchBetalsatt]);
@@ -608,6 +619,7 @@ export function useBekraftelsesteg(
     sattRadMarkerad,
     sattRadNotering,
     registrera,
+    korning,
     skickaKvitton,
     angra,
     jobbstatus,
