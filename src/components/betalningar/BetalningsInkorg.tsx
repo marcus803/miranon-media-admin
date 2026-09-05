@@ -12,14 +12,7 @@ import {
   SearchField,
 } from 'react-aria-components';
 import { EventValjare } from '@/components/events/EventValjare';
-import {
-  Button,
-  InitialAvatar,
-  MessageBox,
-  RaknarChip,
-  SidRam,
-  Skeleton,
-} from '@/components/primitives';
+import { Button, InitialAvatar, MessageBox, SidRam, Skeleton } from '@/components/primitives';
 import {
   antalAktivaFilter,
   type FilterDimension,
@@ -33,7 +26,6 @@ import { useKoaKvitton, useRaderaInbetalning } from '@/data/mutations/inbetalnin
 import { useForhandsgranskaAllaKvitton, useForhandsgranskaKvitto } from '@/data/mutations/kvitton';
 import { useDataSource } from '@/data/useDataSource';
 import type { Event } from '@/domain/models/Event';
-import type { Jobbstatus } from '@/domain/schemas';
 import { filtreraPersonregister, personVisningsnamn } from '@/lib/person-sok';
 import { skrivLaddningssida } from '@/lib/skriv-laddningssida';
 import { queryKeys } from '@/queries/keys';
@@ -47,12 +39,12 @@ import {
   type InkorgsRad,
   type IsoDatum,
   jobbDelutfall,
-  kanForhandsgranska,
   rankaTraffar,
   sammanfattaBetalningar,
   tolkaTakfel,
 } from './inkorg-harledningar';
 import { RegistreraForm, type RegistreringsUtfall } from './RegistreraForm';
+import { RegistreratNuBlock, type SessionsRad, type VantandeKvitto } from './RegistreratNuBlock';
 import { SwishImport } from './SwishImport';
 
 /**
@@ -108,158 +100,12 @@ import { SwishImport } from './SwishImport';
  * båda bär motiveringen i sina egna docblock. Beteendet här är oförändrat:
  * samma localStorage-nyckel, samma standardvärde, samma lokala datum. */
 
-type VantandeKvitto = { inbetalningId: string; namn: string; belopp: number };
-
-/**
- * EN rad i granskningsblocket — allt Lotta registrerat i DENNA session.
- *
- * SKILD FRÅN `VantandeKvitto`, med avsikt. `vantande` är en KÖ: den bär bara
- * det som ska skickas, och den TÖMS när knappen trycks. Granskningsblocket är
- * en LOGG: den bär varje registrering, även de utan kvitto och de som redan
- * gått i väg, och den töms aldrig under sessionen. Att låta kön bära båda
- * rollerna hade betytt att raderna försvann i samma tryck som skickade dem —
- * alltså precis när Lotta vill se vad som hände.
- */
-type SessionsRad = {
-  inbetalningId: string;
-  namn: string;
-  belopp: number;
-  betalsatt: Betalsatt;
-  /** Lottas kryss vid registreringen. Falskt ⇒ raden ska aldrig få ett kvitto. */
-  medKvitto: boolean;
-  /**
-   * Inkorgsradens nyckel (anmälans record-ID), när registreringen kom därifrån.
-   * `undefined` för importerade rader, som inte hör till en synlig rad.
-   *
-   * Den finns HÄR bara för Ångra: kvittenstexten ("500 kr registrerat …") bor i
-   * `kvittenser` under den nyckeln, och en ångrad registrering måste ta med sig
-   * sin kvittens. Annars står ett kvitto kvar på personens kort och påstår att
-   * något registrerades som inte längre finns.
-   */
-  radNyckel?: string;
-};
-
-/**
- * Vad granskningsraden säger om kvittot, plus vilka åtgärder raden får erbjuda.
- *
- * `kanAngra` ÄR AVSIKTLIGT SNÄV (pass 11, Marcus: *"jag kan ju inte ens ta bort
- * Bengt Lindqvist som ligger i granskningsblocket nu, det måste ju gå, eller?"*).
- * Ångra RADERAR inbetalningen — den får bara erbjudas när vi VET att inget
- * kvitto gått i väg:
- *
- *   • inget kvitto begärt (kryssrutan var ur) ⇒ det finns inget att hinna före
- *   • raden ligger i den SESSION-LOKALA kön ⇒ Lotta har inte tryckt på knappen
- *
- * Allt annat får `kanAngra: false`, och skälet står i `angraSkal`. Särskilt
- * `vantar` (köad på SERVERN) är medvetet utesluten trots att kvittot ännu inte
- * skickats: jobbmotorn kan plocka raden i samma sekund, och en radering som
- * kapplöper med en utskickande worker är exakt det vi inte ska bjuda in till.
- * Servern är ändå sista instans — `hantera-inbetalning` skiljer radera (före
- * kvitto) från makulera (efter) — men grinden ska inte förlita sig på att en
- * skarp operation fallerar snyggt.
- */
-type Kvittolage = {
-  text: string;
-  fel: boolean;
-  kanAngra: boolean;
-  /** Varför Ångra inte erbjuds, i klartext för Lotta. `null` när den erbjuds. */
-  angraSkal: string | null;
-  /**
-   * [TASK-362] Sant när raden är FÄRDIGBEHANDLAD och inte kräver
-   * uppmärksamhet — antingen bar registreringen aldrig ett kvitto, eller
-   * kvittot har GÅTT I VÄG. Falskt medan något fortfarande pågår (köat i
-   * sessionen, köat/pågår på servern) ELLER har fallerat.
-   *
-   * Detta är granskningsblockets EGEN varningston (Marcus 2026-09-02,
-   * S113 resume 8-röktestet: *"jag gillade inte riktigt allt som händer
-   * UNDER utskicket, den gula rutan förändrades i höjd"*) — blockets
-   * gold/varning-fond ska bara visas medan `registrerade.some(rad =>
-   * !kvittolage(...).vila)`. Ett kvitto som gått i väg är inte en
-   * varning; det är historia, och raden ska vila lika stilla som en rad
-   * utan kvitto alls.
-   */
-  vila: boolean;
-};
-
-/**
- * Kvittots läge för EN registrerad rad, läst ur de TVÅ källor som redan finns
- * — ingen ny state, ingen ny serverlogik (C1 är en presentationsyta).
- *
- * ORDNINGEN ÄR EN PRIORITETSORDNING, inte en slump:
- *  1. INGET KVITTO vinner allt. Kryssrutan var ur vid registreringen, och då
- *     ska raden aldrig säga något om skickning.
- *  2. KÖN (`vantande`) går före jobbet. Ligger raden i den session-lokala kön
- *     har Lotta ännu inte tryckt på knappen — jobbet vet inte om den.
- *  3. JOBBRADEN är sanningen om arbetet (ADR-129 beslut 2, se
- *     `JobbRadSchema`s docblock). Den nås på `objektId`, som ÄR
- *     inbetalningens id.
- *  4. FALLBACKEN SÄGER ALDRIG "SKICKAT". Raden kan ha köats i ett TIDIGARE
- *     jobb i samma session (varje "Registrera och skicka" skapar ett nytt
- *     jobb och `jobbId` pekar bara på det senaste), och då finns ingen jobbrad
- *     att läsa. "Köat" är då allt vi vet — att skriva "skickat" hade varit ett
- *     påstående utan täckning.
- */
-function kvittolage(
-  rad: SessionsRad,
-  vantande: readonly VantandeKvitto[],
-  jobbrader: readonly Jobbstatus['rader'][number][],
-): Kvittolage {
-  const angrabar = { fel: false, kanAngra: true, angraSkal: null, vila: true };
-  /** Kvittot är ute eller på väg — undo går via makulering, inte radering. */
-  const makuleringsvag =
-    'Kvittot är på väg eller skickat. Ångra genom att makulera inbetalningen på anmälans betalningsrader.';
-
-  if (!rad.medKvitto) return { text: 'Inget kvitto', ...angrabar };
-  if (vantande.some((v) => v.inbetalningId === rad.inbetalningId)) {
-    return { text: 'Kvitto väntar på att skickas', ...angrabar, vila: false };
-  }
-
-  const jobbrad = jobbrader.find((j) => j.objektId === rad.inbetalningId);
-  if (jobbrad?.status === 'skickat') {
-    return {
-      text: jobbrad.kvittonummer ? `Kvitto skickat · ${jobbrad.kvittonummer}` : 'Kvitto skickat',
-      fel: false,
-      kanAngra: false,
-      angraSkal: makuleringsvag,
-      vila: true,
-    };
-  }
-  if (jobbrad?.status === 'pagar') {
-    return {
-      text: 'Kvitto skickas ...',
-      fel: false,
-      kanAngra: false,
-      angraSkal: makuleringsvag,
-      vila: false,
-    };
-  }
-  if (jobbrad?.status === 'vantar') {
-    return {
-      text: 'Kvitto köat',
-      fel: false,
-      kanAngra: false,
-      angraSkal: makuleringsvag,
-      vila: false,
-    };
-  }
-  if (jobbrad?.status === 'fel') {
-    return {
-      text: `Kvittot kunde inte skickas: ${jobbrad.skal ?? 'okänt skäl'}`,
-      fel: true,
-      kanAngra: false,
-      angraSkal: makuleringsvag,
-      vila: false,
-    };
-  }
-
-  return {
-    text: 'Kvitto köat',
-    fel: false,
-    kanAngra: false,
-    angraSkal: makuleringsvag,
-    vila: false,
-  };
-}
+/* [TASK-402.2] `VantandeKvitto`, `SessionsRad`, `Kvittolage` och
+   `kvittolage()` FLYTTADE till `RegistreratNuBlock.tsx` (importerade
+   ovan) — den delade komponenten äger nu blockets radmodell och
+   kvittoläges-härledning; denna fil äger fortsatt mutationerna och
+   skickar dem ner som props. Se den filens docblock för hela
+   resonemanget och facit-kopplingen. */
 
 /* ═══════════════════════════ FILTRERINGENS AXLAR ═══════════════════════════
  *
@@ -328,43 +174,15 @@ const ALLA_EVENT = 'Alla event';
  */
 const FORHANDSGRANSKA_ALLA_NYCKEL = '__alla__';
 
-/**
- * [TASK-393, Marcus fynd S121] Den DELADE synliga etiketten för BÅDA
- * Förhandsgranska-knapparna nedan — ett-kvitto-fallet OCH `!enSamKo`-fallet.
- * Ordet "alla" finns inte längre i den synliga texten (bara i aria-label,
- * se knapparnas egen `aria-label` — den bär "alla" ALDRIG heller, se AC #1):
- * texten är alltid "Förhandsgranska", och `antal` syns bara i det upphöjda
- * `RaknarChip`-chippet bredvid.
- *
- * TVÅ SKILDA KNAPPAR, EN GEMENSAM ETIKETT: `ensamKandidat`-knappen och
- * `!enSamKo`-knappen har olika `onPress` (ett kvitto kontra ett kombinerat
- * dokument, TASK-370.1) och olika `isLoading`-nycklar — bara den VISUELLA
- * texten är gemensam, se `Button`s docblock § "ETIKETTEN ÄGER KNAPPENS
- * MÅTT": `children` renderas i ett `inline-flex`-lager med `gap`, så text +
- * chip läggs sida vid sida utan egen wrapper här.
- *
- * `RaknarChip`s `min-w-6` (i stället för primitivens `min-w-4`-standard)
- * reserverar plats för TVÅ siffror (kön har tak 30) så knappens bredd är
- * IDENTISK vid N = 1, N = 9 och N = 12 (AC #3) — `relative -top-1` ger
- * samma "upphöjda" känsla som `FilterRad`s hörn-badge (Marcus: *"vi har
- * redan en form för det på exempelvis filterknappen"*), fast INLINE i
- * stället för `absolute`-perchad, eftersom chippet här måste ta egen
- * layout-plats (se `RaknarChip.tsx` docblock för hela resonemanget).
- */
-function ForhandsgranskaEtikett({ antal }: { antal: number }) {
-  return (
-    <>
-      {/* Explicit blanksteg (INTE JSX-radbrytningen mellan text och tagg,
-          som trimmas bort helt — se React JSX-whitespace-reglerna): utan
-          detta blir knappens `textContent` "Förhandsgranska3" utan
-          mellanrum. Den VISUELLA luften kommer från `Button`s egen
-          `gap-2` (etikett-lagrets flex-gap); detta tecken säkrar att
-          RENDERAD TEXT (kopiera, `toHaveText`) också läser rätt. */}
-      {'Förhandsgranska '}
-      <RaknarChip antal={antal} className="relative -top-1 min-w-6 tabular-nums" />
-    </>
-  );
-}
+/* [TASK-402.2, formbyte 2] `ForhandsgranskaEtikett` (den DELADE synliga
+   etiketten med `RaknarChip`-räknarchippet, TASK-393) ÄR RIVEN — Marcus fynd
+   (S121, facit-noten): "Ta bort chipset helt", den synliga texten är alltid
+   "Förhandsgranska" utan tal, och antalet bärs uteslutande av respektive
+   knapps `aria-label`. De två call sites flyttade med till
+   `RegistreratNuBlock.tsx` (`FORHANDSGRANSKA_TEXT`) i samma landning.
+   `FORHANDSGRANSKA_ALLA_NYCKEL` ovan är OFÖRÄNDRAD — den är sentinel-nyckeln
+   i `forhandsgranskaPagar`, inte UI-text, och ägs fortsatt av
+   `forhandsgranskaAlla` nedan. */
 
 /**
  * Radens period, med `grupperaPerEvent`s EGEN regel — inte en andra tolkning.
@@ -402,8 +220,18 @@ export function BetalningsInkorg() {
   const [vantande, setVantande] = useState<VantandeKvitto[]>([]);
   /** Granskningsblockets logg — se `SessionsRad` för varför den inte är kön. */
   const [registrerade, setRegistrerade] = useState<SessionsRad[]>([]);
-  /** Inbetalnings-ID vars Ångra-bekräftelse står öppen; `null` = ingen. */
-  const [angraId, setAngraId] = useState<string | null>(null);
+  /**
+   * [TASK-402.2] Senaste Ångra-felet — samma "delad mutation, senaste vinner"
+   * form som `forhandsgranskaFel` nedan bär, och av samma skäl: bara EN
+   * `AngraKnapp`-dialog kan praktiskt vara öppen och under interaktion åt
+   * gången (`Modal` fångar fokus och blockerar resten av sidan), så en delad
+   * felsträng räcker. Nollställs vid varje dialogöppning
+   * (`RegistreratNuBlock`s `onAngraDialogOppen`), inte bara vid nytt försök —
+   * annars kunde rad B:s dialog hinna visa rad A:s gamla fel innan B faktiskt
+   * försökt. Ersätter den tidigare `angraId`-baserade inline-bekräftelsen
+   * (riven, se `RegistreratNuBlock.tsx`s docblock § formbyte 3).
+   */
+  const [angraFel, setAngraFel] = useState<string | null>(null);
   /**
    * [TASK-369] PER-INBETALNING förhandsgransknings-status — se hela
    * resonemanget i `forhandsgranskaKvitto`s docblock. `forhandsgranska`s
@@ -864,42 +692,49 @@ export function BetalningsInkorg() {
    *      registrerat …") måste bort med sin registrering, annars står ett
    *      påstående kvar om något som är ogjort.
    *
-   * ORDNINGEN ÄR SERVERN FÖRST. Städningen sker i `onSuccess`, aldrig
-   * optimistiskt: fallerar raderingen ska raden stå kvar exakt som den var,
-   * och felet synas vid raden.
+   * ORDNINGEN ÄR SERVERN FÖRST. Städningen sker EFTER lyckad `mutateAsync`,
+   * aldrig optimistiskt: fallerar raderingen ska raden stå kvar exakt som
+   * den var, och felet synas i dialogen (`angraFel`, se `RegistreratNuBlock`).
    *
    * FOKUS EFTER BORTTAGNING går till blockets rubrik (`tabIndex={-1}`), som är
    * den enda nod som säkert finns kvar när raden fokus stod på rivs ur DOM.
    * Utan det faller fokus till `document.body` — samma felklass som radens
    * `skaAterfaFokus` och `stangImport` redan vaktar.
+   *
+   * [TASK-402.2] `mutateAsync` I STÄLLET FÖR `.mutate(..., { onSuccess })` —
+   * `RegistreratNuBlock`s `AngraKnapp` kastar dialogen kvar öppen tills detta
+   * anrop antingen löser (och den själv kallar `close()`) eller kastar (och
+   * felet visas i dialogens kropp). Samma anropsform som
+   * `forhandsgranskaKvitto`/`forhandsgranskaAlla` redan bär, av samma skäl:
+   * anroparen behöver invänta UTFALLET, inte bara starta ett jobb.
    */
   const radera = useRaderaInbetalning();
 
-  function angraRegistrering(post: SessionsRad) {
-    /* `radNyckel` ÄR anmälans record-ID (`rad.nyckel`), och den skickas med
-       så att mutationen kan skriva serverns omräkning rakt in i cachen —
-       personens kort återuppstår i listan i samma tick som granskningsraden
-       försvinner. Den är `undefined` för rader som kom in via SwishImport;
-       då hoppas patchen över och invalideringen sköter jobbet som förut. */
-    radera.mutate(
-      { inbetalningId: post.inbetalningId, anmalanRecordId: post.radNyckel },
-      {
-        onSuccess: () => {
-          setVantande((tidigare) => tidigare.filter((v) => v.inbetalningId !== post.inbetalningId));
-          setRegistrerade((tidigare) =>
-            tidigare.filter((p) => p.inbetalningId !== post.inbetalningId),
-          );
-          if (post.radNyckel !== undefined) {
-            setKvittenser((tidigare) => {
-              const { [post.radNyckel as string]: _borttagen, ...kvar } = tidigare;
-              return kvar;
-            });
-          }
-          setAngraId(null);
-          granskningsBlockRef.current?.focus();
-        },
-      },
-    );
+  async function angraRegistrering(post: SessionsRad): Promise<void> {
+    try {
+      /* `radNyckel` ÄR anmälans record-ID (`rad.nyckel`), och den skickas med
+         så att mutationen kan skriva serverns omräkning rakt in i cachen —
+         personens kort återuppstår i listan i samma tick som
+         granskningsraden försvinner. Den är `undefined` för rader som kom in
+         via SwishImport; då hoppas patchen över och invalideringen sköter
+         jobbet som förut. */
+      await radera.mutateAsync({
+        inbetalningId: post.inbetalningId,
+        anmalanRecordId: post.radNyckel,
+      });
+    } catch (fel) {
+      setAngraFel(fel instanceof Error ? fel.message : 'Okänt fel');
+      throw fel;
+    }
+    setVantande((tidigare) => tidigare.filter((v) => v.inbetalningId !== post.inbetalningId));
+    setRegistrerade((tidigare) => tidigare.filter((p) => p.inbetalningId !== post.inbetalningId));
+    if (post.radNyckel !== undefined) {
+      setKvittenser((tidigare) => {
+        const { [post.radNyckel as string]: _borttagen, ...kvar } = tidigare;
+        return kvar;
+      });
+    }
+    granskningsBlockRef.current?.focus();
   }
 
   function skickaKvitton() {
@@ -916,6 +751,21 @@ export function BetalningsInkorg() {
           setVantande([]);
         },
       },
+    );
+  }
+
+  /**
+   * [TASK-402.2] "Skicka igen" på EN fallerad, redan registrerad rad —
+   * utbruten ur `RegistreratNuBlock`s JSX (som nu bara känner till
+   * `onSkickaIgen`, inte `koa`/`setJobbId` direkt) till en namngiven
+   * funktion här, av samma lager-skäl som `angraRegistrering`. SAMMA mutation
+   * (`koaKvitton`, inte en dedikerad "skicka igen"-EF) som jobbrads-listan
+   * längre ner i filen bär.
+   */
+  function skickaIgen(inbetalningId: string) {
+    koa.mutate(
+      { inbetalningIds: [inbetalningId] },
+      { onSuccess: (svar) => setJobbId(svar.jobbId ?? jobbId) },
     );
   }
 
@@ -1181,15 +1031,10 @@ export function BetalningsInkorg() {
     (jobbrad) => !registrerade.some((post) => post.inbetalningId === jobbrad.objektId),
   );
 
-  /* [TASK-362] BLOCKETS TON: varning SÅ LÄNGE något faktiskt pågår eller har
-     fallerat, annars vila. Marcus 2026-09-02 (S113 resume 8-röktestet): den
-     gula fonden stod kvar oavsett vad raderna faktiskt sa — en rad vars
-     kvitto redan gått i väg bär exakt lika mycket varningston som en rad som
-     fortfarande väntar. `some(!vila)` läser samma `kvittolage` raderna
-     redan visar, så tonen kan aldrig säga något annat än vad texten säger. */
-  const blockAktivt = registrerade.some(
-    (post) => !kvittolage(post, vantande, jobb.data?.rader ?? []).vila,
-  );
+  /* [TASK-402.2] `blockAktivt` (TASK-362s guld/vila-ton) FLYTTADE in i
+     `RegistreratNuBlock` — den härleds nu ur `registrerade`/`vantande`/
+     `jobbrader`, som redan skickas dit som props, i stället för att räknas
+     ut här och passeras ner som en extra boolean. */
 
   /* [TASK-353 → OMSKRIVEN TASK-370.4] FORMVALET, MÄTT MOT DEN FAKTISKA
      UI-STRUKTUREN OCH BOKFÖRT.
@@ -1499,804 +1344,31 @@ export function BetalningsInkorg() {
           personen som skiljer raderna åt här, medan förlagan listar en enda
           persons betalningar och därför kan låta betalsättet vara identiteten.
           Betalsättet står i klartext i sekundärledet. */}
-      {registrerade.length > 0 && (
-        /* ETT RIKTIGT BLOCK-I-BLOCK (pass 11, Marcus: *"VA FAN är det här för
-           granskningsblock? FAN va dåligt"*).
-
-           ROTORSAKEN, MÄTT: raderna BAR redan inbetalningsradernas kortform
-           (`rounded-2xl … bg-surface p-3`) — men behållaren var genomskinlig
-           och `body` bär `--mm-bg` = `--p-neutral-0`, alltså VITT. Vita kort
-           på en vit botten är osynliga kort, och det Marcus såg var därför
-           lös text som svävade. Exakt samma rotorsak som fynd 1 i listan.
-
-           Behållaren är nu bilage-ytans `GRUPPKORT`-form (tonad yta vars
-           padding ÄR rännan mellan korten) — samma block-i-block-grepp som
-           pass 8 gav "Senaste inbetalningar" på personkortet och anmälans
-           detaljvy. Radformen är oförändrad; det var aldrig den som var fel.
-
-           (Denna not sade tidigare "med rubriken INUTI". Rubriken revs
-           2026-09-01, se `<div>`-noden nedan — greppet är oförändrat, men
-           formuleringen beskrev en nod som inte längre finns.) */
-        /* ═══ GULD-TONAD YTA MED KONTUR (Marcus 2026-09-01) ═══
-           Ordagrant: *"Kanske ska vi ha gul bakgrund med kontur på
-           granskningsblocket, så det syns tydligare? Eller guld/gul eller vad
-           vi har"*.
-
-           TOKENVALET, ur husets EGEN familj — ingen ny token, ingen hårdkodad
-           färg:
-             yta    `bg-primary-tint`   = `--mm-primary-tint` = `--p-gold-100`
-             kontur `border-primary-muted` = `--mm-primary-muted` = `--p-gold-400`
-             kontrast-more `border-primary` = `--mm-primary` = `--p-gold-500`
-           Guldet ÄR husets primärfärg (`semantic.css` § Primär), så "gul" och
-           "vad vi har" pekar på samma ställe.
-
-           HERO-RESERVATIONEN GÄLLER INTE HÄR — mätt, inte antaget.
-           `NastaEvent.tsx` bär `bg-primary-tint` med en not om att vara Hems
-           enda hero. Den reservationen handlar om HERO-ROLLEN på Hem, inte om
-           tonen: `bg-primary-tint` används på FEM ytor utanför Hem
-           (`EventCheckin.tsx:439` kort, `PersonsList.tsx` rader ×2,
-           `PrototypeSwitcher.tsx` ×2). Tonen är alltså husets tonala yta, och
-           betalningssidan har ingen hero att konkurrera med.
-
-           (Räkningen sade SEX när detta skrevs. `PersonDetail.tsx`s "Just
-           nu"-block lämnade tinten senare samma dag — Marcus: fonden *"skär
-           sig med färgerna som event-raderna har"* — och bär nu guld-KONTUR på
-           vit botten i stället. Talet är rättat i stället för att stå kvar som
-           en tyst osanning; slutsatsen är oförändrad.)
-
-           MÄTVÄRDEN (WCAG 2, sRGB, mot `--p-gold-100` #fbf3e0):
-             `--mm-text` #242424 ......... 14,04:1  (var 15,52:1 mot vitt)
-             `--mm-text-secondary` ....... 7,16:1
-             `--mm-text-muted` #6b6b6b ... 4,82:1   ✓ AA normal text (4,5:1)
-             sage-knappen #606b57 ........ 5,08:1   ✓ 1.4.11 icke-text (3:1)
-                                                    (var 5,15:1 mot bg-muted —
-                                                     alltså ingen regression)
-             vit text PÅ sage ............ 5,62:1   ✓ oförändrad, knappens egen yta
-             vita kort mot ytan .......... 1,11:1   (var 1,09:1 mot bg-muted —
-                                                     kortens avgränsning bärs som
-                                                     förut av `contrast-more`)
-             konturen mot vit sida ....... 2,33:1, och 2,57:1 i contrast-more
-           SAGE-KNAPPEN ÄR OFÖRÄNDRAD I FÄRG OCH FORM — den är husets standard
-           för externa utskick och får inte färgändras. Den mättes MOT den nya
-           ytan, den ändrades inte.
-
-           KONTUREN ÄR SYNLIG I VILA, till skillnad från repots vanliga
-           `border-transparent` + `contrast-more`-idiom. Det är hela poängen med
-           Marcus beställning ("så det syns tydligare"): den tonade ytan ensam
-           ligger på 1,11:1 mot den vita sidan och bär inte avgränsningen. */
-        /* ═══ INGA VITA KORT I BLOCKET (Marcus 2026-09-01, pass 14) ═══
-           Ordagrant: *"Cecilias kort borde gå i samma ton/färg-familj som
-           bakgrunden och konturen på granskningsblocket"*.
-
-           Raderna låg som vita `bg-surface`-kort på guld-tinten — alltså en
-           tredje ton i ett block som bara har två. De ligger nu DIREKT på
-           guldytan, skilda av hårlinjer i blockets EGEN konturton, vilket är
-           samma bank-anatomi som `InbetalningsLista.tsx` fick i samma pass.
-
-           HÅRLINJENS TON ÄR MÄTT, INTE VALD PÅ KÄNSLA (WCAG 2, sRGB, mot
-           `--p-gold-100` #fbf3e0):
-             `--mm-border` (neutral-200) ..... 1,17:1  ← husets vanliga
-                                                        hårlinje SYNS INTE på
-                                                        guld
-             `--mm-primary-pale` (gold-300) .. 1,29:1  ← för svag
-             `--mm-primary-muted` (gold-400) . 2,11:1  ← VALD, och det är
-                                                        blockets egen kontur
-             `--mm-primary` (gold-500) ....... 2,33:1  ← `contrast-more`
-           Valet är alltså inte bara "en gyllene linje" utan EXAKT samma token
-           konturen bär — vilket är vad Marcus bad om ordagrant, och samtidigt
-           det enda värde i familjen som faktiskt läser på tinten.
-
-           BEKRÄFTELSEPANELEN FÖLJDE MED UR NEUTRALFAMILJEN: den bar
-           `border-border bg-bg-muted`, och `--mm-bg-muted` (#f5f5f3) mot
-           tinten mäter 1,09:1 — en panel som praktiskt taget inte syns. Den
-           bär nu transparent fond med `border-primary-muted`, alltså samma
-           2,11:1 som hårlinjerna, och sin avgränsning i tonfamiljen. */
-        /* INGEN `mx-4`: blocket ska ha SAMMA bredd som kortlistorna och
-           menybaren (B1). Listorna når 568 px genom `-mx-4` ur en `px-4`-
-           förälder; detta block hänger direkt i `<section>`, som redan ÄR den
-           bredden — en marginal här hade gjort granskningen 32 px smalare än
-           listan den granskar. */
-        <section
-          /* RUBRIKEN "Registrerat nu" ÄR RIVEN (Marcus: *"känns överflödig"*).
-             Den var blockets tillgängliga namn OCH fokus-mål efter en ångrad
-             rad, så båda rollerna flyttade hit i samma andetag: `aria-label`
-             ger namnet, `tabIndex={-1}` gör noden fokuserbar programmatiskt.
-             Utan dem hade rivningen tagit med sig en a11y-egenskap Marcus
-             aldrig bad om att förlora — texten försvann ur SYNFÄLTET, inte ur
-             tillgänglighetsträdet.
-
-             `<section>` OCH INTE `<div role="group">`: den senare formen var
-             första försöket och fälldes av `lint/a11y/useSemanticElements`,
-             som föreslår `<fieldset>` — men detta är ingen formulärgrupp, så
-             det förslaget är fel för ytan. En `<section>` MED tillgängligt namn
-             är i stället en `region`-landmark, vilket är exakt vad blocket är:
-             en namngiven del av betalningssidan. Samma form som
-             `NastaEvent.tsx` bär (`<section aria-labelledby>`); här blir det
-             `aria-label` eftersom det inte finns någon rubrik-nod att peka på. */
-          ref={granskningsBlockRef}
-          tabIndex={-1}
-          aria-label="Registrerat nu"
-          /* ═══ SYMMETRISK LUFT (Marcus 2026-09-01, pass 14) ═══
-             Ordagrant: *"mer luft över första kortet … lika mycket luft ovan
-             som det är under sista kortet"*.
-
-             MÄTT VAD SOM VAR SNETT: blocket bar `p-3` och raderna sina egna
-             `p-3`, så avståndet från blockets överkant till första radens TEXT
-             var 12 + 12 = 24 px, medan avståndet från knappen till underkanten
-             var 12 px. Två olika luftband i samma block.
-
-             LÖSNINGEN BOR I BLOCKETS PADDING, INTE PER RAD (det senare hade
-             gjort första och sista raden olika höga än de mellanliggande).
-             `p-4` sätter bandet till 16 px, och listans `-my-2` drar tillbaka
-             exakt radernas egen `py-2` vid ändarna — så mätpunkterna blir:
-               överkant → första radens text .... 16 px
-               sista radens text → knappen ...... 16 px  (blockets `gap-4`)
-               knappen → underkant .............. 16 px
-             Tre lika band. Radernas inbördes rytm är orörd.
-
-             [TASK-362] TONEN ÄR NU VILLKORAD PÅ `blockAktivt`, INTE STATISK.
-             Marcus 2026-09-02 (S113 resume 8-röktestet): *"jag gillade inte
-             riktigt allt som händer UNDER utskicket, den gula rutan
-             förändrades i höjd … det var liksom inte 'rent' eller
-             'elegant'"* — och skärmen han visade hade EN skickad rad kvar i
-             gult. Guld/varning är rätt ton MEDAN något pågår eller har
-             fallerat; ett kvitto som gått i väg är historia, inte en
-             varning, och blocket vilar då i SAMMA neutrala form
-             `PersonDetail.tsx`s `kortKlass` redan bär för sitt "Just nu"-
-             block (`border-transparent bg-bg-muted … contrast-more:
-             border-border-strong`) — samma konvention, inte en ny. */
-          className={
-            blockAktivt
-              ? 'flex flex-col gap-4 rounded-2xl border border-primary-muted bg-primary-tint p-4 contrast-more:border-primary'
-              : 'flex flex-col gap-4 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong'
-          }
-        >
-          <ul
-            className={
-              blockAktivt
-                ? '-my-2 flex flex-col divide-y divide-primary-muted contrast-more:divide-primary'
-                : '-my-2 flex flex-col divide-y divide-border'
-            }
-          >
-            {registrerade.map((post) => {
-              const lage = kvittolage(post, vantande, jobb.data?.rader ?? []);
-              const angrarDenna = angraId === post.inbetalningId;
-              return (
-                <li key={post.inbetalningId} className="py-2">
-                  {/* KÄRNRADEN — titel/sekundärled, belopp, åtgärd. EGEN NOD,
-                      skild från panelerna nedan, och det är vad som gör Marcus
-                      andra fynd lösbart: *"'Ångra'-knappen sitter inte
-                      centrerat höjdmässigt på kortet"*.
-
-                      `items-center` CENTRERAR MOT KÄRNRADEN, inte mot hela
-                      `<li>`. Låg knappen kvar i samma flexrad som panelerna
-                      hade en `items-center` dragit ned den till mitten av en
-                      utfälld bekräftelse — alltså rätt i vila och fel i det
-                      läge Lotta faktiskt tittar på. Skilda noder ger båda. */}
-                  <div className="flex flex-nowrap items-center gap-3">
-                    <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                      <span className="w-full truncate font-medium text-body">{post.namn}</span>
-                      <span className="w-full text-caption text-text-muted">
-                        {[post.betalsatt, lage.text].join(' · ')}
-                      </span>
-
-                      {/* VARFÖR ÅNGRA SAKNAS, i klartext. Ett kvitto som gått
-                          i väg går inte att radera bort — då är makulering
-                          vägen, och den bor på inbetalningsraderna. Att tiga
-                          hade lämnat Lotta med en rad hon inte förstår varför
-                          hon inte kan röra.
-
-                          RADEN ÄR INFORMATION, INTE EN TRANSIENT PANEL, och
-                          bor därför INUTI kärnradens textkolumn — till
-                          skillnad från bekräftelsen och felrutan nedan. Det
-                          är vad som gör att beloppet och åtgärdsknappen
-                          centreras mot den också (Marcus 2026-09-01:
-                          *"Priset och åtgärdsknappen … borde sitta centrerade
-                          på raden, höjdmässigt"*). Samma gränsdragning som
-                          `InbetalningsLista` gör mellan sina sekundärrader
-                          och sina paneler.
-
-                          [TASK-362] NODEN ÄR NU ALLTID MONTERAD — bara
-                          SYNLIGHETEN växlar (`invisible`, inte ett villkorat
-                          `&&`). En rad som går från "väntar" (en textrad) till
-                          "skickat" (två textrader, den här läggs till) knuffade
-                          annars VARJE efterföljande rad i loggen, OCH listan
-                          under blocket, nedåt mitt under utskicket — exakt det
-                          layouthopp Marcus flaggade 2026-09-02.
-
-                          `min-h-9` (36 px = 2 × `text-caption`s egen
-                          `line-height: 1.5` på `0.75rem`, `tailwind.css` rad
-                          110–111), INTE en enradig nbsp-platshållare ensam
-                          — mätt fynd: makuleringsvägens text ("Kvittot är på
-                          väg eller skickat. Ångra genom att makulera …")
-                          RADBRYTS till två rader i kortets faktiska bredd, så
-                          en enradig platshållare reserverade FÖR LITE (mätt
-                          skillnad 172 px mot 154 px, exakt en `text-caption`-
-                          radhöjd, `tests/e2e/betalningar-inkorg-
-                          utskicksflode.staging.test.ts` § "höjd är IDENTISK"
-                          — rött innan `min-h-9` fanns, grönt efter). Två
-                          rader är alltså reserverade oavsett om texten faktiskt
-                          radbryter eller ej — `min-height` täcker båda
-                          fallen, en fast nbsp-höjd bara det ena.
-                          `aria-hidden` döljer platshållaren för skärmläsare
-                          när den inte bär information — ingen ny information
-                          tas bort, den flyttar bara till vila-läget osynlig
-                          tills den behövs. */}
-                      <span
-                        className={
-                          !lage.kanAngra && lage.angraSkal !== null
-                            ? 'block min-h-9 w-full text-caption text-text-muted'
-                            : 'invisible block min-h-9 w-full text-caption text-text-muted'
-                        }
-                        aria-hidden={lage.kanAngra || lage.angraSkal === null}
-                      >
-                        {lage.angraSkal ?? '\u00A0'}
-                      </span>
-                    </span>
-
-                    {/* BELOPPSKOLUMNEN — samma sifferpelare som
-                        `InbetalningsLista`. `tabular-nums` är vad som gör
-                        högerkanten till en linje.
-
-                        DEN KÄNDA KANTEN, BOKFÖRD: åtgärdsslotten till höger är
-                        en TEXTKNAPP med varierande bredd ("Ångra" ≈ 60 px,
-                        "Skicka igen" ≈ 90 px), inte inbetalningsradernas
-                        ⋯-knapp med sin fasta 44 px. Beloppets högerkant kan
-                        därför förskjutas mellan en rad med "Ångra" och en med
-                        "Skicka igen". En fast slot-bredd hade krävt ett magiskt
-                        px-tal utan förankring (⋯-slotten har sina 44 px ur
-                        träffytegolvet); knappformen är dessutom ett bokfört val
-                        sedan pass 11 (se knappen nedan). Kanten står här i
-                        stället för att lappas — "Skicka igen" visas bara på en
-                        FALLERAD rad, alltså sällan. */}
-                    <span className="shrink-0 font-medium text-body tabular-nums">
-                      {`${visaKronor(post.belopp)} kr`}
-                    </span>
-
-                    <span className="flex shrink-0 items-center gap-2">
-                      {/* [TASK-353, oförändrad plats/villkor sedan TASK-370.4]
-                          FÖRHANDSGRANSKA — bara på en rad vars kvitto ännu
-                          INTE gått i väg, och bara när kön har FLERA rader
-                          (se `vantandeIds`/`enSamKo` ovan för formvalet).
-                          `kanForhandsgranska` äger regeln; JSX bedömer inte.
-                          Denna knapp och den kombinerade förhandsgranskningen
-                          (bredvid "Skicka N kvitton" nedan — samma synliga
-                          "Förhandsgranska"-etikett sedan `TASK-393`, se
-                          `ForhandsgranskaEtikett`) är OBEROENDE syskon, inte
-                          varandras ersättning — se FORMVALET-kommentaren för
-                          S116 beslut 1.
-
-                          EGET TILLGÄNGLIGT NAMN PER RAD. Åtta knappar som alla
-                          heter "Förhandsgranska" är åtta identiska namn i
-                          skärmläsarens knapplista — `aria-label` namnger
-                          personen, samma grepp som `InbetalningsLista`s
-                          `Fler val för …`. Den SYNLIGA texten är kort, som
-                          husets övriga radknappar.
-
-                          `isLoading`/`loadingText` I STÄLLET FÖR handbyggd
-                          `aria-disabled` + villkorad `Loader2` (TASK-361):
-                          den gamla formen bytte ENDAST ikonen villkorat in/ut
-                          ur `children` — samma bredd-hopp-bugg som fixades på
-                          biblioteksnivå i `Button.tsx`, fast handbyggd HÄR
-                          också. `Button`s `isLoading` löser BÅDA (stabil
-                          bredd OCH stänger klick strukturellt).
-
-                          [OMBYGGD TASK-369] `isLoading` läser
-                          `forhandsgranskaPagar.has(post.inbetalningId)` — ETT
-                          lokalt per-rad Set, INTE längre den delade
-                          `forhandsgranska.isPending` (den bar en ANNAN rads
-                          laddläge så fort två klick överlappade, se hela
-                          resonemanget i `forhandsgranskaKvitto`s docblock).
-                          Dubbelklicks-skyddet ligger DÄR (samma per-rad Set)
-                          — detta är ett EXTRA, strukturellt lager ovanpå. */}
-                      {!enSamKo && kanForhandsgranska(post, vantandeIds) && (
-                        <Button
-                          intent="secondary"
-                          emphasis="outline"
-                          size="sm"
-                          isLoading={forhandsgranskaPagar.has(post.inbetalningId)}
-                          loadingText="Förhandsgranskar …"
-                          aria-label={`Förhandsgranska kvittot till ${post.namn}`}
-                          onPress={() => forhandsgranskaKvitto(post.inbetalningId, post.namn)}
-                        >
-                          Förhandsgranska
-                        </Button>
-                      )}
-                      {/* SKICKA IGEN, bara på en FALLERAD rad — samma regel och
-                          samma mutation (`koaKvitton`, inte `skickaKvittoIgen`)
-                          som jobbrads-listan nedan bär; se dess docblock för
-                          varför. En rad som aldrig fallerat får ingen knapp.
-
-                          EGET TILLGÄNGLIGT NAMN, samma skäl och samma mönster
-                          som Förhandsgranska ovan (granskningsfynd runda 1,
-                          PR #2193): blocket kan bära ett tjugotal rader, och
-                          utan namnet blir varje knapp "Skicka igen" i
-                          skärmläsarens knapplista — omöjliga att skilja åt,
-                          och det är en DESTRUKTIV-intilliggande handling som
-                          köar ett riktigt utskick. */}
-                      {lage.fel && (
-                        <Button
-                          intent="secondary"
-                          emphasis="outline"
-                          size="sm"
-                          isDisabled={koa.isPending}
-                          aria-label={`Skicka kvittot till ${post.namn} igen`}
-                          onPress={() =>
-                            koa.mutate(
-                              { inbetalningIds: [post.inbetalningId] },
-                              { onSuccess: (svar) => setJobbId(svar.jobbId ?? jobbId) },
-                            )
-                          }
-                        >
-                          Skicka igen
-                        </Button>
-                      )}
-                      {/* EN ENKEL KNAPP, INTE EN ⋯-MENY — bokfört val (pass 11
-                          bad om det ena eller det andra). Raden har som mest
-                          EN åtgärd i detta läge, och pass 8:s egen lärdom om
-                          menyavdelaren gäller i samma anda: en meny som bara
-                          rymmer en post är ceremoni, inte struktur. Blir
-                          åtgärderna fler hör de hemma i `Meny`, precis som på
-                          inbetalningsraderna. */}
-                      {lage.kanAngra && !angrarDenna && (
-                        /* EGET TILLGÄNGLIGT NAMN — se Skicka igen ovan.
-                           Formuleringen speglar bekräftelsepanelens egen text
-                           ("Ångra registreringen? Inbetalningen raderas."), så
-                           knappens namn och det som händer när man trycker
-                           säger samma sak. */
-                        <Button
-                          intent="ghost"
-                          size="sm"
-                          aria-label={`Ångra registreringen för ${post.namn}`}
-                          onPress={() => setAngraId(post.inbetalningId)}
-                        >
-                          Ångra
-                        </Button>
-                      )}
-                    </span>
-                  </div>
-
-                  {/* PANELEN OCH SEKUNDÄRRADERNA LIGGER UNDER KÄRNRADEN, i
-                      FULL BREDD — inte längre inuti textkolumnen.
-
-                      DET ÄR SAMMA ÄNDRING SOM GÖR MARCUS ANDRA FYND LÖSBART
-                      (se kärnradens kommentar ovan): så länge panelen låg i
-                      samma flexrad som knappen kunde knappen inte centreras
-                      mot radens tvåradiga kärna utan att glida ned i mitten av
-                      en utfälld panel. Full bredd är dessutom rätt form för
-                      innehållet: bekräftelsen och felmeddelandena hör till
-                      HELA raden, inte till namnkolumnen.
-
-                      "ÖPPNAS PÅ PLATS"-MÖNSTRET ÄR OFÖRÄNDRAT — samma inline-
-                      form som `InbetalningsLista`s radera-bekräftelse och
-                      `RegistreraForm`. Ingen modal för en engångsfråga. */}
-                  {angrarDenna && (
-                    /* INGEN KONTUR (Marcus 2026-09-01: *"Ta bort konturen som
-                       blir runt 'Ångra registreringen'"*). Bekräftelsen låg i
-                       en egen inramad ruta på guldytan — en tredje kant i ett
-                       block som redan har sin egen kontur och sina hårlinjer.
-                       Den ligger nu direkt på ytan som en rad i listrytmen:
-                       frågan står i text och allvaret bärs av "Ja, ångra" i
-                       röd fylld vikt, vilket är den signal en kant ändå bara
-                       upprepade. */
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span className="text-caption">
-                        Ångra registreringen? Inbetalningen raderas.
-                      </span>
-                      <Button
-                        intent="danger"
-                        size="sm"
-                        isDisabled={radera.isPending}
-                        isLoading={radera.isPending}
-                        onPress={() => angraRegistrering(post)}
-                      >
-                        Ja, ångra
-                      </Button>
-                      <Button intent="ghost" size="sm" onPress={() => setAngraId(null)}>
-                        Behåll
-                      </Button>
-                    </div>
-                  )}
-
-                  {radera.isError && angrarDenna && (
-                    <span
-                      role="alert"
-                      className="text-(color:--mm-input-error-text) block text-caption"
-                    >
-                      {radera.error.message}
-                    </span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-          {/* [TASK-362] EN STATUSYTA, RESERVERAD HÖJD, FRÅN KÖAT TILL KLART.
-              Marcus 2026-09-02 (S113 resume 8-röktestet): *"jag gillade inte
-              riktigt allt som händer UNDER utskicket, den gula rutan
-              förändrades i höjd, olika toastar etc, det var liksom inte
-              'rent' eller 'elegant'"*.
-
-              FÖRE denna ändring var knappraden och jobbUTFALLET två separata
-              noder på två separata ställen: knappen levde HÄR (i blocket) och
-              försvann i samma tick som `vantande` tömdes, medan utfallet levde
-              i en EGEN `<div>` under HELA `<section>`, och monterades färskt
-              när `utfall` first fick ett värde. Två monterings-/avmonterings-
-              händelser i snabb följd, i olika delar av trädet — exakt
-              mekaniken forskningspasset 2026-09-02
-              (`docs/research/utskicksbekraftelse-inkorg-auto-dismiss-vs-persistent-2026-09-02.md`
-              § 1) mätte som layouthoppets rotorsak, tillsammans med `utfall`
-              som aldrig nollställdes.
-
-              EFTER: EN slot, `min-h-10` (matchar knappens egen höjd —
-              `Button.tsx` `size.md: 'min-h-10'`, husets default-storlek),
-              som visar EXAKT en av tre saker i sekvens: knappen (köat) → en
-              tyst statusrad (pågår/klart) → ingenting (dold, eller nästa
-              handling gjorde den inaktuell). Ingen extra montering, ingen
-              extra notis — bara EN nods innehåll som byter text.
-
-              [REVIEW RUNDA 1, FYND 1 — bekraftelseSynlig gäller nu ENDAST
-              `success`.] Kryss-regeln (S109-facit): en varning försvinner när
-              ORSAKEN är borta, ALDRIG av en obesläktad handling. Den gamla
-              koden nollställde EN delad flagga ovillkorligt i både
-              `vidRegistrerad` och `skickaKvitton`, vilket hade dolt en genuin
-              "N kvitton misslyckades"-varning bara för att Lotta registrerade
-              en annan, orelaterad betalning. Nu: `bekraftelseSynlig` styr
-              ENDAST success-radens synlighet (döljs av nästa handling ELLER
-              manuellt kryss, återställs av ETT NYTT jobb). En `warning` (och
-              en `info`, av samma princip — se nedan) har INGEN egen dölj-
-              flagga alls: den finns kvar SÅ LÄNGE `utfall` beskriver den, och
-              `utfall` byter bara innehåll när ETT NYTT jobb faktiskt startar
-              (ny `jobbId` → `jobb.data` läses om). Det är alltså `utfall`
-              SJÄLVT, inte en extra boolean, som bär "ersatt av nytt jobb"-
-              semantiken FYND 1 efterfrågade — en andra flagga hade bara
-              kunnat glida isär från den redan existerande sanningskällan.
-
-              `info` (pågår/köat på servern) FICK SAMMA BEHANDLING SOM
-              `warning`, INTE SOM `success` — en egen avvägning (uppdraget
-              adresserade bara success/warning explicit). Skälet: ett
-              AKTIVT pågående utskick är lika lite en "handlingslös
-              bekräftelse man kan gå vidare från" som en varning är — att
-              dölja "Skickar kvitton …" bara för att Lotta registrerar en
-              annan betalning hade gömt information om ett jobb som
-              fortfarande arbetar. Flaggad för samma grillning som resten av
-              forskningspassets öppna frågor; se AMENDERING-sidofilen.
-
-              [REVIEW RUNDA 1, FYND 4 — Notis.tsx-mönstret.] Den kompakta
-              statusraden (`<p role="status">` nedan) är nu ALLTID MONTERAD
-              så snart sändlivscykeln överhuvudtaget börjat (`utfall !==
-              null`, oavsett `bekraftelseSynlig`) — bara INNEHÅLLET växlar
-              mellan tomt och `utfall.rubrik`, exakt `Notis.tsx`s egna
-              dokumenterade form ("Den yttre `role="status"`-regionen är
-              ALLTID monterad — bara detta växlar", MDN: "Start with an
-              empty live region, then – in a separate step – change the
-              content inside the region"). FÖRE denna rättning avmonterades
-              hela slotten (knapp OCH statusrad) så fort `bekraftelseSynlig`
-              blev falsk — en avfärdad bekräftelse tog den RESERVERADE HÖJDEN
-              med sig, vilket var en mindre, kvarstående instans av exakt det
-              layouthopp huvudfixen finns för att förhindra. Det yttre
-              villkoret nedan är därför `utfall !== null` (utan
-              `bekraftelseSynlig`) — regionen finns kvar tom i vila, i
-              stället för att försvinna.
-
-              DEN VANLIGA VÄGEN (Lottas EGEN session, `ovrigaJobbrader` tom)
-              håller sig alltså inom EN höjd hela vägen; en genuin varning
-              (delvis/inget skickat) växer utöver den — medvetet, NN/g:s regel
-              om att ett partiellt misslyckande INTE ska klämmas in i en
-              kompakt rad (forskningspasset § 3). Den korsflik-sällsynta
-              `ovrigaJobbrader > 0`-vägen behåller sin egen, oförändrade
-              `MessageBox`+lista under `</section>`, se nedan.
-
-              [REVIEW RUNDA 1, FYND 2 — golvet är RESPONSIVT, `min-h-22
-              sm:min-h-10`.] Runda 1 mätte höjd-identiteten bara vid
-              1280×720. Vid mobilbredd (375 px, under Tailwinds `sm`
-              (640 px)) WRAPPAR knapparaden ("Skicka 1 kvitto" +
-              "Förhandsgranska", TASK-353 — den senare erbjuds bara vid
-              EXAKT en kö-rad, `enSamKo`) till TVÅ rader (mätt: slotten går
-              från 40 px till 88 px), medan `klart`-läget (den kompakta
-              statusraden) stannar på 40 px — en 48 px skillnad, mätt live
-              med `getBoundingClientRect()` FÖRE denna rättning
-              (`tests/e2e/betalningar-inkorg-utskicksflode.staging.test.ts`
-              röd vid mobil-varianten). DET VAR ALLTSÅ INTE
-              makuleringsväg-texten (`min-h-9` på raderna ovan) som
-              radbröt till en tredje rad — den håller exakt sina två rader
-              vid alla tre bredderna, mätt och skärmdumpat. `sm:min-h-10`
-              (40 px, ≥640 px — täcker iPad 820 px och desktop) är golvet
-              enknappsfallet redan höll; `min-h-22` (88 px, <640 px) är
-              EXAKT den mätta tvåknapps-wrap-höjden, ingen marginal utöver
-              det uppmätta. En `klart`-rad reserverar därmed 88 px även på
-              mobil trots att den bara BEHÖVER 40 — samma avvägning som
-              `min-h-10` alltid gjort (reservera för det TALLASTE av de
-              tillstånd som delar slotten, inte bara det egna).
-
-              [TASK-370.4, ÖPPET, INTE OMÄTT-OCH-TYST — AMENDERAD TASK-393]
-              "Skicka N kvitton" + den kombinerade förhandsgranskningen
-              (`!enSamKo`-fallet) är ETT NYTT tvåknappspar i SAMMA slot —
-              samma `min-h-22 sm:min-h-10`-golv ÅTERANVÄNDS (oförändrat,
-              ingen ny mätning gjord i denna skiva). FÖRUTSÄTTNINGEN "längre
-              text än 'Förhandsgranska' ensamt" HÖLL fram till `TASK-393`:
-              sedan dess har BÅDA knapparna SAMMA korta text ("Förhandsgranska"
-              + ett kompakt räknarchip) — paret är alltså SANNOLIKT SMALARE
-              i dag än när denna rad skrevs, vilket om något minskar
-              wrap-risken, inte ökar den. Mobil-wrap-höjden för DETTA par
-              är fortsatt en RIMLIG ANTAGELSE, inte en bekräftad mätning som
-              ovanstående stycke är för enkvitto-paret — verifieras i
-              `TASK-370.5`s QA-vandring (Marcus facit), samma
-              ansvarsfördelning som försättsbladets
-              utseende. */}
-          {(vantande.length > 0 || (utfall !== null && ovrigaJobbrader.length === 0)) && (
-            <div className="flex min-h-22 flex-col justify-center gap-2 sm:min-h-10">
-              {vantande.length > 0 && (
-                /* [TASK-353] KNAPPRADEN, inte längre en ensam knapp. `self-start`
-                   flyttade från knappen till detta svep — knappen behåller exakt
-                   sin vänsterlinje (svepet ovan är `flex flex-col`, så
-                   `self-start` på raden ger samma horisontella läge som på
-                   knappen), och "Förhandsgranska" hamnar bredvid den i stället
-                   för under. `flex-wrap` gör att paret bryter snyggt på en smal
-                   iPad-kolumn i stället för att trycka ihop knapparna under
-                   träffytegolvet.
-
-                   VÄNSTERSTÄLLD — OCH DET ÄR EN REVERSERING, INTE EN NY DESIGN.
-                   Pass 13 flyttade knappen till HÖGER på Marcus egen beställning
-                   samma dag (*"Jag tycker nog att 'skicka 1 kvitto'-knappen ska
-                   sitta till höger och inte till vänster"*), med husets
-                   dialog-mönster som stöd. Efter att ha sett den på skärmen rev
-                   han beslutet i pass 14: *"skicka-knappen ska flyttas tillbaka
-                   till vänster sidan"*. BÅDA DOMARNA STÅR KVAR I TEXTEN MED
-                   AVSIKT — den senare gäller, men en historik som tyst skriver
-                   om sin egen tidigare mening lämnar nästa läsare att "rätta
-                   tillbaka" och göra om varvet.
-
-                   [REVIEW RUNDA 1, FYND 1] `&&` I STÄLLET FÖR `? :` MOT
-                   status-noderna nedan — INTE längre en TERNARY som
-                   ömsesidigt uteslöt knapp och utfall. Mätt fynd (denna
-                   PR, runda 2): en ternary hade DOLT en `warning` så fort
-                   Lotta köade EN NY, obesläktad rad (`vantande.length`
-                   blev > 0 igen) — exakt den regression FYND 1 varnade
-                   för, fast orsakad av STRUKTUREN, inte av
-                   `bekraftelseSynlig`. Knapp och `warning`/`info` kan nu
-                   samexistera i slotten: båda är sanna samtidigt (ett
-                   jobb fallerade ELLER pågår OCH en ny rad väntar), och
-                   ska synas samtidigt. */
-                <div className="flex flex-wrap items-center gap-2 self-start">
-                  <Button intent="success" onPress={skickaKvitton} isLoading={koa.isPending}>
-                    {`Skicka ${vantande.length} ${vantande.length === 1 ? 'kvitto' : 'kvitton'}`}
-                  </Button>
-
-                  {/* [TASK-353] BREDVID SKICKA-KNAPPEN — men BARA när kön har
-                      exakt ETT kvitto (se `enSamKo` ovan för hela formvalet).
-                      Ordningen är avsiktlig: Skicka först, Förhandsgranska efter.
-                      Den primära handlingen behåller sin plats och sin
-                      vänsterlinje; granskningen är ett steg man tar FÖRE, men den
-                      får inte knuffa undan knappen Lotta trycker på varje lördag.
-
-                      `intent="secondary" emphasis="outline"` är husets form för
-                      just denna knapp (`GenereringsVy.tsx` rad ~1505) — sage-
-                      knappen (`intent="success"`) är reserverad för det externa
-                      utskicket och får inte färgmatchas av en granskningsknapp.
-
-                      `isLoading`/`loadingText` I STÄLLET FÖR handbyggd
-                      `aria-disabled` + villkorad `Loader2`/text-swap
-                      (TASK-361, landad som #2212 medan denna PR var i
-                      granskning — inmergad här, `git merge origin/main`):
-                      den gamla formen ändrade BÅDE ikon OCH SYNLIG TEXT
-                      utan att `aria-label` (fixerad per person) någonsin
-                      ändrades, så bredden hoppade i klienten men
-                      skärmläsaren fick ALDRIG någon annonsering av att
-                      laddning pågick. Samma migrering som per-rad-knappen
-                      ovan (~rad 1500) redan bär.
-
-                      [OMBYGGD TASK-369] `isLoading` läser samma per-rad
-                      `forhandsgranskaPagar`-Set som radknappen ovan, INTE
-                      längre den delade `forhandsgranska.isPending` — se
-                      `forhandsgranskaKvitto`s docblock. Detta läge och
-                      radknappens läge är fortfarande ömsesidigt uteslutande
-                      (`enSamKo`), så samma inbetalningId förekommer aldrig i
-                      båda knapparna samtidigt.
-
-                      [AMENDERAD TASK-393] `aria-label` BYTTE från personnamn
-                      ("Förhandsgranska kvittot till {namn}") till räknarformen
-                      ("Förhandsgranska 1 kvitto") — en RIKTIG ändring av det
-                      tillgängliga namnet, inte bara synlig text. Skälet: AC
-                      #4 kräver samma räkne-mönster som `!enSamKo`-knappen
-                      nedan har ("singular vid 1" är bara meningsfullt om
-                      DENNA knapp, den enda som någonsin kan visa N = 1, bär
-                      räkneformen) och Marcus fynd bad uttryckligen om
-                      ENHETLIGHET ("den alltid ska vara Förhandsgranska X").
-                      Personnamnet tappas INTE ur skärmläsarens sammanhang —
-                      knappen är ensam i sin slot (raden ovan renderar bara
-                      vid `!enSamKo`, se `kanForhandsgranska`-villkoret på
-                      rad ~1776), så ingen namn-kollision uppstår som den
-                      radknappen har (se dess "EGET TILLGÄNGLIGT NAMN PER
-                      RAD"-motivering). Etiketten delas nu med `!enSamKo`-
-                      knappen via `ForhandsgranskaEtikett`, se dess
-                      docblock. */}
-                  {ensamKandidat !== null && kanForhandsgranska(ensamKandidat, vantandeIds) && (
-                    <Button
-                      intent="secondary"
-                      emphasis="outline"
-                      isLoading={forhandsgranskaPagar.has(vantande[0].inbetalningId)}
-                      loadingText="Förhandsgranskar …"
-                      aria-label={`Förhandsgranska ${vantande.length} ${vantande.length === 1 ? 'kvitto' : 'kvitton'}`}
-                      onPress={() =>
-                        forhandsgranskaKvitto(vantande[0].inbetalningId, vantande[0].namn)
-                      }
-                    >
-                      <ForhandsgranskaEtikett antal={vantande.length} />
-                    </Button>
-                  )}
-
-                  {/* [TASK-370.4, S116 beslut 1] DEN KOMBINERADE FÖRHANDS-
-                      GRANSKNINGEN (internt namn "alla" i handlern/nyckeln
-                      nedan) — BREDVID "Skicka N kvitton", precis som
-                      ett-kvitto-fallets knapp ovan, men bara när kön har
-                      TVÅ ELLER FLER väntande (`!enSamKo` — se den omskrivna
-                      FORMVALET-kommentaren ovan för varför TASK-353s "aldrig
-                      en gemensam knapp"-slutsats är upphävd). SAMMA
-                      ordning-avsiktlig-motivering som knappen ovan: Skicka
-                      först, Förhandsgranska(alla) efter.
-
-                      [AMENDERAD TASK-393] Synlig text och `aria-label` bar
-                      tidigare ordet "alla" ("Förhandsgranska alla N
-                      kvitton") — Marcus fynd (S121): knappen ska ALLTID
-                      lyda "Förhandsgranska", med N i ett upphöjt räknarchip.
-                      Ordet "alla" är BORTA ur båda (AC #1); etiketten delas
-                      nu med ett-kvitto-knappen ovan via
-                      `ForhandsgranskaEtikett` (docblock vid
-                      `FORHANDSGRANSKA_ALLA_NYCKEL`). Det INTERNA namnet
-                      ("alla", sentinel-nyckeln, handler-funktionen
-                      `forhandsgranskaAlla`) är OFÖRÄNDRAT — det är en
-                      implementationsdetalj, inte UI-text, och byts inte av
-                      detta kort.
-
-                      `!enSamKo` I STÄLLET FÖR `vantande.length >= 2`: detta
-                      HELA träd-svepet ligger redan inuti `vantande.length > 0`
-                      (den yttre villkoret några rader upp), så `!enSamKo`
-                      ("inte exakt ett") är exakt "två eller fler" här — samma
-                      härledning FORMVALET-kommentaren bygger på, ingen ny
-                      regel.
-
-                      INGET `kanForhandsgranska`-villkor här, TILL SKILLNAD
-                      FRÅN raderna/ett-kvitto-fallet ovan: den härledningen
-                      svarar "kan DEN HÄR specifika raden förhandsgranskas"
-                      (kräver `medKvitto` OCH medlemskap i `vantandeIds`) — en
-                      fråga om EN rad. "Alla" har ingen sådan enskild rad att
-                      pröva; kön (`vantande`) ÄR PER DEFINITION de kvitton som
-                      väntar (PRD § Implementationsbeslut, "läser dagens
-                      session-lokala kö"), så hela listan är alltid ett giltigt
-                      anrop så länge den inte är tom — vilket den yttre
-                      `vantande.length > 0`-vakten redan garanterar.
-
-                      TAKÖVERSKRIDANDE VISAS INTE HÄR SOM ETT VILLKOR: knappen
-                      finns ändå (kön KAN spänna över fler än 30 utan att någon
-                      hindrat registreringen), och EF:ens avvisning översätts
-                      till det begripliga meddelandet av `forhandsgranskaAlla`
-                      själv (se dess docblock och `tolkaTakfel` i
-                      `inkorg-harledningar.ts`) — ALDRIG en tyst delmängd
-                      (S116 beslut 6). */}
-                  {!enSamKo && (
-                    <Button
-                      intent="secondary"
-                      emphasis="outline"
-                      isLoading={forhandsgranskaPagar.has(FORHANDSGRANSKA_ALLA_NYCKEL)}
-                      loadingText="Förhandsgranskar …"
-                      aria-label={`Förhandsgranska ${vantande.length} kvitton`}
-                      onPress={() => forhandsgranskaAlla(vantandeIds)}
-                    >
-                      <ForhandsgranskaEtikett antal={vantande.length} />
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* WARNING — EGEN NOD, HELT OBEROENDE AV `vantande` (FYND 1,
-                 skärpt runda 2 — se kommentaren ovan). `MessageBox`s
-                 kryss-regel förbjuder ändå `onDismiss` här (S109-facit) —
-                 konsekvent, ingen specialundantag skrivs in. NN/g:s regel
-                 (forskningspasset § 3): ett DELVIS eller HELT misslyckat
-                 utskick är inte en toast-kandidat, oavsett visuell form —
-                 det kräver uppmärksamhet och stannar tills ETT NYTT JOBB
-                 gör det inaktuellt. */}
-              {utfall !== null && utfall.intent === 'warning' && ovrigaJobbrader.length === 0 && (
-                <MessageBox intent="warning" title={utfall.rubrik}>
-                  Utfallet per kvitto står på raderna ovan.
-                </MessageBox>
-              )}
-
-              {/* [TASK-362/FYND 4] KOMPAKT STATUSRAD — ALLTID MONTERAD
-                 (samma yttre villkor som blockets `<div>`, `utfall !==
-                 null`), OBEROENDE av `vantande` (FYND 1, samma skäl som
-                 warning-noden ovan: en `info` — "Skickar kvitton …" —
-                 ska inte försvinna för att en NY, obesläktad rad köas).
-                 Bara INNEHÅLLET växlar mellan tomt och `utfall.rubrik` —
-                 samma "empty live region"-form `Notis.tsx` dokumenterar.
-
-                 INTE `MessageBox` — samma avvägning `RegistreraYta.tsx`
-                 redan gör för denna UNION (`intent !== 'warning'`): en
-                 `MessageBox`s kant+fond-vikt är rätt för en varning som
-                 kräver uppmärksamhet, fel för en lugn "klart"-bekräftelse
-                 Lotta bara ska kunna se och gå vidare från. En vanlig rad
-                 håller dessutom blockets höjd nära knappens (`min-h-10`
-                 ovan) i stället för att hoppa till en 70+ px hög ruta för
-                 det VANLIGASTE utfallet av alla (allt gick fram).
-
-                 `role="status"` + `aria-live="polite"` — samma roll
-                 `MessageBox` själv sätter för info/success (S109-facit),
-                 aldrig `alert` här (ingen varning). TOM när: utfallet är
-                 en varning (MessageBoxen ovan bär den redan), `success`
-                 är avfärdad (`bekraftelseSynlig === false` — vilket också
-                 är fallet SÅ FORT `vantande` blir icke-tom igen, eftersom
-                 `vidRegistrerad`/`skickaKvitton` sätter den flaggan i
-                 SAMMA andetag som de fyller kön), eller inget utfall
-                 finns alls. Krysset syns ENDAST för `success`
-                 (kryss-regeln): `pagar`/`vantar` är progress utan
-                 handling att avfärda ännu. */}
-              {utfall !== null && ovrigaJobbrader.length === 0 && (
-                <p
-                  role="status"
-                  aria-live="polite"
-                  data-testid="inkorg-sandstatus"
-                  className="flex items-center justify-between gap-3 text-small text-text-muted"
-                >
-                  {(utfall.intent === 'info' ||
-                    (utfall.intent === 'success' && bekraftelseSynlig)) && (
-                    <>
-                      <span>{utfall.rubrik}</span>
-                      {utfall.intent === 'success' && (
-                        <Button
-                          intent="ghost"
-                          size="sm"
-                          aria-label="Stäng bekräftelse"
-                          onPress={() => setBekraftelseSynlig(false)}
-                          className="shrink-0"
-                        >
-                          <X aria-hidden="true" className="size-4" />
-                        </Button>
-                      )}
-                    </>
-                  )}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* FELET SÄGS PÅ SIDAN, inte i det fönster som stängdes. `role="alert"`
-              därför att Lotta just tryckte och väntar på något som inte kom —
-              samma form och samma klass som blockets övriga fel ovan.
-
-              [OMBYGGD TASK-369] Läser `forhandsgranskaFel` (lokalt state satt
-              av `forhandsgranskaKvitto`s `mutateAsync`-fel-gren), INTE längre
-              `forhandsgranska.isError`/`.error` — den delade mutationen vet
-              inte VILKEN rad som senast felade om två råkar överlappa
-              (samma `#currentMutation`-ersättning som docblocket vid
-              `forhandsgranskaKvitto` beskriver). Texten NAMNGER personen
-              (AC #4) — den gamla texten gjorde det inte. Fälar flera rader
-              samtidigt visas SENASTE, det räcker (S116 beslut 5, bokfört i
-              kortet): ingen kö av fel behövs, bara ett fel i taget blockerar
-              ingen annan rads knapp.
-
-              [REVIEW RUNDA 1] Rutan nollställs INTE av sig själv (till
-              skillnad från den gamla `forhandsgranska.isError`, som
-              TanStack självläkte vid nästa `pending`) — `forhandsgranskaKvitto`
-              rensar den explicit vid varje NYTT försök, se dess docblock.
-
-              [TASK-370.4] SAMMA RUTA, NU DELAD MED "ALLA"-FLÖDET —
-              `forhandsgranskaFel.namn` avgör TEXTFORMEN, se statens eget
-              docblock för varför `null` (alla-flödet) inte får ett eget
-              klientbyggt "Kvittot till X …"-prefix: EF:ens allt-eller-inget-
-              fel namnger redan personen INUTI `message` när felet beror på
-              ETT trasigt underlag, och taköverskridande-meddelandet
-              (`forhandsgranskaAlla`s `tolkaTakfel`-gren) namnger ingen
-              alls — ett påhittat prefix hade i BÅDA fallen sagt något
-              felaktigt eller överflödigt. */}
-          {forhandsgranskaFel && (
-            <p role="alert" className="text-(color:--mm-input-error-text) text-caption">
-              {forhandsgranskaFel.namn
-                ? `Kvittot till ${forhandsgranskaFel.namn} kunde inte förhandsgranskas: ${forhandsgranskaFel.message}`
-                : `Förhandsgranskningen av alla kunde inte skapas: ${forhandsgranskaFel.message}`}
-            </p>
-          )}
-        </section>
-      )}
+      <RegistreratNuBlock
+        granskningsBlockRef={granskningsBlockRef}
+        registrerade={registrerade}
+        vantande={vantande}
+        jobbrader={jobb.data?.rader ?? []}
+        utfall={utfall}
+        ovrigaJobbrader={ovrigaJobbrader}
+        bekraftelseSynlig={bekraftelseSynlig}
+        onDoljBekraftelse={() => setBekraftelseSynlig(false)}
+        koaPending={koa.isPending}
+        onSkickaKvitton={skickaKvitton}
+        vantandeIds={vantandeIds}
+        enSamKo={enSamKo}
+        ensamKandidat={ensamKandidat}
+        forhandsgranskaPagar={forhandsgranskaPagar}
+        forhandsgranskaAllaPagar={forhandsgranskaPagar.has(FORHANDSGRANSKA_ALLA_NYCKEL)}
+        onForhandsgranska={forhandsgranskaKvitto}
+        onForhandsgranskaAlla={forhandsgranskaAlla}
+        onSkickaIgen={skickaIgen}
+        onAngra={angraRegistrering}
+        angraPending={radera.isPending}
+        angraFel={angraFel}
+        onAngraDialogOppen={() => setAngraFel(null)}
+        forhandsgranskaFel={forhandsgranskaFel}
+      />
 
       {/* [TASK-362] DEN KORSFLIK-SÄLLSYNTA VÄGEN — ett jobb startat i en ANNAN
           flik/session, vars rader INTE finns i vår egen `registrerade`-logg

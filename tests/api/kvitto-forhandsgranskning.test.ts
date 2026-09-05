@@ -89,9 +89,15 @@ const EF_KALLA = utanKommentarer(
 const ADAPTER_KALLA = utanKommentarer(
   readFileSync(path.join(REPO_ROOT, 'src', 'data', 'adapters', 'AirtableAdapter.ts'), 'utf8'),
 );
+/* [TASK-402.2] RETARGETAD FRÅN `BetalningsInkorg.tsx` TILL
+   `RegistreratNuBlock.tsx`: granskningsblockets rad-åtgärder (Förhandsgranska/
+   Skicka igen/Ångra, med sina per-rad `aria-label`) bröts ut till den delade
+   komponenten, se dess docblock. Variabelnamnet `INKORG_KALLA` behålls —
+   sviten prövar fortfarande "granskningsblockets" a11y-golv, det är bara
+   filen på disk som bytt plats. */
 const INKORG_KALLA = utanKommentarer(
   readFileSync(
-    path.join(REPO_ROOT, 'src', 'components', 'betalningar', 'BetalningsInkorg.tsx'),
+    path.join(REPO_ROOT, 'src', 'components', 'betalningar', 'RegistreratNuBlock.tsx'),
     'utf8',
   ),
 );

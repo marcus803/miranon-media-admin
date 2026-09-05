@@ -76,6 +76,10 @@ const HAMTA_OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
 const REGISTRERA_INBETALNING = '**/functions/v1/registrera-inbetalning';
 const KOA_KVITTON = '**/functions/v1/koa-kvitton';
 const HAMTA_JOBBSTATUS = '**/functions/v1/hamta-jobbstatus*';
+/** [TASK-402.2] Ångra går via `hantera-inbetalning` (`atgard: 'radera'`) —
+    samma EF `useRaderaInbetalning` redan anropar, se
+    `src/data/adapters/betalningsportar.ts`s `raderaInbetalning`. */
+const HANTERA_INBETALNING = '**/functions/v1/hantera-inbetalning';
 
 const EVENT_ID = 'recTASK362EVENT1';
 const ANMALAN_ID = 'recTASK362ANMALN';
@@ -265,6 +269,33 @@ async function mocka(page: Page, rows: Json[] = [oppenBetalning()]): Promise<voi
       body: JSON.stringify(jobbstatusSvar),
     });
   });
+
+  /* [TASK-402.2] STANDARDSVARET LYCKAS — en test som behöver ett fel
+     registrerar sin EGEN `page.route(HANTERA_INBETALNING, …)` EFTER denna
+     `mocka()`-körning; Playwright prövar senast-registrerade routen först
+     (`route.fallback()` krävs för att falla vidare hit, annars vinner den
+     senare handlern helt) — samma mönster som `mockaPreviewReceipt` i
+     systerfilen `betalningar-inkorg-forhandsgranska-alla.staging.test.ts`. */
+  await page.route(HANTERA_INBETALNING, async (route: Route) => {
+    const body = route.request().postDataJSON() as { atgard: string; inbetalningId: string };
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        atgard: body.atgard,
+        inbetalningId: body.inbetalningId,
+        harledning: {
+          summa: 500,
+          gallandePris: 500,
+          saknas: 500,
+          avgiftKlar: false,
+          alltKlart: false,
+          arForelasning: false,
+        },
+        spegel: { skrivet: true, forsok: 1, skal: null },
+      }),
+    });
+  });
 }
 
 const REGION = 'Registrerat nu';
@@ -296,24 +327,34 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
     await expect(block.getByText('Kvitto skickat · MM-2026-1001')).toBeVisible();
     await expect(block).toHaveCSS('background-color', TON_VILA);
 
-    // Makuleringsvägens sekundärtext syns fortfarande (ingen information
-    // togs bort — den flyttade bara till vila-läget, TASK-362 AC #1).
+    // [TASK-402.2, formbyte 1 — FACIT-LÅST ÄNDRING, INTE EN REGRESSION]
+    // Makuleringsvägens sekundärtext ("Kvittot är på väg eller skickat.
+    // Ångra genom att makulera …") ÄR RIVEN: facit
+    // (`s121-bekraftelsesteget-konvergens/facit.json` § "Registrerat nu")
+    // visar raden som namn · "betalsätt · kvittoläge" · belopp · åtgärder,
+    // UTAN förklaringstexten. Rätten till att ångra syns nu enbart genom
+    // FRÅNVARON av en Ångra-knapp (se `RegistreratNuBlock.tsx`s `AngraKnapp`,
+    // som bara renderas när `lage.kanAngra`) — ingen text ersätter den.
     await expect(
       block.getByText(
         'Kvittot är på väg eller skickat. Ångra genom att makulera inbetalningen på anmälans betalningsrader.',
       ),
-    ).toBeVisible();
+    ).not.toBeVisible();
+    await expect(block.getByRole('button', { name: /^Ångra registreringen för/ })).toHaveCount(0);
   });
 
   /* [REVIEW RUNDA 1, FYND 2] TRE VIEWPORTS, INTE EN — runda 1 mätte bara
-     1280×720 (Desktop Chrome-defaulten). En smalare kolumn kan tvinga
-     radens makuleringsväg ("Kvittot är på väg eller skickat. Ångra genom
-     att makulera …") att radbryta till FLER rader än den `min-h-9`-golv
-     (36 px, TASK-362 huvudfixen) reserverade för — vilket är exakt den
+     1280×720 (Desktop Chrome-defaulten). En smalare kolumn kan bryta
+     åtgärdskolumnens knapprad annorlunda än på desktop — vilket är exakt den
      klass regression höjd-golvet finns för att förhindra, prövad bara vid
      EN bredd. Desktop/iPad/mobil täcker husets tre brytpunkter
      (`sm`/`md`-Tailwind-stegen denna vy själv använder, se
-     `BetalningsradKort`s `sm:flex-row`). */
+     `BetalningsradKort`s `sm:flex-row`).
+
+     [TASK-402.2] Golvet som håller höjden konstant flyttade FRÅN
+     makuleringsväg-textens `min-h-9`-platshållare (riven, se förra testets
+     kommentar) TILL åtgärdskolumnens EGEN `min-h-9`
+     (`RegistreratNuBlock.tsx`) — samma 36 px, ny bärare. */
   const VIEWPORTS: { namn: string; width: number; height: number }[] = [
     { namn: 'desktop (1280×900)', width: 1280, height: 900 },
     { namn: 'iPad (820×1180)', width: 820, height: 1180 },
@@ -344,8 +385,8 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
 
       // Toleransen är 0 — `min-h-10` gör slotten exakt lika hög i båda
       // lägena (Button.tsx `size.md: 'min-h-10'`), och radens EGEN
-      // tillväxt (`min-h-9` på makuleringsväg-platshållaren) tillför
-      // inget extra, VID INGEN AV DE TRE BREDDERNA.
+      // åtgärdskolumn (`min-h-9`, TASK-402.2) håller sin höjd oavsett hur
+      // många knappar som visas, VID INGEN AV DE TRE BREDDERNA.
       expect(klarHojd, `${namn}: köat=${kootHojd}px, klart=${klarHojd}px`).toBe(kootHojd);
     });
   }
@@ -436,8 +477,8 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
     const block = page.locator(`section[aria-label="${REGION}"]`);
     await expect(block.getByRole('button', { name: 'Skicka 1 kvitto' })).toBeVisible();
 
-    // AKTIVT (köat): knappen, radens makuleringsplatshållare (dold via
-    // `invisible`/`aria-hidden`, TASK-362) och rad-texten.
+    // AKTIVT (köat): knappen, radens åtgärdskolumn (`min-h-9`, TASK-402.2)
+    // och rad-texten.
     const aktivtResultat = await new AxeBuilder({ page })
       .include(`section[aria-label="${REGION}"]`)
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
@@ -696,5 +737,107 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
     await expect(region).toBeAttached();
     await expect(region).toHaveText('');
     await expect(region).toHaveAttribute('data-test-marker', 'samma-nod');
+  });
+
+  /**
+   * [TASK-402.2, formbyte 3] ÅNGRA GÅR VIA HUSETS DIALOG — nytt fall, AC #2/
+   * AC #6. Facit (`s121-bekraftelsesteget-konvergens/facit.json` § "Ångra-
+   * dialogen"): rubrik "Ångra registreringen?", kropp "Namn · belopp ·
+   * betalsätt" + konsekvensen, knappar "Behåll" (ofarligt, default-fokus)
+   * och "Ångra registreringen" (destruktivt). Escape stänger utan ändring —
+   * samma `Modal`-primitiv-beteende `Dialog.tsx`s docblock dokumenterar
+   * ("Escape stänger" är inbyggt via react-aria-components).
+   *
+   * TVÅ RADER, MED AVSIKT: en ångrad rad ska INTE ta bort HELA blocket, så
+   * assertionerna kan pröva "just den här raden borta, den andra kvar" i
+   * stället för att behöva resonera om blockets eget unmount-ögonblick.
+   */
+  test('Ångra öppnar husets dialog (Behåll/Escape stänger utan ändring, Ångra registreringen raderar)', async ({
+    page,
+  }) => {
+    await mocka(page, [
+      oppenBetalning(),
+      oppenBetalning({ anmalanRecordId: ANMALAN_ID_2, personNamn: 'Task362 Andrasson' }),
+    ]);
+    await page.goto('/mer/betalningar');
+
+    const rad1 = page.getByRole('listitem').filter({ hasText: 'Task362 Testsson' });
+    await rad1.getByRole('button', { name: 'Registrera betalning' }).click();
+    await page
+      .getByRole('form', { name: /Registrera betalning för/ })
+      .getByRole('button', { name: 'Registrera', exact: true })
+      .click();
+
+    const block = page.locator(`section[aria-label="${REGION}"]`);
+    const angraKnapp = block.getByRole('button', {
+      name: 'Ångra registreringen för Task362 Testsson',
+    });
+    await expect(angraKnapp).toBeVisible();
+
+    // ÖPPNA — rubrik, kropp (namn · belopp · betalsätt + konsekvens).
+    await angraKnapp.click();
+    const dialog = page.getByRole('dialog', { name: 'Ångra registreringen?' });
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText('Task362 Testsson');
+    await expect(dialog).toContainText('500 kr');
+    await expect(dialog).toContainText('Swish');
+    await expect(dialog).toContainText(
+      'Inbetalningen raderas och kvittot skickas inte. Raden går tillbaka till listan.',
+    );
+
+    // DEFAULT-FOKUS PÅ "BEHÅLL" (det ofarliga valet, AC #2) — react-arias
+    // egen dialog-öppning, ingen egen fokus-styrning i produktionskoden.
+    const behallKnapp = dialog.getByRole('button', { name: 'Behåll' });
+    await expect(behallKnapp).toBeFocused();
+
+    // ESCAPE STÄNGER UTAN ÄNDRING — raden är KVAR i blocket, oregistrerad.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect(angraKnapp).toBeVisible();
+    await expect(block.getByText('Task362 Testsson')).toBeVisible();
+
+    // ÖPPNA IGEN, TRYCK "BEHÅLL" — samma utfall som Escape.
+    await angraKnapp.click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Behåll' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(block.getByText('Task362 Testsson')).toBeVisible();
+
+    // ÖPPNA EN TREDJE GÅNG, TRYCK DEN DESTRUKTIVA KNAPPEN — raden RADERAS
+    // via `hantera-inbetalning` (mockad i `mocka()`), dialogen stänger, och
+    // den ANDRA raden (Andrasson) står KVAR orörd i blocket.
+    await angraKnapp.click();
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Ångra registreringen' }).click();
+    await expect(dialog).not.toBeVisible();
+    await expect(block.getByText('Task362 Testsson')).not.toBeVisible();
+  });
+
+  /**
+   * [TASK-402.2, formbyte 1] "FÖRHANDSGRANSKA" BÄR INGET SYNLIGT TAL — nytt
+   * fall, AC #1/AC #6. Ensam-kö-fallet (`enSamKo`, N = 1): den synliga
+   * texten är EXAKT "Förhandsgranska" (`RaknarChip`-chippet rivet), medan
+   * det tillgängliga namnet (`aria-label`) fortsatt bär räkneformen
+   * ("Förhandsgranska 1 kvitto") — antalet flyttade, det försvann inte.
+   * N ≥ 2-fallet (den kombinerade knappen) täcks redan grundligt av
+   * `betalningar-inkorg-forhandsgranska-alla.staging.test.ts`.
+   */
+  test('Förhandsgranska-knappen bär inget synligt tal — aria-label ensam bär räkneformen (N = 1)', async ({
+    page,
+  }) => {
+    await mocka(page);
+    await page.goto('/mer/betalningar');
+
+    await page.getByRole('button', { name: 'Registrera betalning' }).click();
+    await page
+      .getByRole('form', { name: /Registrera betalning för/ })
+      .getByRole('button', { name: 'Registrera', exact: true })
+      .click();
+
+    const block = page.locator(`section[aria-label="${REGION}"]`);
+    const knapp = block.getByRole('button', { name: 'Förhandsgranska 1 kvitto' });
+    await expect(knapp).toBeVisible();
+    // DEN SYNLIGA TEXTEN ÄR REN — inget upphöjt tal, ingen `RaknarChip`.
+    await expect(knapp).toHaveText('Förhandsgranska');
   });
 });

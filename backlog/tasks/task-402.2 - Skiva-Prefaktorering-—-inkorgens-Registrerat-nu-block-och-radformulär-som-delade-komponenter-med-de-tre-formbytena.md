@@ -3,10 +3,10 @@ id: TASK-402.2
 title: >-
   Skiva: Prefaktorering — inkorgens 'Registrerat nu'-block och radformulär som
   delade komponenter, med de tre formbytena
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 19:19'
+updated_date: '2026-09-05 20:51'
 labels:
   - ready-for-agent
 dependencies: []

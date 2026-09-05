@@ -1,8 +1,15 @@
-// [TASK-362] EN statusyta, källkodsnivå — bevisar att `BetalningsInkorg.tsx`s
-// kompakta, höjd-reserverade sändstatusrad renderas för VARJE
-// `utfall.intent !== 'warning'`, alltså BÅDE `info` (`vantar`/`pagar`) och
-// `success` (`allt-skickat`) genom SAMMA gren/nod — inte bara det tillstånd
-// en enda e2e-körning råkar fånga.
+// [TASK-362, retargeted TASK-402.2] EN statusyta, källkodsnivå — bevisar att
+// `RegistreratNuBlock.tsx`s kompakta, höjd-reserverade sändstatusrad
+// renderas för VARJE `utfall.intent !== 'warning'`, alltså BÅDE `info`
+// (`vantar`/`pagar`) och `success` (`allt-skickat`) genom SAMMA gren/nod —
+// inte bara det tillstånd en enda e2e-körning råkar fånga.
+//
+// [TASK-402.2] KÄLLAN FLYTTADE FRÅN `BetalningsInkorg.tsx`: sändstatus-
+// slotten (knapprad/warning/statusrad) bröts ut till den delade komponenten
+// `RegistreratNuBlock.tsx` (inkorgens "Registrerat nu"-block, återanvänd av
+// TASK-402.3s bekräftelsesteg). Denna filens PRÖVNING är oförändrad — samma
+// tre villkorssträngar, samma index-baserade struktur-kontroll — bara VILKEN
+// FIL som läses är ny.
 //
 // ═══════════════════════════════════════════════════════════════════════════
 // VARFÖR KÄLLKODSNIVÅ OCH INTE EN LIVE DOM-MÄTNING AV "PÅGÅR"
@@ -48,12 +55,12 @@ import { expect, test } from '@playwright/test';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-const INKORG_KALLA = readFileSync(
-  path.join(REPO_ROOT, 'src', 'components', 'betalningar', 'BetalningsInkorg.tsx'),
+const BLOCK_KALLA = readFileSync(
+  path.join(REPO_ROOT, 'src', 'components', 'betalningar', 'RegistreratNuBlock.tsx'),
   'utf8',
 );
 
-/** De tre villkors-strängarna, ordagrant ur källan (`BetalningsInkorg.tsx`
+/** De tre villkors-strängarna, ordagrant ur källan (`RegistreratNuBlock.tsx`
     § sändstatus-slotten). Byts något av dem i en refaktor ska denna fil
     fällas — det ÄR grindens jobb. */
 const KNAPP_VILLKOR = '{vantande.length > 0 && (';
@@ -102,7 +109,7 @@ function treOberoendeGrenar(kalla: string): boolean {
 }
 
 test('knapprad, warning och kompakt statusrad är TRE OBEROENDE grenar — ingen utesluter de andra (review-runda 2, FYND 1)', () => {
-  expect(treOberoendeGrenar(INKORG_KALLA)).toBe(true);
+  expect(treOberoendeGrenar(BLOCK_KALLA)).toBe(true);
 
   // NEGATIV KONTROLL 1: DEN FAKTISKA runda 1-REGRESSIONEN — en ternary som
   // gör knappraden och (warning|status) ömsesidigt uteslutande. Detta är
@@ -138,20 +145,25 @@ test('knapprad, warning och kompakt statusrad är TRE OBEROENDE grenar — ingen
 });
 
 test('warning-grenen (och bara den) använder MessageBox — kryss-regeln kan aldrig nås av info/success-raden', () => {
-  // Källan ska INNEHÅLLA exakt EN plats där `intent="warning"` kopplas till
-  // en `MessageBox` i sändstatus-slotten (den andra `intent="warning"`-
-  // träffen i filen hör till realtidsfel-boxen, ett annat, orört block).
-  const warningMessageBoxAntal = (INKORG_KALLA.match(/<MessageBox intent="warning"/g) ?? []).length;
-  // Realtidsfel-boxen (oförändrad) + sändstatus-slottens warning-gren = 2.
-  expect(warningMessageBoxAntal).toBe(2);
+  /* [TASK-402.2] TALET ÄNDRADE FRÅN 2 TILL 1 VID FLYTTEN, INTE EN
+     REGRESSION: `RegistreratNuBlock.tsx` bär bara sändstatus-slottens EGEN
+     warning-gren — realtidsfel-boxen (`<MessageBox intent="warning"
+     title="Realtidsuppdateringen är nere">`) stannade kvar i
+     `BetalningsInkorg.tsx` (containern, orörd i sin egen form) när blocket
+     bröts ut. De två boxarna bor nu i TVÅ FILER i stället för en, och denna
+     grind prövar bara DENNA fils egen invariant: sändstatus-slotten använder
+     `MessageBox` på EXAKT ETT ställe (warning-grenen), aldrig på
+     success/info-raden intill (kryss-regeln, S109-facit). */
+  const warningMessageBoxAntal = (BLOCK_KALLA.match(/<MessageBox intent="warning"/g) ?? []).length;
+  expect(warningMessageBoxAntal).toBe(1);
 
   // NEGATIV KONTROLL: en variant som (felaktigt) gav SUCCESS-utfallet en
-  // `MessageBox` också hade höjt antalet till 3 — mönstret ovan hade inte
+  // `MessageBox` också hade höjt antalet till 2 — mönstret ovan hade inte
   // upptäckt den skillnaden på egen hand, så den prövas explicit här.
-  const trasigKalla = `${INKORG_KALLA}\n<MessageBox intent="warning" title="extra">x</MessageBox>`;
+  const trasigKalla = `${BLOCK_KALLA}\n<MessageBox intent="warning" title="extra">x</MessageBox>`;
   const trasigtAntal = (trasigKalla.match(/<MessageBox intent="warning"/g) ?? []).length;
   expect(trasigtAntal).not.toBe(warningMessageBoxAntal);
-  expect(trasigtAntal).toBe(3);
+  expect(trasigtAntal).toBe(2);
 });
 
 test('sändstatus-slotten reserverar min-h-22 sm:min-h-10 (review-runda 1, FYND 2 — responsivt golv)', () => {
@@ -163,7 +175,7 @@ test('sändstatus-slotten reserverar min-h-22 sm:min-h-10 (review-runda 1, FYND 
   // klart). `sm:min-h-10` (40 px, ≥640 px) är golvet enknappsfallet redan
   // höll (Button.tsx `size.md: 'min-h-10'`) — täcker iPad (820 px) och
   // desktop, båda gröna i samma viewport-matris.
-  expect(INKORG_KALLA).toMatch(/flex min-h-22 flex-col justify-center gap-2 sm:min-h-10/);
+  expect(BLOCK_KALLA).toMatch(/flex min-h-22 flex-col justify-center gap-2 sm:min-h-10/);
 
   const BUTTON_KALLA = readFileSync(
     path.join(REPO_ROOT, 'src', 'components', 'primitives', 'Button.tsx'),
@@ -171,7 +183,7 @@ test('sändstatus-slotten reserverar min-h-22 sm:min-h-10 (review-runda 1, FYND 
   );
   // Källan för husets DEFAULT-knappstorlek ('md') ska bära SAMMA `min-h-10`
   // — annars är "matchar knappens egen höjd vid ≥640 px" ett obelagt
-  // påstående i BetalningsInkorg.tsx:s egen kommentar.
+  // påstående i RegistreratNuBlock.tsx:s egen kommentar.
   expect(BUTTON_KALLA).toMatch(/md:\s*'min-h-10/);
 
   // NEGATIV KONTROLL 1: en slot utan reserverad höjd alls hade INTE
@@ -187,13 +199,13 @@ test('sändstatus-slotten reserverar min-h-22 sm:min-h-10 (review-runda 1, FYND 
 });
 
 test('sändstatus-regionen bär data-testid="inkorg-sandstatus" (review-runda 1, FYND 4 — stabil identitet för DOM-nod-provet)', () => {
-  expect(INKORG_KALLA).toContain('data-testid="inkorg-sandstatus"');
+  expect(BLOCK_KALLA).toContain('data-testid="inkorg-sandstatus"');
 
   // NEGATIV KONTROLL: utan test-id:t kan e2e-sviten inte skilja "samma nod,
   // tomt innehåll" från "avmonterad och åter monterad nod" (se
   // `tests/e2e/betalningar-inkorg-utskicksflode.staging.test.ts`s FYND
   // 4-test, som förlitar sig på exakt detta attribut för sin
   // identitetsprövning).
-  const utanTestId = INKORG_KALLA.replace('data-testid="inkorg-sandstatus"', '');
+  const utanTestId = BLOCK_KALLA.replace('data-testid="inkorg-sandstatus"', '');
   expect(utanTestId).not.toContain('data-testid="inkorg-sandstatus"');
 });
