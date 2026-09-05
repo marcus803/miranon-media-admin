@@ -162,13 +162,24 @@ function SektionsRubrik({ id, antal, children }: { id: string; antal: number; ch
   );
 }
 
-/** Eventgruppens rubrik — inkorgens "RIM 1 · 20 sep."-form, ett steg under h2. */
+/**
+ * Eventgruppens rubrik — KLASS FÖR KLASS inkorgens (`BetalningsInkorg.tsx`
+ * § grupper.map): `h2 font-semibold text-lg`, datumet som rått ISO efter
+ * " · " i en `ml-2 font-normal text-small text-text-muted`-span. Marcus varv
+ * 4: *"EXAKT som på betalnings-sidan. Lotta måste känna igen sig."*
+ * Avdelaren är en textnod så skärmläsaren inte läser namn och datum i ett svep.
+ */
 function GruppRubrik({ namn, datum }: { namn: string; datum: string | null }) {
   return (
-    <h3 className="flex flex-wrap items-baseline gap-x-2 px-4 font-semibold text-body">
+    <h2 className="font-semibold text-lg">
       {namn}
-      {datum && <span className="font-normal text-caption text-text-muted">{visaDag(datum)}</span>}
-    </h3>
+      {datum && (
+        <span className="ml-2 font-normal text-small text-text-muted">
+          {' · '}
+          {datum}
+        </span>
+      )}
+    </h2>
   );
 }
 
@@ -180,7 +191,6 @@ export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
 function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
   const valId = useId();
   const handId = useId();
-  const klarId = useId();
   const { rader } = modell;
 
   const handhogen = rader.filter(saknarBelopp);
@@ -243,26 +253,18 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
         </p>
       </header>
 
-      {/* ═══ REGISTRERINGSFÖRSLAG — appens förslag per rad, ÖVERST (varv 3) ═══
-          Marcus 2026-09-05: listan är innehållet; Lotta går igenom den
-          uppifrån och ned och trycker på beloppet för att ändra. */}
-      <section aria-labelledby={klarId} className="flex flex-col gap-4">
-        <div className="flex flex-col gap-1.5">
-          <SektionsRubrik id={klarId} antal={klarhogen.length}>
-            Registreringsförslag
-          </SektionsRubrik>
-          <p className="px-4 text-small text-text-secondary">
-            Baserat på inbetalningshistoriken så föreslår appen inbetalningsbelopp, gå igenom listan
-            och kolla så det stämmer, tryck på beloppet för att ändra.
-          </p>
-        </div>
+      {/* ═══ LISTAN — inkorgens form, klass för klass (Marcus varv 4) ═══
+          Ingen egen rubrik: eventrubrikerna ÄR listans rubriker, som i
+          inkorgen. `px-4` på sektionen + `-mx-4` på `<ul>` är inkorgens
+          egen geometri (rubriken indragen, korten kant i kant). */}
+      <section aria-label="Registreringsförslag" className="flex flex-col gap-4 px-4">
         {klarhogen.length === 0 ? (
-          <p className="px-4 text-small text-text-secondary">Ingen rad har ett belopp än.</p>
+          <p className="text-small text-text-muted">Ingen rad har ett belopp än.</p>
         ) : (
           klaraGrupper.map((grupp) => (
             <div key={grupp.eventId} className="flex flex-col gap-2">
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
-              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+              <ul className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
                 {grupp.rader.map((rad) => (
                   <KlarRad key={rad.nyckel} rad={rad} modell={modell} />
                 ))}
@@ -541,54 +543,68 @@ function HandKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelseste
 }
 
 /**
- * En förslagsrad — en rad per person. BELOPPET ÄR KNAPPEN (Marcus varv 3:
- * *"tryck på beloppet för att ändra"*): raden i övrigt är läsning, beloppet
- * fäller ut redigeraren med radens egna kandidater som förslag.
+ * En förslagsrad = INKORGENS KORT (`BetalningsradKort`), klass för klass:
+ * `li rounded-2xl border p-3`, avatar · namn/meta-kolumn · trailing knapp
+ * (`primary`/`outline`/`sm`, `self-start sm:self-auto`), staplad under `sm`.
+ * Skillnaden mot inkorgen är EN: knappen bär beloppet i stället för
+ * "Registrera betalning" och fäller ut redigeraren i kortet — som inkorgens
+ * kort fäller ut sitt formulär. Öppet kort får samma markerade yta
+ * (`--mm-betalningskort-markerad-*`). Marcus varv 3: *"tryck på beloppet för
+ * att ändra"*; varv 4: *"Lotta måste känna igen sig"*.
  */
 function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: BekraftelsestegModell }) {
   const [oppen, setOppen] = useState(false);
   const panelId = useId();
   const belopp = radbelopp(rad);
+  const kvar = rad.inkorg.kvar;
   const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
 
   return (
-    <li className="flex flex-col">
-      <div className="flex items-center gap-3 px-3 py-2.5">
-        <InitialAvatar namn={rad.inkorg.namn} />
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="truncate font-medium text-body">{rad.inkorg.namn}</span>
-          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-muted">
-            <SaknasKontext rad={rad} visaEvent={false} />
-            {harMarken && <RadMarken rad={rad} />}
-          </span>
-        </span>
-        <span className="flex shrink-0 flex-col items-end gap-0.5">
-          <button
-            type="button"
-            aria-expanded={oppen}
-            aria-controls={oppen ? panelId : undefined}
-            aria-label={`Ändra belopp för ${rad.inkorg.namn}`}
-            onClick={() => setOppen((v) => !v)}
-            className={`-mr-2 inline-flex min-h-8 items-center gap-1 rounded-lg border px-2 font-medium text-body tabular-nums motion-safe:transition-colors ${
-              oppen
-                ? 'border-border-strong bg-bg-emphasized'
-                : 'border-border bg-surface hover:border-border-strong'
-            }`}
-          >
+    <li
+      className={`rounded-2xl border p-3 ${
+        oppen
+          ? 'border-(--mm-betalningskort-markerad-border) bg-(--mm-betalningskort-markerad-bg) contrast-more:border-(--mm-betalningskort-markerad-border)'
+          : 'border-transparent bg-surface contrast-more:border-border-strong'
+      }`}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+          <InitialAvatar namn={rad.inkorg.namn} />
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <span className="font-medium text-body sm:truncate">{rad.inkorg.namn}</span>
+            <span className="text-caption text-text-muted sm:truncate">
+              {kvar === null ? 'Pris saknas i basen' : `${visaKronor(kvar)} kr kvar att betala`}
+            </span>
+            <RadSammanfattning rad={rad} />
+            {harMarken && (
+              <div className="flex flex-wrap items-center gap-2">
+                <RadMarken rad={rad} />
+              </div>
+            )}
+          </div>
+        </div>
+        <Button
+          intent="primary"
+          emphasis="outline"
+          size="sm"
+          className="self-start sm:self-auto"
+          aria-expanded={oppen}
+          aria-controls={oppen ? panelId : undefined}
+          aria-label={`Ändra belopp för ${rad.inkorg.namn}`}
+          onPress={() => setOppen((v) => !v)}
+        >
+          <span className="tabular-nums">
             {belopp === null ? 'Ogiltigt belopp' : `${visaKronor(belopp)} kr`}
-            <ChevronDown
-              aria-hidden="true"
-              size={16}
-              className={`shrink-0 text-text-secondary motion-safe:transition-transform ${
-                oppen ? 'rotate-180' : ''
-              }`}
-            />
-          </button>
-          <RadSammanfattning rad={rad} />
-        </span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            size={14}
+            className={`shrink-0 motion-safe:transition-transform ${oppen ? 'rotate-180' : ''}`}
+          />
+        </Button>
       </div>
       {oppen && (
-        <div className="px-3 pb-3 pl-15">
+        <div className="mt-3 border-border border-t pt-3">
           <RadRedigerare id={panelId} rad={rad} modell={modell} visaBelopp />
         </div>
       )}
@@ -683,9 +699,9 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
           <p className="px-4 text-small text-text-secondary">Inga än.</p>
         ) : (
           registreradeGrupper.map((grupp) => (
-            <div key={grupp.eventId} className="flex flex-col gap-2">
+            <div key={grupp.eventId} className="flex flex-col gap-2 px-4">
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
-              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+              <ul className="-mx-4 flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
                 {grupp.rader.map((rad) => (
                   <li key={rad.nyckel} className="px-3 py-3">
                     <UtfallRad rad={rad} />
