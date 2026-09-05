@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 21:27'
+updated_date: '2026-09-05 21:31'
 labels:
   - ready-for-agent
 dependencies: []
@@ -91,4 +91,20 @@ FYND ATT BOKFÖRA I SLUTRAPPORTEN (redan identifierade, inte agerade på):
 - "Registrera betalning"-etiketten står ORÖRD i: hem/Genvagar.tsx, events/atgarder/AtgardsSida.tsx (via PanelBetalningar.tsx), registrations/AnmalanDetail.tsx (kommentar, faktisk knapp går via AnmalansBetalningar redan åtgärdad), registrations/OmbokningsKvitto.tsx (TillBetalning-komponenten — klickar programmatiskt på REGISTRERA_TRIGGER_ID, vars etikett NU är "Registrera inbetalning" — denna knapps EGEN text säger fortfarande "Registrera betalning", en genuin INKONSEKVENS värd att flagga för Marcus), RegistreraForm.tsx (form-aria-label, delad av alla lägen, medvetet ORÖRD eftersom inkorgen behåller sin identitet).
 - Ingen visuell baslinje hittad specifikt för betalningsinkorgens filterrad (sökt med grep -rli filterrad tests/visual/ och find tests/visual -iname '*filter*'/'*betalning*') — AC #5 verifierad genom att FilterRad.tsx och RaknarChip-användningen där INTE rörts av denna skiva (grep bekräftar).
 - Modal-primitivens hörnradie (rounded -> rounded-2xl) används LOKALT i AngraKnapp (className på <Modal>), INTE ändrad i primitiven själv — bokförd KANDIDAT utan eget kort, som uppdraget bad om.
+
+SLUTFÖRD 2026-09-05 ~21:30 UTC (fortsättning efter checkpointen ovan, samma agent):
+
+Den KÄNDA BUGGEN (blockAktivt) och de TVÅ ytterligare live-buggarna (mobil-höjdregression via saknad `truncate`, samt testets felaktiga antagande om Ångra-dialogens default-fokus) är ALLA rättade och verifierade LIVE. Se commit 235d320f för fullständig felbeskrivning i commit-meddelandet.
+
+SLUTLIGT LÄGE: SHA 235d320f, PR #2360 (fortsatt draft — orkestreraren armerar efter review-agent + CI). AC #1–#6 och DoD #1–#4 avbockade i kortet med mätvärde.
+
+Grindar, alla gröna (se PR-kroppen för fullständig tabell):
+- typecheck/biome/build/check-langa-streck: exit 0
+- test:api:pure (fullt): 1669/1669 gröna
+- test:api:staging (fullt): grön för betalningsdomänen, 3 opåverkade förhandsexisterande fel i andra moduler
+- e2e (3 filer, 24 test): ALLA gröna efter buggfixarna
+
+Bokförda fynd (se PR-kroppen för fullständig lista): OmbokningsKvitto.tsx-inkonsekvensen ("Registrera betalning" kvar där trots att den klickar på en trigger som nu heter "Registrera inbetalning"), ingen visuell baslinje för filterraden, Modal-hörnradie-kandidaten.
+
+Ingen ytterligare handoff behövs — skivan är komplett från byggagentens sida. Nästa steg ägs av orkestreraren (review-agent i färsk kontext, sedan armering).
 <!-- SECTION:NOTES:END -->
