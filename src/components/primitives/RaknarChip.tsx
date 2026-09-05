@@ -4,14 +4,6 @@ export interface RaknarChipProps {
   /** Antalet som visas i chippet — ett icke-negativt heltal. */
   antal: number;
   /**
-   * Tonen. `accent` (default) är ursprungsformen — accentfärgad pill med
-   * inverterad text (FilterRads hörn-badge). `neutral` är ett vanligt vitt
-   * chip med hårlinje-kant och sekundär text, för ett chip som sitter INLINE
-   * i en knappetikett utan att ropa (S121 varv 16, Marcus: *"inte upphöjt
-   * längre … ett vanligt chips i typ vitt"*).
-   */
-  ton?: 'accent' | 'neutral';
-  /**
    * Extra klasser, merge:as in efter grundformen (tailwind-merge).
    * Positionering och siffer-reserverad bredd är konsumentens val — se
    * komponentens docblock för de två etablerade formerna.
@@ -35,11 +27,7 @@ export interface RaknarChipProps {
  *   ANDRA konsumenten `FilterRad`s tidigare docblock förutspådde): chippet
  *   sitter INLINE bredvid knappens text, `relative -top-1` för samma
  *   "upphöjda" känsla som hörn-badgen (Marcus fynd: *"vi har redan en form
- *   för det på exempelvis filterknappen"*) — en form Marcus sedan DÖMDE UT
- *   i bulkregistreringens prototyp (S121 varv 16: *"inte upphöjt längre …
- *   ett vanligt chips i typ vitt"*): prototypen bär `ton="neutral"` utan
- *   `-top-1`, och inkorgen byter till samma form vid promoveringen
- *   (ADR-103), inte förr — och `min-w-6` reserverar plats
+ *   för det på exempelvis filterknappen"*), och `min-w-6` reserverar plats
  *   för TVÅ siffror (kön har ett tak på 30, `TASK-370.1`) så knappens bredd
  *   inte hoppar mellan N = 1 och N = 12/30. `min-width` i stället för ett
  *   fast `width` är avsiktligt: understiger innehållet golvet (alltid sant
@@ -59,15 +47,12 @@ export interface RaknarChipProps {
  * `aria-label`/sr-only-text, aldrig av chippets siffra själv (samma delning
  * `FilterRad` redan hade före lyftet).
  */
-export function RaknarChip({ antal, ton = 'accent', className }: RaknarChipProps) {
+export function RaknarChip({ antal, className }: RaknarChipProps) {
   return (
     <span
       aria-hidden="true"
       className={cn(
-        'inline-flex h-4 min-w-4 items-center justify-center rounded-full px-1 font-medium text-[10px]',
-        ton === 'neutral'
-          ? 'border border-border bg-surface text-text-secondary contrast-more:border-border-strong'
-          : 'bg-accent text-text-inverse',
+        'inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-accent px-1 font-medium text-[10px] text-text-inverse',
         className,
       )}
     >

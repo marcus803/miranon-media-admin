@@ -8,7 +8,6 @@ import {
   Input,
   MessageBox,
   Modal,
-  RaknarChip,
   Select,
   SelectItem,
 } from '@/components/primitives';
@@ -200,16 +199,24 @@ function kortKlass(vald: boolean): string {
 
 /**
  * "Förhandsgranska" + räknarchip — inkorgens `ForhandsgranskaEtikett`
- * (`TASK-393`) med det explicita blanksteget, men chippet är INTE längre
- * upphöjt och bär den neutrala vita tonen (varv 16, Marcus: *"inte upphöjt
- * längre, sedan vill jag ha det som ett vanligt chips i typ vitt"*). Inkorgen
- * byter till samma form vid promoveringen.
+ * (`TASK-393`) med det explicita blanksteget, men chippet är HUSETS
+ * räknarchip (Hem-vyns `ForfallnaBetalningar` och segmentvyn: `rounded-md
+ * bg-bg-emphasized px-1.5 py-0.5 font-semibold … tabular-nums`, ingen kant),
+ * inte den upphöjda accent-pillen (varv 16–17, Marcus: *"inte upphöjt
+ * längre"* → *"ett chips som vi har i huset. Ingen kontur."*). `min-w-6`
+ * behåller TASK-393:s bredd-reservation för två siffror. Inkorgen byter till
+ * samma form vid promoveringen.
  */
 function ForhandsgranskaEtikett({ antal }: { antal: number }) {
   return (
     <>
       {'Förhandsgranska '}
-      <RaknarChip antal={antal} ton="neutral" className="min-w-6 tabular-nums" />
+      <span
+        aria-hidden="true"
+        className="inline-flex min-w-6 justify-center rounded-md bg-bg-emphasized px-1.5 py-0.5 font-semibold text-small text-text tabular-nums"
+      >
+        {antal}
+      </span>
     </>
   );
 }
