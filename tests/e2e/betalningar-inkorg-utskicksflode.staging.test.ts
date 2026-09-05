@@ -749,10 +749,14 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
    * [TASK-402.2, formbyte 3] ÅNGRA GÅR VIA HUSETS DIALOG — nytt fall, AC #2/
    * AC #6. Facit (`s121-bekraftelsesteget-konvergens/facit.json` § "Ångra-
    * dialogen"): rubrik "Ångra registreringen?", kropp "Namn · belopp ·
-   * betalsätt" + konsekvensen, knappar "Behåll" (ofarligt, default-fokus)
-   * och "Ångra registreringen" (destruktivt). Escape stänger utan ändring —
-   * samma `Modal`-primitiv-beteende `Dialog.tsx`s docblock dokumenterar
-   * ("Escape stänger" är inbyggt via react-aria-components).
+   * betalsätt" + konsekvensen, knappar "Behåll" (ofarligt) och "Ångra
+   * registreringen" (destruktivt). [RÄTTAT RUNDA 2] Default-fokus landar på
+   * DIALOGEN, inte på "Behåll" — react-arias `useDialog` fokuserar
+   * dialog-elementet självt vid mount (samma verifierade beteende som
+   * `RegistreratNuBlock.tsx`s docblock nu beskriver); "Behåll" är bara
+   * första Tab-stoppet. Escape stänger utan ändring — samma `Modal`-
+   * primitiv-beteende `Dialog.tsx`s docblock dokumenterar ("Escape stänger"
+   * är inbyggt via react-aria-components).
    *
    * TVÅ RADER, MED AVSIKT: en ångrad rad ska INTE ta bort HELA blocket, så
    * assertionerna kan pröva "just den här raden borta, den andra kvar" i

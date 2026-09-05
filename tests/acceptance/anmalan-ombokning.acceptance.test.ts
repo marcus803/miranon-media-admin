@@ -443,7 +443,7 @@ test.describe('Boka om till annat event (TASK-368.5)', () => {
     await expect(kvitto).toContainText('Nya eventet kostar 2 500 kr, samma pris.');
 
     // Ingen betalningsväg vid jämnt pris.
-    await expect(kvitto.getByRole('button', { name: 'Registrera betalning' })).toHaveCount(0);
+    await expect(kvitto.getByRole('button', { name: 'Registrera inbetalning' })).toHaveCount(0);
     await expect(kvitto.getByRole('button', { name: 'Registrera återbetalning' })).toHaveCount(0);
 
     // AVBOKNINGSGRUPPEN ÄR I SITT VILOLÄGE PÅ DEN NYA ANMÄLAN (review #2267

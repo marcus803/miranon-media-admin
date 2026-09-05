@@ -53,8 +53,17 @@ import { type JobbDelutfall, kanForhandsgranska } from './inkorg-harledningar';
  *    avvikelse från primitivens `rounded`-default; en primitiv-bred ändring
  *    är en bokförd KANDIDAT utan eget kort, se PR-kroppen), rubrik "Ångra
  *    registreringen?", kropp "Namn · belopp · betalsätt" + konsekvensen,
- *    knappar "Behåll" (ghost, står FÖRST i DOM så react-arias default-fokus
- *    landar där) och "Ångra registreringen" (danger). Se `AngraKnapp` nedan.
+ *    knappar "Behåll" (ghost) och "Ångra registreringen" (danger). [RÄTTAT
+ *    RUNDA 2] Fokus landar i DIALOGEN, inte på "Behåll" — react-arias
+ *    `useDialog` fokuserar dialog-elementet självt vid mount (om inget barn
+ *    redan har fokus; `node_modules/react-aria/dist/private/dialog/
+ *    useDialog.mjs`, kommentaren "Focus the dialog itself on mount"), så
+ *    rubriken läses upp av skärmläsare. Tab når "Behåll" FÖRST därefter
+ *    (DOM-ordningen styr tab-sekvensen, inte initialt fokus) — samma
+ *    beteende som facitets VariantC redan dokumenterar korrekt
+ *    (`prototype/VariantC.tsx`: "Fokus landar i dialogen (react-arias
+ *    default, så rubriken läses upp), Tab når Behåll först"). Se
+ *    `AngraKnapp` nedan.
  *
  * SERVER FÖRST ÄR OFÖRÄNDRAT, ÄVEN I DIALOGEN: till skillnad från
  * prototypens `close()`-vid-klick (ingen riktig mutation att vänta på i en

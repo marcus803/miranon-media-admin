@@ -87,7 +87,7 @@ function TillBetalning({ vag }: { vag: Exclude<Prisvag, null> }) {
 
   return (
     <Button intent="secondary" emphasis="outline" size="sm" onPress={till}>
-      {vag === 'aterbetalning' ? 'Registrera återbetalning' : 'Registrera betalning'}
+      {vag === 'aterbetalning' ? 'Registrera återbetalning' : 'Registrera inbetalning'}
     </Button>
   );
 }
