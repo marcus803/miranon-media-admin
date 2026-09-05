@@ -616,7 +616,14 @@ function MarkerbartKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekrafte
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <Checkbox
           isSelected={vald}
-          onChange={(v) => modell.sattRadMarkerad(rad.nyckel, v)}
+          onChange={(v) => {
+            modell.sattRadMarkerad(rad.nyckel, v);
+            // Avmarkeras ett ÖPPET kort stängs formuläret — annars stod kortet
+            // kvar som "öppet" utan vare sig formulär eller belopp (Marcus
+            // fynd 2026-09-05: *"När jag avmarkerade Fatima så försvann hennes
+            // belopp och chevron"*). Ändringarna i formuläret behålls.
+            if (!v) setOppen(false);
+          }}
           className="flex min-w-0 cursor-pointer items-center gap-3 sm:flex-1"
         >
           <KortHuvud rad={rad} vald={vald} />
