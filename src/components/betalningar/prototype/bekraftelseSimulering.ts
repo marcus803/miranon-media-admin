@@ -26,8 +26,13 @@ import { FIXTUR_FEL_ID } from './fixtur';
  * nätverk. "Förhandsgranska N" och "Skicka N kvitton" är inerta i varianterna.
  */
 
-/** De tre beloppsgenvägarna (beslut 2). `annat` = skriv varje belopp för hand. */
-export type Beloppsgenvag = 'avgift' | 'allt' | 'annat';
+/**
+ * Beloppsgenvägarna (beslut 2) plus `forslag` (konvergens varv 2, Marcus val
+ * B 2026-09-05): appens eget förval per rad — avgiften för den som inte
+ * betalat något, resten för den som redan betalat avgiften. `annat` = skriv
+ * varje belopp för hand.
+ */
+export type Beloppsgenvag = 'forslag' | 'avgift' | 'allt' | 'annat';
 
 export const BETALSATT: readonly Betalsatt[] = ['Swish', 'Bankgiro', 'Plusgiro'];
 
@@ -62,8 +67,58 @@ export type Fas = 'redigera' | 'registrerar' | 'klart';
 /** Beloppet en genväg ger för en rad, eller `null` när valet inte går ihop. */
 export function genvagsbelopp(rad: BekraftelseRad, genvag: Beloppsgenvag): number | null {
   if (genvag === 'annat') return null;
+  if (genvag === 'forslag') return forslagsbelopp(rad.beloppsknappar);
   const knapp = rad.beloppsknappar.find((k) => k.nyckel === genvag);
   return knapp ? knapp.belopp : null;
+}
+
+/**
+ * Appens förval för en rad (Marcus berättelse, Del 4 § varv 2): finns en
+ * avgift kvar att betala är det den — en ny anmälan betalar avgiften först.
+ * Är avgiften redan betald är det resten. Saknas båda (pris saknas i basen)
+ * finns inget förval.
+ */
+export function forslagsbelopp(knappar: readonly Beloppsknapp[]): number | null {
+  const avgift = knappar.find((k) => k.nyckel === 'avgift');
+  if (avgift) return avgift.belopp;
+  const allt = knappar.find((k) => k.nyckel === 'allt');
+  return allt ? allt.belopp : null;
+}
+
+/** Vad radens NUVARANDE belopp är, sett mot radens egna kandidater. */
+export type Beloppsklass = 'avgift' | 'resten' | 'allt' | 'annat' | 'saknas';
+
+export function beloppsklass(rad: BekraftelseRad): Beloppsklass {
+  const belopp = radbelopp(rad);
+  if (belopp === null) return 'saknas';
+  for (const k of rad.beloppsknappar) {
+    if (k.belopp !== belopp) continue;
+    if (k.nyckel === 'avgift') return 'avgift';
+    return k.etikett === 'resten' ? 'resten' : 'allt';
+  }
+  return 'annat';
+}
+
+/**
+ * Avstämningen i Lottas klumpar: så många anmälningsavgifter, så många
+ * slutbetalningar, så mycket. Det är kontoutdragets form — "sex à 1 000 och
+ * fyra à 1 500" — och det hon jämför mot innan hon trycker Registrera.
+ */
+export type Avstamning = { klass: Beloppsklass; antal: number; summa: number }[];
+
+export function avstamning(rader: readonly BekraftelseRad[]): Avstamning {
+  const ordning: Beloppsklass[] = ['avgift', 'resten', 'allt', 'annat', 'saknas'];
+  const karta = new Map<Beloppsklass, { antal: number; summa: number }>();
+  for (const rad of rader) {
+    const klass = beloppsklass(rad);
+    const post = karta.get(klass) ?? { antal: 0, summa: 0 };
+    post.antal += 1;
+    post.summa += radbelopp(rad) ?? 0;
+    karta.set(klass, post);
+  }
+  return ordning
+    .filter((k) => karta.has(k))
+    .map((klass) => ({ klass, ...(karta.get(klass) ?? { antal: 0, summa: 0 }) }));
 }
 
 /**
@@ -188,9 +243,11 @@ function byggRader(oppna: readonly OppenBetalning[], idag: string, betalsatt: Be
     const beloppsknappar = harledBeloppsknappar(inkorg);
     // Startbelopp = "allt som saknas" (kvar), samma förval som radformuläret
     // (`RegistreraForm` § forifyllt). Okänt/betalt pris ⇒ tomt fält.
-    // Husets visningsform ("1 000"), samma som `RegistreraForm` § forifyllt —
-    // fältet ska se ut som raden bredvid, inte som ett råtal.
-    const start = inkorg.kvar !== null && inkorg.kvar > 0 ? visaKronor(inkorg.kvar) : '';
+    // Förvalet per rad (varv 2, Marcus val B): avgiften för nya, resten för
+    // dem som betalat avgiften. Husets visningsform ("1 000"), samma som
+    // `RegistreraForm` § forifyllt — fältet ska se ut som raden bredvid.
+    const forslag = forslagsbelopp(beloppsknappar);
+    const start = forslag !== null ? visaKronor(forslag) : '';
     return {
       nyckel: inkorg.nyckel,
       inkorg,
@@ -258,7 +315,7 @@ export function useBekraftelsesteg(
     byggRader(oppna, idag, startBetalsatt),
   );
   const [fas, setFas] = useState<Fas>('redigera');
-  const [aktivGenvag, setAktivGenvag] = useState<Beloppsgenvag | null>(null);
+  const [aktivGenvag, setAktivGenvag] = useState<Beloppsgenvag | null>('forslag');
   const [batchBetalsatt, setBatchBetalsatt] = useState<Betalsatt>(startBetalsatt);
   const [batchDatum, setBatchDatum] = useState(idag);
   // Speglar `rader` synkront så `registrera()` kan läsa den aktuella
@@ -275,7 +332,7 @@ export function useBekraftelsesteg(
     // en annan komponent; här kör vi det bara när signaturen faktiskt bytt).
     setRader(byggRader(oppna, idag, startBetalsatt));
     setFas('redigera');
-    setAktivGenvag(null);
+    setAktivGenvag('forslag');
     setBatchDatum(idag);
   }
 
@@ -364,7 +421,7 @@ export function useBekraftelsesteg(
   const aterstall = useCallback(() => {
     setRader(byggRader(oppna, idag, batchBetalsatt));
     setFas('redigera');
-    setAktivGenvag(null);
+    setAktivGenvag('forslag');
   }, [oppna, idag, batchBetalsatt]);
 
   const summering = useMemo(() => summera(rader), [rader]);

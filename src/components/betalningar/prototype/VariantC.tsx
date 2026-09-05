@@ -1,16 +1,18 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { RadioGroup as AriaRadioGroup, Radio } from 'react-aria-components';
-import { Button, MessageBox, RaknarChip } from '@/components/primitives';
+import { Button, MessageBox, Radio, RadioGroup, RaknarChip } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { visaKronor } from '../belopp-inmatning';
 import {
   antalRegistreradeKvitton,
   arRegistrerbar,
+  avstamning,
   type BekraftelseRad,
   type BekraftelsestegModell,
   type Beloppsgenvag,
+  type Beloppsklass,
   genvagsbelopp,
+  grupperaRader,
   radbelopp,
 } from './bekraftelseSimulering';
 import {
@@ -24,74 +26,92 @@ import {
 } from './radfalt';
 
 /**
- * [PROTOTYPE] Variant C — AVVIKELSE-FÖRST. Konvergens-passet, steg 2 (S121,
- * Marcus val 2026-09-05: *"Jag vill gå vidare med C"*).
+ * [PROTOTYPE] Variant C — AVVIKELSE-FÖRST. Konvergens-passet (S121, Marcus
+ * val 2026-09-05: *"Jag vill gå vidare med C"*), steg 2.
  *
- * Bevisar: MINSTA ANTAL HANDLINGAR. Appen förvalar allt (belopp ur bulkvalet,
- * betalsätt = senast använda, datum = i dag) och Lotta rör bara undantagen.
- * Ett val överst — "Vad betalade de?" — sorterar raderna i två högar: de som
- * saknar belopp ligger öppna överst, de som är klara ligger komprimerade under.
+ * Bevisar: MINSTA ANTAL HANDLINGAR. Appen förvalar allt och Lotta rör bara
+ * undantagen. Raderna ligger i två högar: de som saknar belopp öppna överst,
+ * de som är klara komprimerade under, grupperade per event.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * STEG 2 — HUSETS GRAMMATIK, INTE EN EGEN (Marcus 2026-09-05: *"Implementera
- * appens sidkrom och det här, håll appens bredd (!)"*)
+ * VARV 2 — LOTTAS MORGON STYR (Marcus val B, 2026-09-05)
  * ═══════════════════════════════════════════════════════════════════════════
- * Divergens-steget bröt ut till 92 vw / 1100 px och ritade en egen sticky
- * knapprad som krockade med tabbaren. Steg 2 lever i `<main>`s 600 px-kolumn
- * och lånar formen från ytor som redan finns:
- *   • sidkrom: `SidRam`-chevron + `<h1>` i `px-4` (inkorgen, persondetaljen);
- *   • formulär: `<h2>` utanför ett grått kort med etiketter ovanför fälten
- *     (Skapa event § "Om eventet");
- *   • listor: grå gruppbehållare (`bg-bg-muted rounded-2xl`) med vita kort
- *     (inkorgens öppna rader) respektive avdelade rader (Hem-vyns listor);
- *   • rubrik med räknarchip ("Färdiga grupper 14", segmentvyn);
- *   • massåtgärd: helbreddsknapp under listan (Hem § "Bekräfta alla",
- *     `BulkAtgardsknapp`-formen: `flex flex-col` + `Button`);
- *   • en primär, syskonet outline (Marcus dom 2026-09-01, `RegistreraForm`);
- *   • MAX EN varningssignal per rad (`BetalningsInkorg` § pill-anatomin).
+ * Marcus prövade varv 1 mot en verklig morgon (fixturen bär den nu, se
+ * `fixtur.ts`): sex avgifter à 1 000 över tre event och fyra slutbetalningar
+ * à 1 500 i ett event. Ett globalt "Vad betalade de?" har inget svar för en
+ * blandad batch — och blandad är normalfallet. Därför:
+ *   • BELOPPET FÖRVALS PER RAD ur datat (`forslagsbelopp`): avgiften för den
+ *     som inte betalat något, resten för den som redan betalat avgiften. Alla
+ *     tio blir rätt utan ett enda val.
+ *   • BULKVALET FINNS KVAR (val B, "för att inte ta bort flexibilitet") som
+ *     ett treval: Som vi föreslår · Anmälningsavgift för alla · Allt som saknas
+ *     för alla — varje rad visar vad valet ger, i kronor, INNAN det görs.
+ *   • AVSTÄMNINGEN i hennes klumpar ("6 anmälningsavgifter · 6 000 kr, 4
+ *     slutbetalningar · 6 000 kr") står ovanför Registrera — det hon jämför
+ *     mot kontoutdraget.
+ *   • RADERNA GRUPPERAS PER EVENT (inkorgens form): de fyra slutbetalningarna
+ *     ligger ihop, avgifterna syns per event.
+ *   • RADENS EGNA KANDIDATER som förslagsknappar i redigeraren, så en
+ *     rättelse är ett tryck efter utfällningen.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * HUSETS GRAMMATIK, INTE EN EGEN (varv 1, Marcus: *"håll appens bredd (!)"*)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Ytan lever i `<main>`s 600 px-kolumn och lånar formen från ytor som redan
+ * finns: sidkrom (`SidRam` + `<h1>` i `px-4`); formulär som `<h2>` utanför
+ * ett grått kort (Skapa event); grå gruppbehållare med vita kort (inkorgen)
+ * respektive avdelade rader (Hem); rubrik med räknarchip (segmentvyn);
+ * helbreddsknapp under listan (Hem § "Bekräfta alla"); en primär, syskonet
+ * outline (`RegistreraForm`); max en varningssignal per rad (inkorgen).
  *
  * VAD SOM RÄKNAS SOM "BEHÖVER DIN HAND": en rad UTAN belopp — bulkvalet gick
  * inte ihop (`ejGenomforbar`) eller fältet är tomt. Obekräftad och förfallen
- * är MÄRKEN på raden var den än ligger, inte skäl att lyfta den: beslut 5
- * säger att obekräftade registreras som vanligt, och en förfallen rad har ett
- * lika giltigt belopp som de andra. Divergens-steget lyfte båda; det gjorde
- * högen större utan att ge Lotta något att göra där.
- *
- * "Annat belopp" (beslut 2:s tredje genväg) erbjuds inte som bulkval här:
- * varje rad har sitt eget beloppsfält, och att tömma alla tio för hand är
- * motsatsen till variantens idé. Öppet bokfört, inte tyst borttaget.
+ * är MÄRKEN på raden var den än ligger (beslut 5). "Annat belopp" erbjuds
+ * inte som bulkval — varje rad har sitt eget fält.
  */
 
-const GENVAGAR: {
-  nyckel: Extract<Beloppsgenvag, 'avgift' | 'allt'>;
-  etikett: string;
-  under: string;
-}[] = [
-  { nyckel: 'avgift', etikett: 'Anmälningsavgift', under: 'Bara avgiften för platsen' },
-  { nyckel: 'allt', etikett: 'Allt som saknas', under: 'Hela beloppet som är kvar' },
+type BulkNyckel = Extract<Beloppsgenvag, 'forslag' | 'avgift' | 'allt'>;
+
+const BULKVAL: { nyckel: BulkNyckel; etikett: string }[] = [
+  { nyckel: 'forslag', etikett: 'Som vi föreslår' },
+  { nyckel: 'avgift', etikett: 'Anmälningsavgift för alla' },
+  { nyckel: 'allt', etikett: 'Allt som saknas för alla' },
 ];
+
+const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
+  avgift: { ett: 'anmälningsavgift', flera: 'anmälningsavgifter' },
+  resten: { ett: 'slutbetalning', flera: 'slutbetalningar' },
+  allt: { ett: 'hela beloppet', flera: 'hela beloppet' },
+  annat: { ett: 'eget belopp', flera: 'egna belopp' },
+  saknas: { ett: 'rad utan belopp', flera: 'rader utan belopp' },
+};
 
 /** Raden saknar ett belopp — bulkvalet gick inte ihop, eller fältet är tomt. */
 function saknarBelopp(rad: BekraftelseRad): boolean {
   return rad.ejGenomforbar !== null || rad.belopp.trim() === '';
 }
 
-/** Kort svenskt datum för radens sekundärled: "4 sep." */
+/** Kort svenskt datum: "4 sep." */
 function visaDag(iso: string): string {
   const d = new Date(`${iso}T00:00:00`);
   if (Number.isNaN(d.getTime())) return iso;
   return new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short' }).format(d);
 }
 
+function plural(antal: number, ett: string, flera: string): string {
+  return `${antal} ${antal === 1 ? ett : flera}`;
+}
+
 /**
  * Förslagsknappens ord. `harledBeloppsknappar` etiketterar med domänens
- * korta former (`anmälningsavgift`/`allt`/`resten`); här står de utskrivna,
- * så knappen läser som en mening: "Allt som saknas · 500 kr".
+ * korta former; här står de utskrivna så knappen läser som en mening.
  */
 function forslagsEtikett(etikett: string): string {
   switch (etikett) {
     case 'anmälningsavgift':
       return 'Anmälningsavgift';
+    case 'resten av anmälningsavgiften':
+      return 'Resten av avgiften';
     case 'allt':
       return 'Allt som saknas';
     case 'resten':
@@ -99,10 +119,6 @@ function forslagsEtikett(etikett: string): string {
     default:
       return etikett.charAt(0).toUpperCase() + etikett.slice(1);
   }
-}
-
-function plural(antal: number, ett: string, flera: string): string {
-  return `${antal} ${antal === 1 ? ett : flera}`;
 }
 
 /** Varför raden saknar belopp, i en mening Lotta kan handla på. */
@@ -120,6 +136,20 @@ function handSkal(rad: BekraftelseRad): string {
   return 'Beloppet är tomt.';
 }
 
+/** Vad ett bulkval ger över raderna — antal med belopp, och summan. */
+function bulkutfall(rader: readonly BekraftelseRad[], nyckel: BulkNyckel) {
+  let antal = 0;
+  let summa = 0;
+  for (const rad of rader) {
+    const belopp = genvagsbelopp(rad, nyckel);
+    if (belopp !== null) {
+      antal += 1;
+      summa += belopp;
+    }
+  }
+  return { antal, summa };
+}
+
 /** Rubrik med räknarchip — segmentvyns "Färdiga grupper 14"-form. */
 function SektionsRubrik({ id, antal, children }: { id: string; antal: number; children: string }) {
   return (
@@ -129,6 +159,16 @@ function SektionsRubrik({ id, antal, children }: { id: string; antal: number; ch
         {antal}
       </span>
     </h2>
+  );
+}
+
+/** Eventgruppens rubrik — inkorgens "RIM 1 · 20 sep."-form, ett steg under h2. */
+function GruppRubrik({ namn, datum }: { namn: string; datum: string | null }) {
+  return (
+    <h3 className="flex flex-wrap items-baseline gap-x-2 px-4 font-semibold text-body">
+      {namn}
+      {datum && <span className="font-normal text-caption text-text-muted">{visaDag(datum)}</span>}
+    </h3>
   );
 }
 
@@ -145,31 +185,39 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
 
   const handhogen = rader.filter(saknarBelopp);
   const klarhogen = rader.filter((r) => !saknarBelopp(r));
+  const klaraGrupper = useMemo(() => grupperaRader(klarhogen), [klarhogen]);
   const registrerbara = rader.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
   const antalEvent = new Set(
     rader.map((r) => r.inkorg.betalning.eventId ?? r.inkorg.betalning.eventNamn ?? 'utan-event'),
   ).size;
-  const vald = modell.aktivGenvag === 'avgift' ? 'avgift' : 'allt';
+  const vald: BulkNyckel =
+    modell.aktivGenvag === 'avgift' || modell.aktivGenvag === 'allt'
+      ? modell.aktivGenvag
+      : 'forslag';
 
-  // Vad varje bulkval ger, räknat på raderna: så ser Lotta följden av valet
-  // INNAN hon gör det, i stället för att läsa av tio rader efteråt.
-  const utfallPerGenvag = useMemo(() => {
-    const ut = new Map<'avgift' | 'allt', { antal: number; summa: number }>();
-    for (const g of GENVAGAR) {
-      let antal = 0;
-      let summa = 0;
-      for (const rad of rader) {
-        const belopp = genvagsbelopp(rad, g.nyckel);
-        if (belopp !== null) {
-          antal += 1;
-          summa += belopp;
-        }
-      }
-      ut.set(g.nyckel, { antal, summa });
+  // Vad varje bulkval ger, räknat på raderna INNAN valet görs.
+  const utfallPerVal = useMemo(
+    () => new Map(BULKVAL.map((v) => [v.nyckel, bulkutfall(rader, v.nyckel)] as const)),
+    [rader],
+  );
+  // Förslagets egen klumpsammanfattning ("6 anmälningsavgifter · 4 slutbetalningar").
+  const forslagsklumpar = useMemo(() => {
+    const antal = new Map<Beloppsklass, number>();
+    for (const rad of rader) {
+      const avgift = rad.beloppsknappar.find((k) => k.nyckel === 'avgift');
+      const allt = rad.beloppsknappar.find((k) => k.nyckel === 'allt');
+      let klass: Beloppsklass = 'saknas';
+      if (avgift) klass = 'avgift';
+      else if (allt) klass = allt.etikett === 'resten' ? 'resten' : 'allt';
+      antal.set(klass, (antal.get(klass) ?? 0) + 1);
     }
-    return ut;
+    const ordning: Beloppsklass[] = ['avgift', 'resten', 'allt', 'annat', 'saknas'];
+    return ordning
+      .filter((k) => antal.has(k))
+      .map((k) => plural(antal.get(k) ?? 0, KLASS_ORD[k].ett, KLASS_ORD[k].flera));
   }, [rader]);
+  const avstamda = useMemo(() => avstamning(rader), [rader]);
 
   return (
     <form
@@ -195,35 +243,46 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
         </p>
       </header>
 
-      {/* ═══ BULKVALET — formulärets grammatik: h2 utanför, grått kort med fält ═══ */}
+      {/* ═══ BELOPPET — förslaget per rad, bulkvalen som treval (val B) ═══ */}
       <section aria-labelledby={valId} className="flex flex-col gap-3">
         <h2 id={valId} className="px-4 font-semibold text-lg">
           Vad betalade de?
         </h2>
         <div className="flex flex-col gap-4 rounded-2xl bg-bg-muted p-4">
-          <AriaRadioGroup
-            aria-label="Vad betalade de?"
+          <RadioGroup
+            label="Belopp för alla rader"
+            hideLabel
+            orientation="vertical"
             value={vald}
-            onChange={(v) => modell.sattGenvag(v as 'avgift' | 'allt')}
-            className="grid gap-2 sm:grid-cols-2"
+            onChange={(v) => modell.sattGenvag(v as BulkNyckel)}
           >
-            {GENVAGAR.map((g) => {
-              const u = utfallPerGenvag.get(g.nyckel) ?? { antal: 0, summa: 0 };
+            {BULKVAL.map((v) => {
+              const u = utfallPerVal.get(v.nyckel) ?? { antal: 0, summa: 0 };
+              const utan = rader.length - u.antal;
+              let under: string;
+              if (v.nyckel === 'forslag') under = forslagsklumpar.join(' · ');
+              else if (utan === 0) under = `${u.antal} av ${rader.length} rader`;
+              else
+                under = `${u.antal} av ${rader.length} rader · ${plural(utan, 'rad får inget belopp', 'rader får inget belopp')}`;
               return (
                 <Radio
-                  key={g.nyckel}
-                  value={g.nyckel}
-                  className="flex cursor-pointer flex-col gap-0.5 rounded-xl border border-border bg-surface p-3 text-left data-[selected]:border-primary not-data-[selected]:data-[hovered]:border-border-strong data-[selected]:bg-primary-tint data-[focus-visible]:outline-(--mm-focus-ring) data-[focus-visible]:outline-2 data-[focus-visible]:outline-offset-2 motion-safe:transition-colors contrast-more:data-[selected]:border-2"
+                  key={v.nyckel}
+                  value={v.nyckel}
+                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 data-[selected]:border-primary data-[selected]:bg-primary-tint motion-safe:transition-colors contrast-more:data-[selected]:border-2"
                 >
-                  <span className="font-semibold text-body">{g.etikett}</span>
-                  <span className="text-caption text-text-muted">{g.under}</span>
-                  <span className="pt-1.5 text-small text-text-secondary tabular-nums">
-                    {u.antal} av {rader.length} rader · {visaKronor(u.summa)} kr
+                  <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
+                    <span className="flex min-w-0 flex-col gap-0.5">
+                      <span className="font-semibold text-body">{v.etikett}</span>
+                      <span className="text-caption text-text-muted">{under}</span>
+                    </span>
+                    <span className="shrink-0 pt-0.5 font-medium text-body tabular-nums">
+                      {visaKronor(u.summa)} kr
+                    </span>
                   </span>
                 </Radio>
               );
             })}
-          </AriaRadioGroup>
+          </RadioGroup>
           <div className="flex flex-wrap gap-x-4 gap-y-3">
             <div className="flex flex-col items-start gap-1">
               <span className="text-(color:--mm-input-label-text) text-small">Betalsätt</span>
@@ -261,40 +320,54 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
         )}
       </section>
 
-      {/* ═══ KLARA ATT REGISTRERA — komprimerade rader, utfällbara ═══ */}
-      <section aria-labelledby={klarId} className="flex flex-col gap-3">
+      {/* ═══ KLARA ATT REGISTRERA — per event, komprimerade rader ═══ */}
+      <section aria-labelledby={klarId} className="flex flex-col gap-4">
         <SektionsRubrik id={klarId} antal={klarhogen.length}>
           Klara att registrera
         </SektionsRubrik>
         {klarhogen.length === 0 ? (
           <p className="px-4 text-small text-text-secondary">Inga rader är klara än.</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
-            {klarhogen.map((rad) => (
-              <KlarRad key={rad.nyckel} rad={rad} modell={modell} />
-            ))}
-          </ul>
+          klaraGrupper.map((grupp) => (
+            <div key={grupp.eventId} className="flex flex-col gap-2">
+              <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
+              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+                {grupp.rader.map((rad) => (
+                  <KlarRad key={rad.nyckel} rad={rad} modell={modell} />
+                ))}
+              </ul>
+            </div>
+          ))
         )}
       </section>
 
-      {/* ═══ SUMMAN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
+      {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
       <div className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1 px-4">
-          <div className="flex items-baseline justify-between gap-3">
-            <span className="font-medium text-body">
+        <dl className="flex flex-col gap-1 px-4">
+          {avstamda.map((post) => (
+            <div key={post.klass} className="flex items-baseline justify-between gap-3">
+              <dt className="text-body text-text-secondary">
+                {plural(post.antal, KLASS_ORD[post.klass].ett, KLASS_ORD[post.klass].flera)}
+              </dt>
+              <dd className="m-0 text-body text-text-secondary tabular-nums">
+                {post.klass === 'saknas' ? '' : `${visaKronor(post.summa)} kr`}
+              </dd>
+            </div>
+          ))}
+          <div className="mt-1 flex items-baseline justify-between gap-3 border-border border-t pt-2">
+            <dt className="font-medium text-body">
               {plural(registrerbara.length, 'betalning', 'betalningar')}
-            </span>
-            <span className="font-semibold text-lg tabular-nums">
+            </dt>
+            <dd className="m-0 font-semibold text-lg tabular-nums">
               {visaKronor(modell.summering.summa)} kr
-            </span>
+            </dd>
           </div>
-          {handhogen.length > 0 && (
-            <p className="text-caption text-text-secondary">
-              {plural(handhogen.length, 'rad saknar', 'rader saknar')} belopp och registreras inte
-              förrän du fyllt i det.
-            </p>
-          )}
-        </div>
+        </dl>
+        <p className="px-4 text-caption text-text-secondary">
+          {handhogen.length > 0
+            ? `${plural(handhogen.length, 'rad saknar', 'rader saknar')} belopp och registreras inte förrän du fyllt i det.`
+            : 'Jämför med kontoutdraget innan du registrerar.'}
+        </p>
         <div className="flex flex-col gap-2">
           <div className="flex flex-col">
             <Button isDisabled={registrerbara.length === 0} onPress={modell.registrera}>
@@ -330,8 +403,29 @@ function RadSammanfattning({ rad }: { rad: BekraftelseRad }) {
   );
 }
 
+/** Radens egna beloppskandidater som knappar — ett tryck sätter beloppet. */
+function ForslagsKnappar({ rad, modell }: { rad: BekraftelseRad; modell: BekraftelsestegModell }) {
+  if (rad.beloppsknappar.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <span className="text-caption text-text-muted">Förslag</span>
+      {rad.beloppsknappar.map((k) => (
+        <Button
+          key={k.nyckel}
+          size="sm"
+          intent="secondary"
+          emphasis="outline"
+          onPress={() => modell.sattRadBelopp(rad.nyckel, visaKronor(k.belopp))}
+        >
+          {`${forslagsEtikett(k.etikett)} · ${visaKronor(k.belopp)} kr`}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Radens redigerare — belopp (valfritt), betalsätt, datum, kvitto. En form
+ * Radens redigerare — belopp (valfritt), datum, betalsätt, kvitto. En form
  * för hand-kortet och den utfällda klara raden; skillnaden är bara om
  * beloppet redan står öppet ovanför.
  */
@@ -348,8 +442,7 @@ function RadRedigerare({
   id: string;
 }) {
   // Två fält av samma höjd på rad ett, pillen ensam på rad två: en pill i
-  // samma flexrad som fälten radbröt ojämnt i kolumnens bredd (Datum hamnade
-  // ensamt på en tredje rad, k01).
+  // samma flexrad som fälten radbröt ojämnt i kolumnens bredd (varv 1).
   return (
     <div id={id} className="flex flex-col gap-3">
       <div className="flex flex-wrap items-start gap-3">
@@ -369,6 +462,7 @@ function RadRedigerare({
           className="w-36"
         />
       </div>
+      {visaBelopp && <ForslagsKnappar rad={rad} modell={modell} />}
       <div className="flex flex-col items-start gap-1">
         <span className="text-(color:--mm-input-label-text) text-small">Betalsätt</span>
         <BetalsattSegment
@@ -417,22 +511,7 @@ function HandKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelseste
           onChange={(v) => modell.sattRadBelopp(rad.nyckel, v)}
           className="w-40"
         />
-        {rad.beloppsknappar.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-caption text-text-muted">Förslag</span>
-            {rad.beloppsknappar.map((k) => (
-              <Button
-                key={k.nyckel}
-                size="sm"
-                intent="secondary"
-                emphasis="outline"
-                onPress={() => modell.sattRadBelopp(rad.nyckel, visaKronor(k.belopp))}
-              >
-                {`${forslagsEtikett(k.etikett)} · ${visaKronor(k.belopp)} kr`}
-              </Button>
-            ))}
-          </div>
-        )}
+        <ForslagsKnappar rad={rad} modell={modell} />
       </div>
 
       <div className="flex items-center justify-between gap-3">
@@ -463,7 +542,6 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
   const panelId = useId();
   const belopp = radbelopp(rad);
   const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
-  const eventNamn = rad.inkorg.betalning.eventNamn;
 
   return (
     <li className="flex flex-col">
@@ -478,7 +556,7 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="truncate font-medium text-body">{rad.inkorg.namn}</span>
           <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-caption text-text-muted">
-            {eventNamn && <span className="truncate">{eventNamn}</span>}
+            <SaknasKontext rad={rad} visaEvent={false} />
             {harMarken && <RadMarken rad={rad} />}
           </span>
         </span>
@@ -508,7 +586,7 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
 /**
  * Under och efter registreringen: samma sida, raderna byter hög allteftersom
  * utfallet landar (beslut 4: utfall per rad i samma steg, ett fel stoppar
- * inte de andra). Rubriken får fokus när allt är klart.
+ * inte de andra). Statusraden får fokus när allt är klart.
  */
 function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
   const klart = modell.fas === 'klart';
@@ -523,6 +601,7 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
   const vantar = korda.filter((r) => r.utfall === null);
   const total = registrerade.length + misslyckade.length + vantar.length;
   const kvitton = antalRegistreradeKvitton(modell.rader);
+  const registreradeGrupper = useMemo(() => grupperaRader(registrerade), [registrerade]);
 
   useEffect(() => {
     if (klart) statusRef.current?.focus();
@@ -571,7 +650,7 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
                 key={rad.nyckel}
                 className="flex flex-col gap-3 rounded-2xl border border-transparent bg-surface p-3 contrast-more:border-border-strong"
               >
-                <UtfallRad rad={rad} />
+                <UtfallRad rad={rad} visaEvent />
                 <div className="flex flex-wrap gap-2 pl-12">
                   <Button size="sm" intent="secondary" emphasis="outline" isDisabled>
                     Försök igen
@@ -583,20 +662,25 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
         </section>
       )}
 
-      <section aria-labelledby={regId} className="flex flex-col gap-3">
+      <section aria-labelledby={regId} className="flex flex-col gap-4">
         <SektionsRubrik id={regId} antal={registrerade.length}>
           Registrerade
         </SektionsRubrik>
         {registrerade.length === 0 ? (
           <p className="px-4 text-small text-text-secondary">Inga än.</p>
         ) : (
-          <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
-            {registrerade.map((rad) => (
-              <li key={rad.nyckel} className="px-3 py-3">
-                <UtfallRad rad={rad} />
-              </li>
-            ))}
-          </ul>
+          registreradeGrupper.map((grupp) => (
+            <div key={grupp.eventId} className="flex flex-col gap-2">
+              <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
+              <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+                {grupp.rader.map((rad) => (
+                  <li key={rad.nyckel} className="px-3 py-3">
+                    <UtfallRad rad={rad} />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))
         )}
       </section>
 
@@ -608,7 +692,7 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
           <ul className="flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
             {vantar.map((rad) => (
               <li key={rad.nyckel} className="px-3 py-3">
-                <UtfallRad rad={rad} />
+                <UtfallRad rad={rad} visaEvent />
               </li>
             ))}
           </ul>
@@ -640,15 +724,15 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
 }
 
 /**
- * Rad i utfallslistorna: avatar · namn/event · belopp, med utfallet i
- * högerkolumnen när det är kort ("Registrerad · kvitto väntar") och på en
- * egen rad under när det är ett fel — feltexten är en mening och ska inte
- * trängas in bredvid beloppet.
+ * Rad i utfallslistorna: avatar · namn/betalsätt/datum · belopp, med utfallet
+ * i högerkolumnen när det är kort och på en egen rad under när det är ett
+ * fel — feltexten är en mening och ska inte trängas in bredvid beloppet.
+ * `visaEvent` för listor som inte är grupperade per event.
  */
-function UtfallRad({ rad }: { rad: BekraftelseRad }) {
+function UtfallRad({ rad, visaEvent = false }: { rad: BekraftelseRad; visaEvent?: boolean }) {
   const belopp = radbelopp(rad);
-  const eventNamn = rad.inkorg.betalning.eventNamn;
   const fel = rad.utfall?.klass === 'fel';
+  const eventNamn = visaEvent ? rad.inkorg.betalning.eventNamn : null;
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-3">

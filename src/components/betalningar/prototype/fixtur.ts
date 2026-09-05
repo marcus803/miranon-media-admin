@@ -1,55 +1,49 @@
 import type { OppenBetalning } from '@/domain/schemas';
 
 /**
- * [PROTOTYPE] Deterministisk fixtur för bekräftelsestegets divergens-pass
- * (S121 beslut 8). TIO rader i TRE event, hopsatt för att täcka VARJE
- * tillstånd besluten i Del 2 nämner — se § Täckningen nedan. Ingen riktig
- * mutation, ingen läsning ur basen: raderna är litteraler i
- * `OppenBetalning`-form (`src/domain/schemas/Betalningar.schema.ts`), samma
- * kontrakt `useOppnaBetalningar` levererar, så variant-koden inte kan se
- * skillnad på fixtur och staging.
+ * [PROTOTYPE] Deterministisk fixtur för bekräftelsesteget (S121). Sedan
+ * konvergens varv 2 (2026-09-05) bär den MARCUS BERÄTTELSE om Lottas morgon,
+ * verbatim ur chatten:
+ *
+ * > "Hon har sett på sitt kontoutdrag denna morgon att hon fått in 8 swishar
+ * > och 2 bankgiro-inbetalningar. Hon ser att 6 av dem har beloppet 1000kr
+ * > och vet därför att det är anmälningsavgifter. 4 belopp är 1500kr, alltså
+ * > slutbetalningar (resterande). … de 6 anmälningsavgifterna som inbetalats
+ * > är spridda över 3 olika framtida event. Hon ser att alla 4 inbetalningar
+ * > på 1500 kr är för ett och samma event."
+ *
+ * Raderna är litteraler i `OppenBetalning`-form, samma kontrakt som
+ * `useOppnaBetalningar` levererar. Ingen läsning ur basen, ingen mutation.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * DATUMEN ÄR FRUSNA VID `FIXTUR_IDAG`
+ * BERÄTTELSEN I RADER
  * ═══════════════════════════════════════════════════════════════════════════
- * Härledningarna (`harledRad`, `grupperaPerEvent`) tar `idag` som argument och
- * läser aldrig klockan (deras egen regel). Fixtur-läget matar dem
- * `FIXTUR_IDAG` i stället för `idagIso()`, så "förfallen" och "kommande" är
- * stabila oavsett när prototypen öppnas — en skärmdump tagen om ett halvår
- * visar samma sak som en tagen i dag. Staging-läget använder den riktiga
- * `idagIso()`.
+ *   • RIM 1 (pris 2 500, avgift 1 000, 20 sep): FYRA som redan betalat
+ *     avgiften och nu betalat resten 1 500 — Anna, Björn, Cecilia, David.
+ *     Cecilia har passerad deadline (förfallen). Plus TVÅ nya som betalat
+ *     avgiften 1 000 — Erik (obekräftad anmälan, normalt för en ny) och Fatima.
+ *   • Fjärrskådning (pris 3 500, avgift 1 000, 27 sep): TVÅ nya — Gunnar och
+ *     Hanna.
+ *   • Psionautics (pris 4 500, avgift 1 000, 25 okt): TVÅ nya — Ida och Johan.
  *
- * ═══════════════════════════════════════════════════════════════════════════
- * TÄCKNINGEN (varje tillstånd besluten nämner, med raden som bär det)
- * ═══════════════════════════════════════════════════════════════════════════
- *   • anmälningsavgiften saknas (bulk "Anmälningsavgift" ger ett belopp):
- *     rad 1-4 (RIM 1, avgift 1 000) + rad 6-9 (Fjärrskådning, avgift 1 500)
- *     = ÅTTA rader.
- *   • annan anmälningsavgift per event: RIM 1 = 1 000, Fjärrskådning = 1 500,
- *     så samma bulkval ger OLIKA belopp per rad.
- *   • hela priset saknas (inget fack, bulk "Allt som saknas" är beloppet):
- *     rad 10 (föreläsning, ett pris utan fack) + rad 5:s rest (avgiften redan
- *     betald, kvar = slutbetalningen).
- *   • avgiften redan betald ⇒ "Anmälningsavgift" går inte ihop, raden får
- *     ingen siffra utan en markering: rad 5 (Erik, 1 000 redan inbetalt).
- *   • Obekräftad anmälan (registreras som vanligt, förblir märkt): rad 3.
- *   • Förfallen (slutbetalningens deadline passerad): rad 4.
- *   • föreläsning med ETT pris utan fack (ADR-128 beslut 6): rad 10.
+ *   Sex avgifter à 1 000 över tre event, fyra slutbetalningar à 1 500 i ett
+ *   event: 12 000 kr. Betalsätten (åtta Swish, två bankgiro) bär datat inte —
+ *   dem sätter Lotta i steget, och de två bankgiro-raderna är exakt de
+ *   undantag steget ska göra billiga.
  *
- * Namnen är påhittade deltagare; eventnamnen är husets värld (RIM,
- * Fjärrskådning, en föreläsning). Alla belopp i hela kronor.
+ * Datumen är frusna vid `FIXTUR_IDAG` så "förfallen"/"kommande" är stabila
+ * oavsett när prototypen öppnas (härledningarna läser aldrig klockan).
  */
 
-/** Fryst "i dag" för fixtur-läget. Rad 4:s deadline ligger före detta. */
+/** Fryst "i dag" för fixtur-läget. Cecilias deadline ligger före detta. */
 export const FIXTUR_IDAG = '2026-09-04';
 
 /**
- * Radens `anmalanRecordId` som fallerar i den simulerade registreringen
- * (beslut 4: "ett fel stoppar inte de andra"). Vald till en rad som ALLTID
- * bär ett belopp under båda bulkvalen (Fjärrskådning, avgift 1 500 · kvar
- * 3 500), så felet syns oavsett vilket bulkval Lotta gjort.
+ * Raden som fallerar i den simulerade registreringen (beslut 4: "ett fel
+ * stoppar inte de andra"). En ny anmälan, så raden bär belopp under alla
+ * bulkval och felet syns oavsett vad Lotta valt.
  */
-export const FIXTUR_FEL_ID = 'rec-fjarr-002';
+export const FIXTUR_FEL_ID = 'rec-fjarr-001';
 
 /** Bygger EN rad utan att upprepa de fält varje rad delar. */
 function rad(
@@ -77,7 +71,6 @@ function rad(
   };
 }
 
-/** RIM 1 — kurs, pris 2 500, anmälningsavgift 1 000, startar 2026-09-20. */
 const RIM = {
   eventId: 'rec-event-rim1',
   eventNamn: 'RIM 1',
@@ -87,84 +80,74 @@ const RIM = {
   anmalningsavgift: 1000,
 } as const;
 
-/** Fjärrskådning — kurs, pris 3 500, ANNAN avgift 1 500, startar 2026-09-27. */
 const FJARR = {
   eventId: 'rec-event-fjarr',
   eventNamn: 'Fjärrskådning',
   eventStartdatum: '2026-09-27',
   eventTyp: 'Kurs',
   gallandePris: 3500,
-  anmalningsavgift: 1500,
+  anmalningsavgift: 1000,
+} as const;
+
+const PSIO = {
+  eventId: 'rec-event-psio',
+  eventNamn: 'Psionautics',
+  eventStartdatum: '2026-10-25',
+  eventTyp: 'Kurs',
+  gallandePris: 4500,
+  anmalningsavgift: 1000,
 } as const;
 
 export function bekraftelseFixtur(): OppenBetalning[] {
   return [
-    // ── RIM 1 (avgift 1 000) ──
-    rad({ ...RIM, anmalanRecordId: 'rec-rim-001', personNamn: 'Anna Lindqvist', summaInbetalt: 0 }),
-    rad({ ...RIM, anmalanRecordId: 'rec-rim-002', personNamn: 'Björn Sjöberg', summaInbetalt: 0 }),
+    // ── RIM 1: fyra slutbetalningar (avgiften redan betald) ──
+    rad({
+      ...RIM,
+      anmalanRecordId: 'rec-rim-001',
+      personNamn: 'Anna Lindqvist',
+      summaInbetalt: 1000,
+    }),
+    rad({
+      ...RIM,
+      anmalanRecordId: 'rec-rim-002',
+      personNamn: 'Björn Sjöberg',
+      summaInbetalt: 1000,
+    }),
     rad({
       ...RIM,
       anmalanRecordId: 'rec-rim-003',
       personNamn: 'Cecilia Malm',
-      summaInbetalt: 0,
-      anmalanStatus: 'Obekräftad',
+      summaInbetalt: 1000,
+      // Slutbetalningens deadline passerad (ligger före FIXTUR_IDAG).
+      deadlineSlutbetalning: '2026-08-28',
     }),
-    rad({
-      ...RIM,
-      anmalanRecordId: 'rec-rim-004',
-      personNamn: 'David Ek',
-      summaInbetalt: 0,
-      // Deadline passerad (ligger före FIXTUR_IDAG) ⇒ förfallen.
-      deadlineSlutbetalning: '2026-08-20',
-    }),
+    rad({ ...RIM, anmalanRecordId: 'rec-rim-004', personNamn: 'David Ek', summaInbetalt: 1000 }),
+    // ── RIM 1: två nya som betalat avgiften ──
     rad({
       ...RIM,
       anmalanRecordId: 'rec-rim-005',
       personNamn: 'Erik Holm',
-      // Anmälningsavgiften (1 000) är redan betald ⇒ "Anmälningsavgift" går
-      // inte ihop, raden markeras. Kvar = slutbetalningen (1 500).
-      summaInbetalt: 1000,
+      summaInbetalt: 0,
+      anmalanStatus: 'Obekräftad',
     }),
+    rad({ ...RIM, anmalanRecordId: 'rec-rim-006', personNamn: 'Fatima Nouri', summaInbetalt: 0 }),
 
-    // ── Fjärrskådning (avgift 1 500 — annan än RIM 1) ──
+    // ── Fjärrskådning: två nya ──
     rad({
       ...FJARR,
       anmalanRecordId: 'rec-fjarr-001',
-      personNamn: 'Fatima Nouri',
-      summaInbetalt: 0,
-    }),
-    // rec-fjarr-002 = FIXTUR_FEL_ID, raden som fallerar i simuleringen.
-    rad({
-      ...FJARR,
-      anmalanRecordId: 'rec-fjarr-002',
       personNamn: 'Gunnar Falk',
       summaInbetalt: 0,
     }),
     rad({
       ...FJARR,
-      anmalanRecordId: 'rec-fjarr-003',
+      anmalanRecordId: 'rec-fjarr-002',
       personNamn: 'Hanna Wikström',
       summaInbetalt: 0,
     }),
-    rad({
-      ...FJARR,
-      anmalanRecordId: 'rec-fjarr-004',
-      personNamn: 'Ida Ström',
-      summaInbetalt: 0,
-    }),
 
-    // ── Föreläsning — ETT pris utan fack (ADR-128 beslut 6) ──
-    rad({
-      anmalanRecordId: 'rec-forel-001',
-      personNamn: 'Johan Lund',
-      eventId: 'rec-event-forel',
-      eventNamn: 'Föreläsning: Att tyda drömmar',
-      eventStartdatum: '2026-09-12',
-      eventTyp: 'Föreläsning',
-      // Priset ÄR avgiften (ett fack) ⇒ inga två fack; "Allt som saknas" = 500.
-      gallandePris: 500,
-      anmalningsavgift: 500,
-      summaInbetalt: 0,
-    }),
+    // ── Psionautics: två nya ──
+    rad({ ...PSIO, anmalanRecordId: 'rec-psio-001', personNamn: 'Ida Ström', summaInbetalt: 0 }),
+    rad({ ...PSIO, anmalanRecordId: 'rec-psio-002', personNamn: 'Johan Lund', summaInbetalt: 0 }),
   ];
 }
