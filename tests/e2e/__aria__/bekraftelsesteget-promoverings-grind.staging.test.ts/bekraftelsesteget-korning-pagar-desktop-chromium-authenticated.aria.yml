@@ -1,0 +1,59 @@
+- heading "Bulkregistrering" [level=1]
+- status: /Registrerar \d+ inbetalningar …/
+- region "Markerade inbetalningar":
+  - heading /Resor i medvetandet 1, Skövde · \d+-\d+-\d+/ [level=2]
+  - list:
+    - listitem:
+      - checkbox "Anna Lindqvist Markerad" [checked] [disabled]
+      - text: Anna Lindqvist Markerad
+      - button "Ändra belopp för Anna Lindqvist" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Björn Sjöberg Markerad" [checked] [disabled]
+      - text: Björn Sjöberg Markerad
+      - button "Ändra belopp för Björn Sjöberg" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Cecilia Malm Förfallen Markerad" [checked] [disabled]
+      - text: Cecilia Malm Förfallen Markerad
+      - button "Ändra belopp för Cecilia Malm" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "David Ek Markerad" [checked] [disabled]
+      - text: David Ek Markerad
+      - button "Ändra belopp för David Ek" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Erik Holm Obekräftad Markerad" [checked] [disabled]
+      - text: Erik Holm Obekräftad Markerad
+      - button "Ändra belopp för Erik Holm" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Fatima Nouri Markerad" [checked] [disabled]
+      - text: Fatima Nouri Markerad
+      - button "Ändra belopp för Fatima Nouri" [disabled]: /1 \d+ kr/
+  - heading /Fjärrskådning, Göteborg · \d+-\d+-\d+/ [level=2]
+  - list:
+    - listitem:
+      - checkbox "Gunnar Falk Markerad" [checked] [disabled]
+      - text: Gunnar Falk Markerad
+      - button "Ändra belopp för Gunnar Falk" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Hanna Wikström Markerad" [checked] [disabled]
+      - text: Hanna Wikström Markerad
+      - button "Ändra belopp för Hanna Wikström" [disabled]: /1 \d+ kr/
+  - heading /Psionautics, Stockholm · \d+-\d+-\d+/ [level=2]
+  - list:
+    - listitem:
+      - checkbox "Ida Ström Markerad" [checked] [disabled]
+      - text: Ida Ström Markerad
+      - button "Ändra belopp för Ida Ström" [disabled]: /1 \d+ kr/
+    - listitem:
+      - checkbox "Johan Lund Markerad" [checked] [disabled]
+      - text: Johan Lund Markerad
+      - button "Ändra belopp för Johan Lund" [disabled]: /1 \d+ kr/
+- term: 6 anmälningsavgifter
+- definition: /6 \d+ kr/
+- term: 4 slutbetalningar
+- definition: /6 \d+ kr/
+- term: /\d+ inbetalningar/
+- definition: /\d+ \d+ kr/
+- progressbar "Registrerar inbetalningar": /0 av \d+ registrerade …/
+- button [disabled]:
+  - status: /Registrerar \d+ inbetalningar/
+- button /Registrera och skicka \d+ kvitton/ [disabled]

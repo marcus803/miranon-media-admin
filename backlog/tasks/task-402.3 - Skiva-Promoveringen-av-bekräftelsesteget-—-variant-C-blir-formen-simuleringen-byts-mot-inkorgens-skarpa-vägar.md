@@ -3,10 +3,10 @@ id: TASK-402.3
 title: >-
   Skiva: Promoveringen av bekräftelsesteget — variant C blir formen,
   simuleringen byts mot inkorgens skarpa vägar
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 19:19'
+updated_date: '2026-09-05 22:43'
 labels:
   - ready-for-agent
 dependencies:

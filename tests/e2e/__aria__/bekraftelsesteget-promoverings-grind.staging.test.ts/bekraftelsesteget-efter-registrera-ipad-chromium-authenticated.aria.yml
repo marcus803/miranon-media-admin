@@ -1,0 +1,68 @@
+- heading "Bulkregistrering" [level=1]
+- status: 9 inbetalningar registrerade, 1 kunde inte registreras
+- region "Registrerat nu":
+  - list:
+    - listitem:
+      - text: /Anna Lindqvist Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Anna Lindqvist" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Anna Lindqvist"
+    - listitem:
+      - text: /Björn Sjöberg Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Björn Sjöberg" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Björn Sjöberg"
+    - listitem:
+      - text: /Cecilia Malm Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Cecilia Malm" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Cecilia Malm"
+    - listitem:
+      - text: /David Ek Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till David Ek" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för David Ek"
+    - listitem:
+      - text: /Erik Holm Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Erik Holm" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Erik Holm"
+    - listitem:
+      - text: /Fatima Nouri Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Fatima Nouri" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Fatima Nouri"
+    - listitem:
+      - text: /Hanna Wikström Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Hanna Wikström" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Hanna Wikström"
+    - listitem:
+      - text: /Ida Ström Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Ida Ström" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Ida Ström"
+    - listitem:
+      - text: /Johan Lund Swish · Kvitto väntar på att skickas 1 \d+ kr/
+      - button "Förhandsgranska kvittot till Johan Lund" [disabled]
+      - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+      - button "Ångra registreringen för Johan Lund"
+  - button "Skicka 9 kvitton"
+  - button "Förhandsgranska 9 kvitton" [disabled]
+  - tooltip "Öppnar kvittot som PDF i den skarpa ytan. Inte byggt i prototypen."
+  - text: 9 kvitton hör till registreringen
+- region "Markerade inbetalningar":
+  - heading /Fjärrskådning, Göteborg · \d+-\d+-\d+/ [level=2]
+  - list:
+    - listitem:
+      - checkbox "Gunnar Falk Markerad" [checked]
+      - text: Gunnar Falk Markerad
+      - button "Ändra belopp för Gunnar Falk": /1 \d+ kr/
+      - alert: Beloppet kunde inte sparas. Försök igen.
+- term: 1 anmälningsavgift
+- definition: /1 \d+ kr/
+- term: 1 inbetalning
+- definition: /1 \d+ kr/
+- paragraph: Jämför med kontoutdraget innan du registrerar.
+- button "Försök igen"
+- button "Registrera och skicka 1 kvitto"

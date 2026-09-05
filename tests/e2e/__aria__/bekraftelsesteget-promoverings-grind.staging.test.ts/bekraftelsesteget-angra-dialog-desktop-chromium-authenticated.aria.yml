@@ -1,0 +1,6 @@
+- dialog "Ångra registreringen?":
+  - heading "Ångra registreringen?" [level=2]
+  - paragraph: /Anna Lindqvist · 1 \d+ kr · Swish/
+  - paragraph: Inbetalningen raderas och kvittot skickas inte. Raden går tillbaka till listan.
+  - button "Behåll"
+  - button "Ångra registreringen"
