@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { OppenBetalning } from '@/domain/schemas';
-import { normaliseraBeloppKlient, summeraKronorKlient } from '../belopp-inmatning';
+import { normaliseraBeloppKlient, summeraKronorKlient, visaKronor } from '../belopp-inmatning';
 import type { Betalsatt } from '../betalsatt-minne';
 import { lasSenasteBetalsatt } from '../betalsatt-minne';
 import {
@@ -60,7 +60,7 @@ export type BekraftelseRad = {
 export type Fas = 'redigera' | 'registrerar' | 'klart';
 
 /** Beloppet en genväg ger för en rad, eller `null` när valet inte går ihop. */
-function genvagsbelopp(rad: BekraftelseRad, genvag: Beloppsgenvag): number | null {
+export function genvagsbelopp(rad: BekraftelseRad, genvag: Beloppsgenvag): number | null {
   if (genvag === 'annat') return null;
   const knapp = rad.beloppsknappar.find((k) => k.nyckel === genvag);
   return knapp ? knapp.belopp : null;
@@ -188,7 +188,9 @@ function byggRader(oppna: readonly OppenBetalning[], idag: string, betalsatt: Be
     const beloppsknappar = harledBeloppsknappar(inkorg);
     // Startbelopp = "allt som saknas" (kvar), samma förval som radformuläret
     // (`RegistreraForm` § forifyllt). Okänt/betalt pris ⇒ tomt fält.
-    const start = inkorg.kvar !== null && inkorg.kvar > 0 ? String(inkorg.kvar) : '';
+    // Husets visningsform ("1 000"), samma som `RegistreraForm` § forifyllt —
+    // fältet ska se ut som raden bredvid, inte som ett råtal.
+    const start = inkorg.kvar !== null && inkorg.kvar > 0 ? visaKronor(inkorg.kvar) : '';
     return {
       nyckel: inkorg.nyckel,
       inkorg,
@@ -288,7 +290,7 @@ export function useBekraftelsesteg(
         const belopp = genvagsbelopp(rad, genvag);
         return belopp === null
           ? { ...rad, belopp: '', ejGenomforbar: genvag }
-          : { ...rad, belopp: String(belopp), ejGenomforbar: null };
+          : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null };
       }),
     );
   }, []);

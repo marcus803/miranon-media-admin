@@ -26,7 +26,7 @@ export type PrototypVariant = 'a' | 'b' | 'c';
 const PROTO_VARIANTS: PrototypeVariant[] = [
   { key: 'a', label: 'Radlistan', steg: 1, stegLabel: 'divergens' },
   { key: 'b', label: 'Sammanställningen', steg: 1, stegLabel: 'divergens' },
-  { key: 'c', label: 'Avvikelse-först', steg: 1, stegLabel: 'divergens' },
+  { key: 'c', label: 'Avvikelse-först', steg: 2, stegLabel: 'konvergens' },
 ];
 
 // Datalägets URL-värden är EXPLICITA ('fixtur'/'staging'), inte `null`, så
@@ -73,32 +73,35 @@ export function BekraftelsestegPrototype({
   const stagingLaddar = data === 'staging' && stagingFraga.isLoading;
   const stagingFel = data === 'staging' && stagingFraga.isError;
 
+  // STEG 2 (konvergens, Marcus 2026-09-05: *"håll appens bredd (!)"*): ytan
+  // lever i `<main>`s 600 px-kolumn med husets sidkrom — `SidRam`-chevron
+  // följt av sidans eget rubrikblock i `px-4`, innehållet kant i kant
+  // (`SidRam.tsx` § smalare omfattning). Divergens-steget bröt ut till
+  // 92 vw / 1100 px; det var en egen ram, inte appens. Varianterna A och B
+  // (divergens-förlorare, rivs vid promoveringen) renderas oförändrade och
+  // får därför trängas i kolumnen.
   return (
-    <div className="mx-[calc(50%-46vw)] flex w-[92vw] flex-col">
+    <section className="flex flex-col gap-4">
       {import.meta.env.DEV && (
         <PrototypeSwitcher variants={PROTO_VARIANTS} dataLagen={PROTO_DATA_LAGEN} />
       )}
-      <div className="mx-auto flex w-full max-w-[1100px] flex-col">
-        <SidRam to="/mer/betalningar" tillbakaEtikett="Tillbaka till inkorgen" />
-        <div className="px-4 lg:px-6">
-          {stagingLaddar ? (
-            <p className="py-8 text-body text-text-secondary">Hämtar öppna betalningar …</p>
-          ) : stagingFel ? (
-            <p className="py-8 text-body text-text-secondary">
-              Kunde inte hämta staging-data. Växla till Fixtur i växlaren.
-            </p>
-          ) : oppna.length === 0 ? (
-            <p className="py-8 text-body text-text-secondary">Inga öppna betalningar att visa.</p>
-          ) : variant === 'b' ? (
-            <VariantB modell={modell} />
-          ) : variant === 'c' ? (
-            <VariantC modell={modell} />
-          ) : (
-            <VariantA modell={modell} />
-          )}
-        </div>
-      </div>
-    </div>
+      <SidRam to="/mer/betalningar" tillbakaEtikett="Tillbaka till inkorgen" />
+      {stagingLaddar ? (
+        <p className="px-4 py-8 text-body text-text-secondary">Hämtar öppna betalningar …</p>
+      ) : stagingFel ? (
+        <p className="px-4 py-8 text-body text-text-secondary">
+          Kunde inte hämta staging-data. Växla till Fixtur i växlaren.
+        </p>
+      ) : oppna.length === 0 ? (
+        <p className="px-4 py-8 text-body text-text-secondary">Inga öppna betalningar att visa.</p>
+      ) : variant === 'b' ? (
+        <VariantB modell={modell} />
+      ) : variant === 'c' ? (
+        <VariantC modell={modell} />
+      ) : (
+        <VariantA modell={modell} />
+      )}
+    </section>
   );
 }
 

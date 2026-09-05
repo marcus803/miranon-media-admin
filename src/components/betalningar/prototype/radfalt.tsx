@@ -1,4 +1,4 @@
-import { Check, CircleCheck, TriangleAlert } from 'lucide-react';
+import { Check, CircleCheck, Clock, TriangleAlert } from 'lucide-react';
 import { Checkbox } from 'react-aria-components';
 import {
   Button,
@@ -76,14 +76,19 @@ export function BeloppInput({
   hideLabel = false,
   size = 'md',
   label = 'Belopp i kronor',
+  className,
 }: {
   rad: BekraftelseRad;
   onChange: (v: string) => void;
   hideLabel?: boolean;
   size?: 'sm' | 'md';
   label?: string;
+  className?: string;
 }) {
   const fel = beloppsFel(rad.belopp);
+  // INGEN platshållare med ett belopp: en grå siffra i ett tomt fält lästes
+  // som ett värde (L237-fyndet ur divergens-passet — "väntande raders grå
+  // platshållare visar hela priset"). Tomt fält är tomt fält.
   return (
     <Input
       label={label}
@@ -92,10 +97,10 @@ export function BeloppInput({
       onChange={onChange}
       inputMode="decimal"
       autoComplete="off"
-      placeholder="2 500"
       size={size}
       isInvalid={fel !== null}
       errorMessage={fel ?? undefined}
+      className={className}
     />
   );
 }
@@ -158,12 +163,14 @@ export function DatumInput({
   label,
   hideLabel = false,
   size = 'md',
+  className,
 }: {
   value: string;
   onChange: (v: string) => void;
   label: string;
   hideLabel?: boolean;
   size?: 'sm' | 'md';
+  className?: string;
 }) {
   return (
     <Input
@@ -173,6 +180,7 @@ export function DatumInput({
       value={value}
       onChange={onChange}
       size={size}
+      className={className}
     />
   );
 }
@@ -241,7 +249,7 @@ export function RadMarken({ rad }: { rad: BekraftelseRad }) {
   return (
     <>
       {rad.inkorg.forfallen && (
-        <StatusBadge ton="warning" storlek="sm">
+        <StatusBadge ton="warning" storlek="sm" ikon={Clock}>
           Förfallen
         </StatusBadge>
       )}

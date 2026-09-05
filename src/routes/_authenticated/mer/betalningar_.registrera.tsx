@@ -25,6 +25,15 @@ import { betalningarPa } from '@/lib/funktionsflaggor';
  * Route-koden är additiv: ny route + nya filer under `betalningar/prototype/`.
  *
  * ═══════════════════════════════════════════════════════════════════════════
+ * KONVERGENS (steg 2, 2026-09-05): MARCUS VALDE C
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Vinnaren behåller sin nyckel (`?variant=c`, ADR-074 beslut 1) och itereras
+ * i `VariantC.tsx` — nu i appens 600 px-kolumn med husets sidkrom
+ * (`BekraftelsestegPrototype.tsx`). `a` och `b` är divergens-förlorare: de
+ * renderas fortfarande men rivs vid promoveringen (ADR-103), och de har inte
+ * anpassats till kolumnen.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
  * UN-NESTAD FRÅN INKORGEN
  * ═══════════════════════════════════════════════════════════════════════════
  * Filnamnet bär trailing underscore (`betalningar_.registrera`) så routen
