@@ -4,10 +4,10 @@ title: >-
   Fynd: segmentets detaljvy (t.ex. RIM 1) — sju åtgärder: utskicks-copy,
   publiklistans bredd och rullningslist, 'Namn saknas' + person-ikon som
   Intresserade, Form-raden, regeln som chips
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-04 10:03'
-updated_date: '2026-09-05 16:54'
+updated_date: '2026-09-05 17:25'
 labels:
   - ready-for-agent
 dependencies: []
@@ -33,7 +33,7 @@ FYND (Marcus 2026-09-04, S120 Del 1, verbatim i sessionsdoket): öppnar man ett 
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
-- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
-- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [x] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [x] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [x] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->

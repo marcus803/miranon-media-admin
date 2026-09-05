@@ -3,10 +3,10 @@ id: TASK-400
 title: >-
   Fynd: KopplaTillEventDialog.tsx saknar konsumenter — riv den döda dialogen och
   rätta kommentarerna som pekar på den
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-05 10:54'
-updated_date: '2026-09-05 17:10'
+updated_date: '2026-09-05 17:37'
 labels:
   - ready-for-agent
 dependencies: []
@@ -29,7 +29,7 @@ FYND (S120 Del 2, premiss-fynd i TASK-394:s forensik 2026-09-04; re-verifierat a
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
-- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
-- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [x] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [x] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [x] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
