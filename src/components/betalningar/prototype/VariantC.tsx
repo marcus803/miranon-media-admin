@@ -33,7 +33,7 @@ import { KvittoKryss, RadMarken } from './radfalt';
  * ═══════════════════════════════════════════════════════════════════════════
  * Den tidigare resultatvyn (egna listor "Registrerade"/"Kunde inte
  * registreras") är riven. I stället:
- *   • "Registrera N betalningar" registrerar rad för rad; registrerade rader
+ *   • "Registrera N inbetalningar" registrerar rad för rad; registrerade rader
  *     lämnar listan och dyker upp i `RegistreratNu` — inkorgens block
  *     (`BetalningsInkorg.tsx` § "Registrerat nu"), klass för klass:
  *     guldtonat medan något pågår, neutralt när allt vilar; rad = namn ·
@@ -47,7 +47,7 @@ import { KvittoKryss, RadMarken } from './radfalt';
  *     MM-2026-1001" utan att Lotta trycker Skicka.
  *   • En rad vars registrering fallerar (Gunnar) STANNAR i listan, markerad,
  *     med felet under sig (inkorgens `registrera.isError`-rad), och
- *     "Registrera 1 betalning" är omkörningen. Andra försöket lyckas.
+ *     "Registrera 1 inbetalning" är omkörningen. Andra försöket lyckas.
  *   • Ångra tar raden tillbaka till listan (inkorgens Ångra raderar
  *     inbetalningen).
  *   • Förhandsgranska öppnar en PDF i den skarpa ytan; här är knapparna
@@ -225,8 +225,8 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
             när ett kort avmarkeras. */}
         <p role="status" aria-live="polite" className="text-small text-text-secondary">
           {kvar.length > 0
-            ? `${markerade.length} av ${kvar.length} betalningar markerade`
-            : 'Alla betalningar registrerade'}
+            ? `${markerade.length} av ${kvar.length} inbetalningar markerade`
+            : 'Alla inbetalningar registrerade'}
         </p>
       </header>
 
@@ -234,7 +234,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
 
       {/* ═══ LISTAN — inkorgens form, klass för klass (varv 4) ═══ */}
       {klarhogen.length > 0 && (
-        <section aria-label="Markerade betalningar" className="flex flex-col gap-4 px-4">
+        <section aria-label="Markerade inbetalningar" className="flex flex-col gap-4 px-4">
           {klaraGrupper.map((grupp) => (
             <div key={grupp.eventId} className="flex flex-col gap-2">
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
@@ -278,7 +278,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
             ))}
             <div className="mt-1 flex items-baseline justify-between gap-3 border-border border-t pt-2">
               <dt className="font-medium text-body">
-                {plural(registrerbara.length, 'betalning', 'betalningar')}
+                {plural(registrerbara.length, 'inbetalning', 'inbetalningar')}
               </dt>
               <dd className="m-0 font-semibold text-lg tabular-nums">
                 {visaKronor(modell.summering.summa)} kr
@@ -302,7 +302,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               >
                 {registrerbara.length === 0
                   ? 'Registrera'
-                  : `Registrera ${plural(registrerbara.length, 'betalning', 'betalningar')}`}
+                  : `Registrera ${plural(registrerbara.length, 'inbetalning', 'inbetalningar')}`}
               </Button>
             </div>
             <div className="flex flex-col">
