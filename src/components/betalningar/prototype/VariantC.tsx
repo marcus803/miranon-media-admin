@@ -587,9 +587,19 @@ function RegistreratNu({
                       >
                         Ångra
                       </Button>
-                      <Modal isDismissable>
+                      {/* VARV 19 (Marcus: *"Kan ångra-dialogen göras lite
+                          snyggare?"*): md-bredd så texten inte bryts i tre
+                          rader, kortens `rounded-2xl` i stället för
+                          primitivens `rounded` (4 px bredvid 16 px-kort såg
+                          daterat ut — kandidat för Modal-primitiven själv),
+                          kroppen i två led: VEM och VAD (namn i fetstil,
+                          belopp · betalsätt) och sedan konsekvensen i
+                          sekundär ton; knapparna per Apple HIG:s alert-regel
+                          — verbet på den destruktiva ("Ångra registreringen",
+                          inte "Ja"), och "Behåll" som det ofarliga valet. */}
+                      <Modal isDismissable className="rounded-2xl">
                         <Dialog
-                          size="sm"
+                          size="md"
                           title="Ångra registreringen?"
                           actions={({ close }) => (
                             <>
@@ -603,14 +613,24 @@ function RegistreratNu({
                                   close();
                                 }}
                               >
-                                Ja, ångra
+                                Ångra registreringen
                               </Button>
                             </>
                           )}
                         >
-                          {`Inbetalningen på ${visaKronor(belopp)} kr för ${rad.inkorg.namn} raderas${
-                            rad.medKvitto ? ', och kvittot skickas inte' : ''
-                          }.`}
+                          <div className="flex flex-col gap-2">
+                            <p className="m-0">
+                              <span className="font-semibold">{rad.inkorg.namn}</span>
+                              <span className="text-text-secondary">
+                                {` · ${visaKronor(belopp)} kr · ${rad.betalsatt}`}
+                              </span>
+                            </p>
+                            <p className="m-0 text-small text-text-secondary">
+                              {rad.medKvitto
+                                ? 'Inbetalningen raderas och kvittot skickas inte. Raden går tillbaka till listan.'
+                                : 'Inbetalningen raderas. Raden går tillbaka till listan.'}
+                            </p>
+                          </div>
                         </Dialog>
                       </Modal>
                     </DialogTrigger>
