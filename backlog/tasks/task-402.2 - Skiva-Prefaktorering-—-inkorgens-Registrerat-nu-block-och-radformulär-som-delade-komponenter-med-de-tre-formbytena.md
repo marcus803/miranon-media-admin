@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-05 19:02'
+updated_date: '2026-09-05 19:19'
 labels:
   - ready-for-agent
 dependencies: []
@@ -36,3 +37,9 @@ Gör ändringen enkel innan den enkla ändringen görs: inkorgens 'Registrerat n
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 - [ ] #4 Facit-granskning: ytan bekraftelsesteget jämförd mot facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json (bilderna i samma katalog) i varje läge skivan rör — avvikelse bokförs som AMENDERING-fil i facit-katalogen, aldrig som tyst ändring (ADR-102 B5/R3)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+FÖRKRAV (S121 paus 3, 2026-09-05): prototypkoden (VariantC, BekraftelsestegPrototype, bekraftelseSimulering, fixtur, radfalt, routen betalningar_.registrera) ligger på grenen proto/s121-bekraftelsesteget (draft-PR #2325, 21 commits över main, DEV-grindad) — INTE på main. Landa #2325 via review-loopen (ready → review-agent → backstopp → armera) FÖRE denna skiva, eller basera skivans gren på proto-grenen. Facit-manifestet och markörerna följer med den landningen.
+<!-- SECTION:NOTES:END -->
