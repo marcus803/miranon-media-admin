@@ -643,9 +643,9 @@ function MarkerbartKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekrafte
               {belopp === null ? 'Saknar belopp' : `${visaKronor(belopp)} kr`}
             </span>
             <span
-              className={`-mr-2 flex size-9 shrink-0 items-center justify-center rounded-full motion-safe:transition-colors ${
+              className={`mr-1 flex size-9 shrink-0 items-center justify-center rounded-full motion-safe:transition-colors ${
                 vald
-                  ? 'text-text-secondary group-data-[hovered]:bg-bg-emphasized group-data-[hovered]:text-text'
+                  ? 'text-text-secondary group-data-[hovered]:bg-(--mm-success)/15 group-data-[hovered]:text-text'
                   : 'text-text-muted'
               }`}
             >
