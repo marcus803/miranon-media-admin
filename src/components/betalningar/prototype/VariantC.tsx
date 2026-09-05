@@ -1,16 +1,7 @@
 import { ChevronDown, CircleCheck, Info, type LucideIcon, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button as AriaButton, Checkbox } from 'react-aria-components';
-import {
-  Button,
-  Input,
-  MessageBox,
-  Radio,
-  RadioGroup,
-  RaknarChip,
-  Select,
-  SelectItem,
-} from '@/components/primitives';
+import { Button, Input, MessageBox, RaknarChip, Select, SelectItem } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { VALBARA_BETALSATT } from '@/domain/schemas';
 import { beloppsFel, normaliseraBeloppKlient, visaKronor } from '../belopp-inmatning';
@@ -22,13 +13,11 @@ import {
   avstamning,
   type BekraftelseRad,
   type BekraftelsestegModell,
-  type Beloppsgenvag,
   type Beloppsklass,
-  genvagsbelopp,
   grupperaRader,
   radbelopp,
 } from './bekraftelseSimulering';
-import { BetalsattSegment, DatumInput, KvittoKryss, RadMarken, RadUtfallRad } from './radfalt';
+import { KvittoKryss, RadMarken, RadUtfallRad } from './radfalt';
 
 /**
  * [PROTOTYPE] Variant C — AVVIKELSE-FÖRST. Konvergens-passet (S121, Marcus
@@ -63,18 +52,18 @@ import { BetalsattSegment, DatumInput, KvittoKryss, RadMarken, RadUtfallRad } fr
  * Räknaren först ("10 av 10 betalningar markerade"). Efter registreringen är
  * lyckade kort vita och fallna gröna (Åtgärds-sidans `UtfallsKort`).
  *
- * VARV 2–4: beloppet förvals per rad ur datat (`forslagsbelopp`), bulkvalen
- * kvar som "Ändra för alla" under listan (val B), avstämningen i Lottas
- * klumpar ovanför Registrera, listan klass för klass ur `BetalningsInkorg`.
+ * VARV 12 — BULKVALEN RIVNA (Marcus: *"Jag tror vi kan ta bort 'Ändra för
+ * alla'-blocket helt och hållet. Vad ska hon med det till egentligen?"*).
+ * Förslaget per rad (`forslagsbelopp`) gjorde beslut 2:s bulkval överflödiga;
+ * kvar är listan, avstämningen i Lottas klumpar och knapparna. Betalsätt och
+ * datum för alla rader kommer ur modellens förval (senast använda betalsätt,
+ * dagens datum) och ändras per rad i kortets formulär. `sattGenvag` lever
+ * kvar i modellen för A/B.
+ *
+ * VARV 2–4: beloppet förvals per rad ur datat (`forslagsbelopp`), avstämningen
+ * i Lottas klumpar ovanför Registrera, listan klass för klass ur
+ * `BetalningsInkorg`.
  */
-
-type BulkNyckel = Extract<Beloppsgenvag, 'forslag' | 'avgift' | 'allt'>;
-
-const BULKVAL: { nyckel: BulkNyckel; etikett: string }[] = [
-  { nyckel: 'forslag', etikett: 'Som vi föreslår' },
-  { nyckel: 'avgift', etikett: 'Anmälningsavgift för alla' },
-  { nyckel: 'allt', etikett: 'Allt som saknas för alla' },
-];
 
 const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
   avgift: { ett: 'anmälningsavgift', flera: 'anmälningsavgifter' },
@@ -142,20 +131,6 @@ function handSkal(rad: BekraftelseRad): string {
   return 'Beloppet är tomt.';
 }
 
-/** Vad ett bulkval ger över raderna — antal med belopp, och summan. */
-function bulkutfall(rader: readonly BekraftelseRad[], nyckel: BulkNyckel) {
-  let antal = 0;
-  let summa = 0;
-  for (const rad of rader) {
-    const belopp = genvagsbelopp(rad, nyckel);
-    if (belopp !== null) {
-      antal += 1;
-      summa += belopp;
-    }
-  }
-  return { antal, summa };
-}
-
 /** Rubrik med räknarchip — segmentvyns "Färdiga grupper 14"-form. */
 function SektionsRubrik({ id, antal, children }: { id: string; antal: number; children: string }) {
   return (
@@ -207,7 +182,6 @@ export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
 }
 
 function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
-  const valId = useId();
   const handId = useId();
   const { rader } = modell;
 
@@ -219,30 +193,7 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
   const klaraGrupper = useMemo(() => grupperaRader(klarhogen), [klarhogen]);
   const registrerbara = rader.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
-  const vald: BulkNyckel =
-    modell.aktivGenvag === 'avgift' || modell.aktivGenvag === 'allt'
-      ? modell.aktivGenvag
-      : 'forslag';
 
-  const utfallPerVal = useMemo(
-    () => new Map(BULKVAL.map((v) => [v.nyckel, bulkutfall(markerade, v.nyckel)] as const)),
-    [markerade],
-  );
-  const forslagsklumpar = useMemo(() => {
-    const antal = new Map<Beloppsklass, number>();
-    for (const rad of markerade) {
-      const avgift = rad.beloppsknappar.find((k) => k.nyckel === 'avgift');
-      const allt = rad.beloppsknappar.find((k) => k.nyckel === 'allt');
-      let klass: Beloppsklass = 'saknas';
-      if (avgift) klass = 'avgift';
-      else if (allt) klass = allt.etikett === 'resten' ? 'resten' : 'allt';
-      antal.set(klass, (antal.get(klass) ?? 0) + 1);
-    }
-    const ordning: Beloppsklass[] = ['avgift', 'resten', 'allt', 'annat', 'saknas'];
-    return ordning
-      .filter((k) => antal.has(k))
-      .map((k) => plural(antal.get(k) ?? 0, KLASS_ORD[k].ett, KLASS_ORD[k].flera));
-  }, [markerade]);
   const avstamda = useMemo(() => avstamning(markerade), [markerade]);
 
   return (
@@ -299,65 +250,6 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
           </ul>
         </section>
       )}
-
-      {/* ═══ ÄNDRA FÖR ALLA — bulkvalen som verktyg under listan (val B) ═══ */}
-      <section aria-labelledby={valId} className="flex flex-col gap-3">
-        <h2 id={valId} className="px-4 font-semibold text-lg">
-          Ändra för alla
-        </h2>
-        <div className="flex flex-col gap-4 rounded-2xl bg-bg-muted p-4">
-          <RadioGroup
-            label="Belopp för alla rader"
-            hideLabel
-            orientation="vertical"
-            value={vald}
-            onChange={(v) => modell.sattGenvag(v as BulkNyckel)}
-          >
-            {BULKVAL.map((v) => {
-              const u = utfallPerVal.get(v.nyckel) ?? { antal: 0, summa: 0 };
-              const utan = markerade.length - u.antal;
-              let under: string;
-              if (v.nyckel === 'forslag') under = forslagsklumpar.join(' · ');
-              else if (utan === 0) under = `${u.antal} av ${markerade.length} rader`;
-              else
-                under = `${u.antal} av ${markerade.length} rader · ${plural(utan, 'rad får inget belopp', 'rader får inget belopp')}`;
-              return (
-                <Radio
-                  key={v.nyckel}
-                  value={v.nyckel}
-                  className="w-full rounded-xl border border-border bg-surface px-3 py-2.5 data-[selected]:border-primary data-[selected]:bg-primary-tint motion-safe:transition-colors contrast-more:data-[selected]:border-2"
-                >
-                  <span className="flex min-w-0 flex-1 items-start justify-between gap-3">
-                    <span className="flex min-w-0 flex-col gap-0.5">
-                      <span className="font-semibold text-body">{v.etikett}</span>
-                      <span className="text-caption text-text-muted">{under}</span>
-                    </span>
-                    <span className="shrink-0 pt-0.5 font-medium text-body tabular-nums">
-                      {visaKronor(u.summa)} kr
-                    </span>
-                  </span>
-                </Radio>
-              );
-            })}
-          </RadioGroup>
-          <div className="flex flex-wrap gap-x-4 gap-y-3">
-            <div className="flex flex-col items-start gap-1">
-              <span className="text-(color:--mm-input-label-text) text-small">Betalsätt</span>
-              <BetalsattSegment
-                label="Betalsätt för alla rader"
-                value={modell.batchBetalsatt}
-                onChange={modell.sattBetalsattAlla}
-              />
-            </div>
-            <DatumInput
-              label="Datum"
-              value={modell.batchDatum}
-              onChange={modell.sattDatumAlla}
-              className="w-40"
-            />
-          </div>
-        </div>
-      </section>
 
       {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
       <div className="flex flex-col gap-3">
