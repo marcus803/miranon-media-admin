@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 20:55'
+updated_date: '2026-09-05 21:27'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,20 +22,20 @@ Gör ändringen enkel innan den enkla ändringen görs: inkorgens 'Registrerat n
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Inkorgens 'Registrerat nu'-block är identiskt med facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json ytan bekraftelsesteget i lägena 'efter Registrera' och 'efter Registrera och skicka' vad gäller blockets rader (namn · betalsätt · kvittoläge · belopp · åtgärder, fast höjd på åtgärdskolumnen, ingen makuleringstext per rad) och knappraden ('Skicka N kvitton' + 'Förhandsgranska' utan räknarchip)
-- [ ] #2 Ångra i inkorgen öppnar dialogen identisk med facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json ytan bekraftelsesteget i läge 'Ångra-dialogen'; 'Behåll' stänger utan ändring, 'Ångra registreringen' raderar inbetalningen via inkorgens befintliga ångra-väg
-- [ ] #3 Inkorgens registreringsformulär finns i ett delat läge med Klar/Avbryt: Klar stänger, Avbryt återställer radens värden till dem som gällde när formuläret öppnades; inkorgens eget läge (Registrera) är oförändrat
-- [ ] #4 Etiketten 'Registrera inbetalning' ersätter 'Registrera betalning' på anmälans betalningsyta och personkortet; 'Registrera återbetalning' orörd
-- [ ] #5 Räknarchip-primitiven är oförändrad och filterknappens badge renderar som förut (visual-baslinjen för filterraden byte-identisk)
-- [ ] #6 Inkorgens befintliga tester (api-pure och staging-e2e för utskicksflödet) är gröna utan ändrad avsikt; nya fall täcker dialogen och den chip-lösa knappens tillgängliga namn
+- [x] #1 Inkorgens 'Registrerat nu'-block är identiskt med facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json ytan bekraftelsesteget i lägena 'efter Registrera' och 'efter Registrera och skicka' vad gäller blockets rader (namn · betalsätt · kvittoläge · belopp · åtgärder, fast höjd på åtgärdskolumnen, ingen makuleringstext per rad) och knappraden ('Skicka N kvitton' + 'Förhandsgranska' utan räknarchip)
+- [x] #2 Ångra i inkorgen öppnar dialogen identisk med facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json ytan bekraftelsesteget i läge 'Ångra-dialogen'; 'Behåll' stänger utan ändring, 'Ångra registreringen' raderar inbetalningen via inkorgens befintliga ångra-väg
+- [x] #3 Inkorgens registreringsformulär finns i ett delat läge med Klar/Avbryt: Klar stänger, Avbryt återställer radens värden till dem som gällde när formuläret öppnades; inkorgens eget läge (Registrera) är oförändrat
+- [x] #4 Etiketten 'Registrera inbetalning' ersätter 'Registrera betalning' på anmälans betalningsyta och personkortet; 'Registrera återbetalning' orörd
+- [x] #5 Räknarchip-primitiven är oförändrad och filterknappens badge renderar som förut (visual-baslinjen för filterraden byte-identisk)
+- [x] #6 Inkorgens befintliga tester (api-pure och staging-e2e för utskicksflödet) är gröna utan ändrad avsikt; nya fall täcker dialogen och den chip-lösa knappens tillgängliga namn
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
-- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
-- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
-- [ ] #4 Facit-granskning: ytan bekraftelsesteget jämförd mot facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json (bilderna i samma katalog) i varje läge skivan rör — avvikelse bokförs som AMENDERING-fil i facit-katalogen, aldrig som tyst ändring (ADR-102 B5/R3)
+- [x] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [x] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [x] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [x] #4 Facit-granskning: ytan bekraftelsesteget jämförd mot facit tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json (bilderna i samma katalog) i varje läge skivan rör — avvikelse bokförs som AMENDERING-fil i facit-katalogen, aldrig som tyst ändring (ADR-102 B5/R3)
 <!-- DOD:END -->
 
 ## Implementation Notes

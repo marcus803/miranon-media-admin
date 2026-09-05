@@ -383,10 +383,16 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
       await expect(block.getByText('Kvitto skickat · MM-2026-1001')).toBeVisible();
       const klarHojd = await block.evaluate((el) => el.getBoundingClientRect().height);
 
-      // Toleransen är 0 — `min-h-10` gör slotten exakt lika hög i båda
-      // lägena (Button.tsx `size.md: 'min-h-10'`), och radens EGEN
+      // Toleransen är 0 — `min-h-10` gör den NEDRE slotten exakt lika hög i
+      // båda lägena (Button.tsx `size.md: 'min-h-10'`), radens EGEN
       // åtgärdskolumn (`min-h-9`, TASK-402.2) håller sin höjd oavsett hur
-      // många knappar som visas, VID INGEN AV DE TRE BREDDERNA.
+      // många knappar som visas, OCH radens bildtext (`truncate`, RÄTTAD
+      // LIVE-BUGG TASK-402.2) håller sig till EN rad oavsett om
+      // åtgärdskolumnen bredvid är tom eller bär en knapp. Mätt fynd (denna
+      // skiva, mobilbredden nedan): utan `truncate` vann/förlorade
+      // textkolumnen ~64 px bredd beroende på om "Ångra"-knappen fanns i
+      // grannkolumnen, vilket fick bildtexten att radbryta i KÖAT men inte
+      // i KLART — en 18 px total höjdskillnad, rött innan `truncate` fanns.
       expect(klarHojd, `${namn}: köat=${kootHojd}px, klart=${klarHojd}px`).toBe(kootHojd);
     });
   }
@@ -785,8 +791,18 @@ test.describe('TASK-362 — betalningsinkorgens utskicksflöde', () => {
       'Inbetalningen raderas och kvittot skickas inte. Raden går tillbaka till listan.',
     );
 
-    // DEFAULT-FOKUS PÅ "BEHÅLL" (det ofarliga valet, AC #2) — react-arias
-    // egen dialog-öppning, ingen egen fokus-styrning i produktionskoden.
+    // [RÄTTAD LIVE-BUGG] FOKUS LANDAR I DIALOGEN, INTE PÅ "BEHÅLL" — verifierat
+    // mot den installerade react-aria-components-källan (v1.20.0,
+    // `useDialog.mjs` rad 31: "Focus the dialog itself on mount, unless a
+    // child element is already focused."). VariantC-prototypens egen
+    // docblock säger exakt detta: "Fokus landar i dialogen (react-arias
+    // default, så rubriken läses upp), Tab når Behåll först" — INTE att
+    // Behåll själv får fokus direkt. Ett tidigare test här antog fel form
+    // (`toBeFocused()` på knappen) och fälldes mot den skarpa koden; rättat
+    // till att pröva det VariantC faktiskt beskriver: dialogen själv bär
+    // fokus, och ETT Tab-tryck når Behåll (först i DOM-ordningen, AC #2).
+    await expect(dialog).toBeFocused();
+    await page.keyboard.press('Tab');
     const behallKnapp = dialog.getByRole('button', { name: 'Behåll' });
     await expect(behallKnapp).toBeFocused();
 

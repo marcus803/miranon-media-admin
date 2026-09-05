@@ -111,11 +111,26 @@ export type VantandeKvitto = { inbetalningId: string; namn: string; belopp: numb
  * sista instans — `hantera-inbetalning` skiljer radera (före kvitto) från
  * makulera (efter) — men grinden ska inte förlita sig på att en skarp
  * operation fallerar snyggt.
+ *
+ * [TASK-402.2] `vila` ÄR EGET FRÅN `kanAngra` — DE FÖRVÄXLADES EN GÅNG UNDER
+ * DENNA SKIVAS BYGGE, BOKFÖRT SOM LÄRDOM. `vila` styr blockets guld/vila-ton
+ * (TASK-362): sant när raden är FÄRDIGBEHANDLAD och inte kräver
+ * uppmärksamhet (inget kvitto alls, ELLER kvittot har GÅTT I VÄG), falskt
+ * medan något fortfarande pågår (köat i sessionen, köat/pågår på servern)
+ * ELLER har fallerat. "Kvitto väntar på att skickas" (i den lokala kön) har
+ * `kanAngra: true` (radering är fortfarande säker) MEN `vila: false` (Lotta
+ * har en handling kvar att göra) — de två fälten pekar alltså åt OLIKA håll
+ * i just det läget, och en implementation som antar att de alltid
+ * sammanfaller (`!kanAngra` som stand-in för `!vila`) ger blockets ton FEL
+ * i exakt detta, mest VANLIGA läget (en nyss registrerad rad som väntar på
+ * att skickas). Se `BetalningsInkorg.tsx`s ursprungliga `Kvittolage`-docblock
+ * (git-historik) för samma fält, innan blocket flyttade hit.
  */
 type Kvittolage = {
   text: string;
   fel: boolean;
   kanAngra: boolean;
+  vila: boolean;
 };
 
 /**
@@ -140,9 +155,9 @@ function kvittolage(
 ): Kvittolage {
   const angrabar = { fel: false, kanAngra: true };
 
-  if (!rad.medKvitto) return { text: 'Inget kvitto', ...angrabar };
+  if (!rad.medKvitto) return { text: 'Inget kvitto', ...angrabar, vila: true };
   if (vantande.some((v) => v.inbetalningId === rad.inbetalningId)) {
-    return { text: 'Kvitto väntar på att skickas', ...angrabar };
+    return { text: 'Kvitto väntar på att skickas', ...angrabar, vila: false };
   }
 
   const jobbrad = jobbrader.find((j) => j.objektId === rad.inbetalningId);
@@ -151,23 +166,25 @@ function kvittolage(
       text: jobbrad.kvittonummer ? `Kvitto skickat · ${jobbrad.kvittonummer}` : 'Kvitto skickat',
       fel: false,
       kanAngra: false,
+      vila: true,
     };
   }
   if (jobbrad?.status === 'pagar') {
-    return { text: 'Kvitto skickas ...', fel: false, kanAngra: false };
+    return { text: 'Kvitto skickas ...', fel: false, kanAngra: false, vila: false };
   }
   if (jobbrad?.status === 'vantar') {
-    return { text: 'Kvitto köat', fel: false, kanAngra: false };
+    return { text: 'Kvitto köat', fel: false, kanAngra: false, vila: false };
   }
   if (jobbrad?.status === 'fel') {
     return {
       text: `Kvittot kunde inte skickas: ${jobbrad.skal ?? 'okänt skäl'}`,
       fel: true,
       kanAngra: false,
+      vila: false,
     };
   }
 
-  return { text: 'Kvitto köat', fel: false, kanAngra: false };
+  return { text: 'Kvitto köat', fel: false, kanAngra: false, vila: false };
 }
 
 /**
@@ -324,15 +341,16 @@ export function RegistreratNuBlock({
      fallerat, annars vila. Marcus 2026-09-02 (S113 resume 8-röktestet): den
      gula fonden stod kvar oavsett vad raderna faktiskt sa — en rad vars
      kvitto redan gått i väg bär exakt lika mycket varningston som en rad som
-     fortfarande väntar. `kanAngra` (nedan) är sant precis när kvittot INTE
-     gått i väg än, så `!lage.kanAngra` läser samma "något pågår/klart utan
-     att ha fallerat"-gräns TASK-362 mätte upp — utom att TASK-362 även
-     inkluderade `fel`, vilket kräver ett explicit tillägg: en fallerad rad
-     ska hålla tonen aktiv precis som förr. */
-  const blockAktivt = registrerade.some((post) => {
-    const lage = kvittolage(post, vantande, jobbrader);
-    return lage.fel || !lage.kanAngra;
-  });
+     fortfarande väntar. `some(!vila)` läser samma `kvittolage` raderna
+     redan visar, så tonen kan aldrig säga något annat än vad texten säger.
+     [TASK-402.2, RÄTTAD LIVE-BUGG] `vila` är INTE samma sak som `kanAngra`
+     — se `Kvittolage`s eget docblock. En tidigare version av denna rad
+     läste `lage.fel || !lage.kanAngra`, vilket gav FEL svar för "Kvitto
+     väntar på att skickas" (kanAngra: true, vila: false): blocket vilade i
+     neutral ton direkt efter registrering i stället för att stå AKTIVT
+     (guld) tills kvittot faktiskt skickats — mätt rött i e2e-sviten
+     (`betalningar-inkorg-utskicksflode.staging.test.ts`), rättat här. */
+  const blockAktivt = registrerade.some((post) => !kvittolage(post, vantande, jobbrader).vila);
 
   return (
     /* ETT RIKTIGT BLOCK-I-BLOCK (pass 11, Marcus: *"VA FAN är det här för
@@ -424,7 +442,21 @@ export function RegistreratNuBlock({
               <div className="flex flex-nowrap items-center gap-3">
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <span className="w-full truncate font-medium text-body">{post.namn}</span>
-                  <span className="w-full text-caption text-text-muted">
+                  {/* [TASK-402.2, RÄTTAD LIVE-BUGG] `truncate` — UTAN den
+                      radbryter denna rad till TVÅ rader när åtgärdskolumnen
+                      bredvid bär en bredare knapp ("Ångra", ~64 px) och till
+                      EN rad när kolumnen är tom (kvittot redan skickat,
+                      `kanAngra: false`), eftersom bredden som återstår för
+                      textkolumnen då växer. Mätt live vid mobilbredd
+                      (375 px, `betalningar-inkorg-utskicksflode.staging
+                      .test.ts`s viewport-matris): raden gick från 78 px
+                      (köat, radbruten) till 60 px (klart, en rad) — exakt
+                      den regression `min-h-9`-golvet på åtgärdskolumnen
+                      skulle förhindra, fast orsakad av EN ANNAN kolumn.
+                      `truncate` gör radens höjd oberoende av bredden
+                      grannkolumnen råkar ta, precis som namnraden ovan
+                      redan är. */}
+                  <span className="w-full truncate text-caption text-text-muted">
                     {[post.betalsatt, lage.text].join(' · ')}
                   </span>
                 </span>
