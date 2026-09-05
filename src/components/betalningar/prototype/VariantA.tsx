@@ -122,11 +122,11 @@ export function VariantA({ modell }: { modell: BekraftelsestegModell }) {
                 intent="secondary"
                 emphasis="outline"
                 isDisabled={summering.antal === 0}
-                onPress={modell.registrera}
+                onPress={() => modell.registrera(false)}
               >
                 Registrera och skicka
               </Button>
-              <Button isDisabled={summering.antal === 0} onPress={modell.registrera}>
+              <Button isDisabled={summering.antal === 0} onPress={() => modell.registrera(false)}>
                 {`Registrera ${summering.antal} · ${visaKronor(summering.summa)} kr`}
               </Button>
             </>

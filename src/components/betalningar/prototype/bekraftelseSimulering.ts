@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
-import type { OppenBetalning } from '@/domain/schemas';
+import type { Jobbstatus, OppenBetalning } from '@/domain/schemas';
 import { normaliseraBeloppKlient, summeraKronorKlient, visaKronor } from '../belopp-inmatning';
 import type { Betalsatt } from '../betalsatt-minne';
 import { lasSenasteBetalsatt } from '../betalsatt-minne';
@@ -69,7 +69,18 @@ export type BekraftelseRad = {
   ejGenomforbar: Beloppsgenvag | null;
   /** Simuleringens utfall, satt efter "Registrera N". */
   utfall: RadUtfall | null;
+  /** Låtsas-id för den registrerade inbetalningen (varv 13); `null` tills raden registrerats. */
+  inbetalningId: string | null;
+  /**
+   * Kvittots läge efter registreringen — inkorgens `kvittolage`-tillstånd:
+   * `ingen` (inget kryss), `vantar` (i kön, "Skicka N kvitton" väntar),
+   * `koad`/`skickas`/`skickat`/`fel` (utskicksjobbets radstatus).
+   */
+  kvitto: Kvittoläge;
+  kvittonummer: string | null;
 };
+
+export type Kvittoläge = 'ingen' | 'vantar' | 'koad' | 'skickas' | 'skickat' | 'fel';
 
 export type Fas = 'redigera' | 'registrerar' | 'klart';
 
@@ -155,10 +166,15 @@ export function radbelopp(rad: BekraftelseRad): number | null {
   return tal !== null && tal > 0 ? tal : null;
 }
 
-/** Kan raden registreras nu? (Markerad, giltigt belopp, inget utfall än.) */
+/**
+ * Kan raden registreras nu? Markerad, giltigt belopp, och inte redan
+ * registrerad — en rad vars registrering FALLERADE är omkörbar (inkorgens
+ * "försök igen" är att registrera igen).
+ */
 export function arRegistrerbar(rad: BekraftelseRad): boolean {
   if (!rad.markerad) return false;
-  return rad.utfall === null && radbelopp(rad) !== null;
+  if (rad.utfall?.klass === 'registrerad') return false;
+  return radbelopp(rad) !== null;
 }
 
 /**
@@ -270,11 +286,21 @@ function byggRader(oppna: readonly OppenBetalning[], idag: string, betalsatt: Be
       notering: '',
       ejGenomforbar: null,
       utfall: null,
+      inbetalningId: null,
+      kvitto: 'ingen',
+      kvittonummer: null,
     };
   });
 }
 
 const FEL_TEXT = 'Beloppet kunde inte sparas. Försök igen.';
+
+/** Ett låtsas-uuid för prototypens registrerade inbetalningar och jobb. */
+function latsasUuid(): string {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `00000000-0000-4000-8000-${String(Date.now()).slice(-12).padStart(12, '0')}`;
+}
 
 function prefersReducedMotion(): boolean {
   try {
@@ -311,8 +337,18 @@ export type BekraftelsestegModell = {
   /** Markera/avmarkera en rad (varv 5). */
   sattRadMarkerad: (nyckel: string, markerad: boolean) => void;
   sattRadNotering: (nyckel: string, notering: string) => void;
-  /** Kör den simulerade registreringen, en rad i taget (beslut 4). */
-  registrera: () => void;
+  /**
+   * Kör den simulerade registreringen, en rad i taget (beslut 4). `skickaNu`
+   * = "Registrera och skicka": kvittona köas direkt till utskicksjobbet,
+   * exakt som inkorgens `vidRegistrerad` gör vid `resultat.skickaNu`.
+   */
+  registrera: (skickaNu: boolean) => void;
+  /** Köar alla väntande kvitton till utskicksjobbet ("Skicka N kvitton"). */
+  skickaKvitton: () => void;
+  /** Ångra en registrering — raden går tillbaka till listan (inkorgens Ångra). */
+  angra: (nyckel: string) => void;
+  /** Utskicksjobbet i `Jobbstatus`-form, så inkorgens `jobbDelutfall` kan läsa det. */
+  jobbstatus: Jobbstatus | undefined;
   /** Återställ till redigeringsläget (ny körning). */
   aterstall: () => void;
 };
@@ -415,37 +451,139 @@ export function useBekraftelsesteg(
     );
   }, []);
 
-  const registrera = useCallback(() => {
-    // Ögonblicksbild av vilka rader som körs, tagen FÖRE loopen ur den
-    // synkront speglade refen — så loopen inte påverkas av utfalls-
-    // uppdateringarna under vägen, och ingen sidoeffekt bor i en state-updater.
-    const attKora = raderRef.current.filter(arRegistrerbar).map((r) => r.nyckel);
-    if (attKora.length === 0) return;
-    setFas('registrerar');
+  // ═══ UTSKICKSJOBBET (varv 13) — simulerar kvittojobbet rad för rad ═══
+  // Köade rader går `koad` → `skickas` → `skickat` med löpnummer i husets form
+  // (`MM-2026-1001`, se `tests/api/kvitto-visa-skicka-igen.test.ts`). Inget
+  // simulerat utskicksfel: Marcus berättelse bär ett registreringsfel
+  // (Gunnar), inte ett kvittofel — ett påhittat andra fel hade varit brus.
+  const lopnummerRef = useRef(1000);
+  // Gunnar fallerar FÖRSTA gången, lyckas vid omkörning — så "Registrera 1
+  // betalning" efter felet går att pröva som i den skarpa ytan.
+  const felUtlostRef = useRef(false);
+  const jobbIdRef = useRef<string | null>(null);
+  const korJobb = useCallback(() => {
+    const koade = raderRef.current.filter((r) => r.kvitto === 'koad').map((r) => r.nyckel);
+    if (koade.length === 0) return;
+    if (jobbIdRef.current === null) jobbIdRef.current = latsasUuid();
     const reducerad = prefersReducedMotion();
     void (async () => {
-      for (const nyckel of attKora) {
-        // Reducerad rörelse: hoppa fördröjningen men BEHÅLL sekvensen (beslut 4).
-        if (!reducerad) await delay(350);
-        setRader((tidigare) =>
-          tidigare.map((rad) => {
-            if (rad.nyckel !== nyckel) return rad;
-            const utfall: RadUtfall =
-              nyckel === FIXTUR_FEL_ID
-                ? { klass: 'fel', text: FEL_TEXT }
-                : {
-                    klass: 'registrerad',
-                    text: rad.medKvitto ? 'Registrerad · kvitto väntar' : 'Registrerad',
-                  };
-            return { ...rad, utfall };
-          }),
+      for (const nyckel of koade) {
+        setRader((t) => t.map((r) => (r.nyckel === nyckel ? { ...r, kvitto: 'skickas' } : r)));
+        if (!reducerad) await delay(450);
+        lopnummerRef.current += 1;
+        const nummer = `MM-2026-${lopnummerRef.current}`;
+        setRader((t) =>
+          t.map((r) =>
+            r.nyckel === nyckel ? { ...r, kvitto: 'skickat', kvittonummer: nummer } : r,
+          ),
         );
       }
-      setFas('klart');
     })();
   }, []);
 
+  const registrera = useCallback(
+    (skickaNu: boolean) => {
+      const attKora = raderRef.current.filter(arRegistrerbar).map((r) => r.nyckel);
+      if (attKora.length === 0) return;
+      setFas('registrerar');
+      const reducerad = prefersReducedMotion();
+      void (async () => {
+        for (const nyckel of attKora) {
+          if (!reducerad) await delay(350);
+          // Beslutet om fel tas UTANFÖR state-uppdateraren: React (StrictMode)
+          // kör uppdaterare två gånger i dev, och en sidoeffekt där inne lät
+          // Gunnar passera på andra varvet (mätt: han registrerades).
+          const skaFalla = nyckel === FIXTUR_FEL_ID && !felUtlostRef.current;
+          if (skaFalla) felUtlostRef.current = true;
+          setRader((tidigare) =>
+            tidigare.map((rad) => {
+              if (rad.nyckel !== nyckel) return rad;
+              if (skaFalla) return { ...rad, utfall: { klass: 'fel', text: FEL_TEXT } };
+              const kvitto: Kvittoläge = rad.medKvitto ? (skickaNu ? 'koad' : 'vantar') : 'ingen';
+              return {
+                ...rad,
+                utfall: {
+                  klass: 'registrerad',
+                  text: rad.medKvitto ? 'Registrerad · kvitto väntar' : 'Registrerad',
+                },
+                inbetalningId: latsasUuid(),
+                kvitto,
+              };
+            }),
+          );
+        }
+        setFas('klart');
+        // Nästa tick: refen speglar state först efter renderingen, annars
+        // missar jobbet den sist registrerade raden (mätt: Johan blev kvar
+        // som "köat").
+        if (skickaNu) window.setTimeout(korJobb, 0);
+      })();
+    },
+    [korJobb],
+  );
+
+  const skickaKvitton = useCallback(() => {
+    setRader((t) => t.map((r) => (r.kvitto === 'vantar' ? { ...r, kvitto: 'koad' } : r)));
+    // Kön läses ur refen i nästa tick, efter att state landat.
+    window.setTimeout(korJobb, 0);
+  }, [korJobb]);
+
+  const angra = useCallback((nyckel: string) => {
+    setRader((t) =>
+      t.map((r) =>
+        r.nyckel === nyckel
+          ? { ...r, utfall: null, inbetalningId: null, kvitto: 'ingen', kvittonummer: null }
+          : r,
+      ),
+    );
+  }, []);
+
+  const jobbstatus = useMemo<Jobbstatus | undefined>(() => {
+    const jobbId = jobbIdRef.current;
+    const iJobb = rader.filter((r) => r.kvitto !== 'ingen' && r.kvitto !== 'vantar');
+    if (jobbId === null || iJobb.length === 0) return undefined;
+    const nu = new Date().toISOString();
+    const jobbrader: Jobbstatus['rader'] = iJobb.map((r) => ({
+      id: `${jobbId}-${r.nyckel}`,
+      jobbId,
+      jobbtyp: 'kvitto',
+      objektId: r.inbetalningId ?? r.nyckel,
+      status:
+        r.kvitto === 'skickat'
+          ? 'skickat'
+          : r.kvitto === 'skickas'
+            ? 'pagar'
+            : r.kvitto === 'fel'
+              ? 'fel'
+              : 'vantar',
+      skal: null,
+      forsok: r.kvitto === 'koad' ? 0 : 1,
+      skapadNar: nu,
+      paborjadNar: r.kvitto === 'koad' ? null : nu,
+      avslutadNar: r.kvitto === 'skickat' || r.kvitto === 'fel' ? nu : null,
+      uppdateradNar: nu,
+      kvittonummer: r.kvittonummer,
+    }));
+    const skickade = jobbrader.filter((j) => j.status === 'skickat').length;
+    const fel = jobbrader.filter((j) => j.status === 'fel').length;
+    const kvar = jobbrader.length - skickade - fel;
+    return {
+      jobb: {
+        id: jobbId,
+        jobbtyp: 'kvitto',
+        status: kvar > 0 ? 'oppet' : 'avslutat',
+        skapadAv: 'prototyp',
+        skapadNar: nu,
+        avslutadNar: kvar > 0 ? null : nu,
+      },
+      rader: jobbrader,
+      sammanfattning: { totalt: jobbrader.length, skickade, fel, kvar },
+    };
+  }, [rader]);
+
   const aterstall = useCallback(() => {
+    jobbIdRef.current = null;
+    felUtlostRef.current = false;
     setRader(byggRader(oppna, idag, batchBetalsatt));
     setFas('redigera');
     setAktivGenvag('forslag');
@@ -470,6 +608,9 @@ export function useBekraftelsesteg(
     sattRadMarkerad,
     sattRadNotering,
     registrera,
+    skickaKvitton,
+    angra,
+    jobbstatus,
     aterstall,
   };
 }

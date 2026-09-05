@@ -161,7 +161,7 @@ function Sammanstallning({ modell }: { modell: BekraftelsestegModell }) {
           <div className="flex flex-col gap-2 border-border border-t pt-3">
             <Button
               isDisabled={summering.antal === 0}
-              onPress={modell.registrera}
+              onPress={() => modell.registrera(false)}
               className="w-full"
             >
               {`Registrera ${summering.antal}`}
@@ -170,7 +170,7 @@ function Sammanstallning({ modell }: { modell: BekraftelsestegModell }) {
               intent="secondary"
               emphasis="outline"
               isDisabled={summering.antal === 0}
-              onPress={modell.registrera}
+              onPress={() => modell.registrera(false)}
               className="w-full"
             >
               Registrera och skicka
@@ -242,7 +242,7 @@ function BottenArk({ modell }: { modell: BekraftelsestegModell }) {
           <Button
             className="ml-auto"
             isDisabled={summering.antal === 0}
-            onPress={modell.registrera}
+            onPress={() => modell.registrera(false)}
           >
             {`Registrera ${summering.antal}`}
           </Button>
