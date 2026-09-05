@@ -71,8 +71,10 @@ import { KvittoKryss, RadMarken } from './radfalt';
  *     (`BetalningsInkorg.tsx` § "Registrerat nu"), klass för klass:
  *     guldtonat medan något pågår, neutralt när allt vilar; rad = namn ·
  *     "betalsätt · kvittoläge" · belopp · åtgärd (Förhandsgranska / Skicka
- *     igen / Ångra); under listan "Skicka N kvitton" + "Förhandsgranska" med
- *     räknarchip, och statusraden "Skickar kvitton, 3 av 9 klara" →
+ *     igen / Ångra); under listan "Skicka N kvitton" + "Förhandsgranska"
+ *     (utan räknarchip sedan varv 18 — Marcus: *"Ta bort chipset helt. Vi
+ *     låter det bara stå Förhandsgranska"*; antalet bärs av aria-label),
+ *     och statusraden "Skickar kvitton, 3 av 9 klara" →
  *     "9 kvitton skickade" ur inkorgens EGEN `jobbDelutfall`.
  *   • "Registrera och skicka N kvitton" gör samma registrering och köar
  *     kvittona direkt (inkorgens `vidRegistrerad` vid `skickaNu`), så
@@ -195,30 +197,6 @@ function kortKlass(vald: boolean): string {
       ? 'border-(--mm-success) bg-(--mm-success-bg) contrast-more:border-(--mm-success)'
       : 'border-transparent bg-surface contrast-more:border-border-strong'
   }`;
-}
-
-/**
- * "Förhandsgranska" + räknarchip — inkorgens `ForhandsgranskaEtikett`
- * (`TASK-393`) med det explicita blanksteget, men chippet är HUSETS
- * räknarchip (Hem-vyns `ForfallnaBetalningar` och segmentvyn: `rounded-md
- * bg-bg-emphasized px-1.5 py-0.5 font-semibold … tabular-nums`, ingen kant),
- * inte den upphöjda accent-pillen (varv 16–17, Marcus: *"inte upphöjt
- * längre"* → *"ett chips som vi har i huset. Ingen kontur."*). `min-w-6`
- * behåller TASK-393:s bredd-reservation för två siffror. Inkorgen byter till
- * samma form vid promoveringen.
- */
-function ForhandsgranskaEtikett({ antal }: { antal: number }) {
-  return (
-    <>
-      {'Förhandsgranska '}
-      <span
-        aria-hidden="true"
-        className="inline-flex min-w-6 justify-center rounded-md bg-bg-emphasized px-1.5 py-0.5 font-semibold text-small text-text tabular-nums"
-      >
-        {antal}
-      </span>
-    </>
-  );
 }
 
 export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
@@ -654,7 +632,7 @@ function RegistreratNu({
               <InertForhandsgranska
                 ariaLabel={`Förhandsgranska ${vantande.length} ${vantande.length === 1 ? 'kvitto' : 'kvitton'}`}
               >
-                <ForhandsgranskaEtikett antal={vantande.length} />
+                Förhandsgranska
               </InertForhandsgranska>
             </div>
           )}
