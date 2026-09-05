@@ -117,20 +117,32 @@ i `bankimport-parser.ts` använder fortfarande "bankrapport" om FORMATET; det ä
 kod-intern prosa, inte UI-text.
 
 **Bekräftelsesteget (inbetalningar)** — den fokuserade yta där Lotta granskar
-och bekräftar FLERA inbetalningar på en gång innan de registreras: en rad per
-anmälan med namn, event, saknas, belopp, betalsätt och datum; bulkval överst
-(beloppsgenvägarna "Anmälningsavgift", "Allt som saknas", "Annat belopp",
-samt betalsätt och datum) som sätter alla rader, med sanningen per rad synlig
-och skrivbar; en knapp "Registrera N"; utfall per rad i samma yta, följt av
-"Förhandsgranska N" och "Skicka N kvitton" ur inkorgens kö. Egen yta under
-betalningssidan med full bredd, inte en panel i inkorgen (grillad samsyn
-S121 beslut 1 och 4, 2026-09-04). Fylls av tre *Matare*. Beloppsgenvägarna
-sätter ett BELOPP, aldrig ett fack (ADR-128 beslut 2). Radformuläret för EN
-betalning på plats i inkorgen är orört och är inte ett bekräftelsesteg.
+och bekräftar FLERA inbetalningar på en gång innan de registreras. Sidans
+rubrik är **Bulkregistrering**. Formen är facit-låst (S121 konvergens variant
+C, Marcus *"Lås som facit."* 2026-09-05): inkorgens lista med de markerade
+raderna grupperade per event, där kortet är kryssrutan och bär sitt belopp
+platt på ytan — ett tryck på beloppet öppnar inkorgens formulär i kortet med
+Klar/Avbryt; rader utan belopp samlas under "Behöver din hand" med skäl och
+radens egna förslag; under listan avstämning per beloppsklass, summaraden
+"N inbetalningar" och två knappar, "Registrera N inbetalningar" och
+"Registrera och skicka N kvitton". Registreringen är ETT steg (sidan står
+stilla med räkningen "k av N registrerade …", resultatet ritas en gång) och
+efterläget är inkorgens "Registrerat nu"-block på listans plats, med fallerad
+rad kvar i listan och knappen "Försök igen". Egen yta under betalningssidan
+med full bredd, inte en panel i inkorgen (grillad samsyn S121 beslut 1 och 4,
+2026-09-04). Fylls av tre *Matare*. Bulkvalen överst ur beslut 2 och 3
+(beloppsgenvägar, batch-betalsätt/datum) revs i konvergensen (varv 12):
+beloppet bor på raden. Beloppet sätter ett BELOPP, aldrig ett fack (ADR-128
+beslut 2). Radformuläret för EN betalning på plats i inkorgen är orört och är
+inte ett bekräftelsesteg.
 *Undvik:* registreringsvyn, registreringssidan (Marcus arbetsnamn i
 S121-ingången, ersatta), bekräftelselistan (importens gamla namn på sitt
-sista steg, som flyttar in hit), batchvyn, massregistrering.
-*I koden:* planerad; namnet sätts i PRD:n.
+sista steg, som flyttar in hit), batchvyn, massregistrering, bulkval (rivet).
+*I koden:* prototypad som variant C på betalningssidans undersida
+"registrera" (draft-PR #2325; facit-manifestet i
+`tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/`); promoveras
+enligt PRD TASK-402 (skivan för promoveringen), varianterna A/B och växlaren
+rivs efter Marcus stämpel.
 
 **Matare** — en ingång som fyller *Bekräftelsesteget* med rader: (1)
 markera-läget i inkorgen, över alla event; (2) *Kontoutdraget*, där
