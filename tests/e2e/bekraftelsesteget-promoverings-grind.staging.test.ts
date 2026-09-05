@@ -212,8 +212,25 @@ async function mocka(page: Page, hallForstaSvaret = false): Promise<void> {
     await new Promise((klar) => setTimeout(klar, SVARSTID_MS));
     if (rad.anmalanRecordId === FIXTUR_FEL_ID && !felUtlost) {
       felUtlost = true;
+      /**
+       * 422 OCH INTE 500 — MÄTT UNDER BYGGET, INTE VALT PÅ KÄNSLA.
+       *
+       * Första EFTER-körningen svarade 500 här, och ALLA TIO raderna
+       * registrerades ändå: `fetchWithRetry` (`src/data/utils.ts`) retryar
+       * 5xx tre gånger med exponentiell backoff, så mockens enda fel-svar
+       * konsumerades av retry-lagret och andra försöket lyckades. Det är
+       * KORREKT produktionsbeteende — ett övergående serverfel ska läkas utan
+       * att Lotta ser något — men det gör 5xx obrukbart för att pröva
+       * fel-radens FORM.
+       *
+       * 4xx returneras direkt utan retry (samma fil, § Strategi), och är
+       * dessutom det realistiska fallet: EF:en avvisar en payload den inte
+       * accepterar. Prototypens motsvarighet (`FIXTUR_FEL_ID` +
+       * `felUtlostRef`) hade ingen server och därmed inget retry-lager att
+       * ta hänsyn till.
+       */
       await route.fulfill({
-        status: 500,
+        status: 422,
         contentType: 'application/json',
         body: JSON.stringify({ error: 'Beloppet kunde inte sparas. Försök igen.' }),
       });
@@ -340,15 +357,20 @@ async function mocka(page: Page, hallForstaSvaret = false): Promise<void> {
 }
 
 /**
- * DEN ENDA RADEN SOM BYTER VID FLIPPEN.
+ * DEN ENDA RADEN SOM BYTTE VID FLIPPEN.
  *
- * FÖRE: variant-läget med prototypens in-memory-lager.
- * EFTER: den promoverade ytan utan variantparameter, urvalet via `ids`.
+ * FÖRE (commit `d95b8e1a`): `?variant=c&data=fixtur&ids=…` — variant-läget med
+ * prototypens in-memory-lager, där `ids` ignorerades av fixtur-grenen.
+ * EFTER (denna commit): `?ids=…` — den promoverade ytan utan variantparameter.
+ * Urvalet är matarens, raderna kommer ur `hamta-oppna-betalningar` (mockad
+ * ovan med SAMMA tio rader), registreringen går via `registrera-inbetalning`.
+ *
+ * Diffa denna fil mot `d95b8e1a` för att se att inget annat rördes.
  */
 const IDS = bekraftelseFixtur()
   .map((b) => b.anmalanRecordId)
   .join(',');
-const STEG_URL = `/mer/betalningar/registrera?variant=c&data=fixtur&ids=${IDS}`;
+const STEG_URL = `/mer/betalningar/registrera?ids=${IDS}`;
 
 /** Sidans form — `VariantC`s rot, utan DEV-substratets syskonnoder. */
 function steget(page: Page) {

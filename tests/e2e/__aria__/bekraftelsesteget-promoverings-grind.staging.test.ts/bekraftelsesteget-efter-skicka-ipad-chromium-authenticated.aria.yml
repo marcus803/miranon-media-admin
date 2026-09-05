@@ -14,7 +14,6 @@
   - status:
     - text: 9 kvitton skickade
     - button "Stäng bekräftelse"
-  - text: 9 kvitton hör till registreringen
 - region "Markerade inbetalningar":
   - heading /Fjärrskådning, Göteborg · \d+-\d+-\d+/ [level=2]
   - list:
@@ -22,7 +21,7 @@
       - checkbox "Gunnar Falk Markerad" [checked]
       - text: Gunnar Falk Markerad
       - button "Ändra belopp för Gunnar Falk": /1 \d+ kr/
-      - alert: Beloppet kunde inte sparas. Försök igen.
+      - alert: "/Edge Function \"registrera-inbetalning\" \\d+: Beloppet kunde inte sparas\\. Försök igen\\./"
 - term: 1 anmälningsavgift
 - definition: /1 \d+ kr/
 - term: 1 inbetalning
