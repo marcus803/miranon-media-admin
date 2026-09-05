@@ -1,0 +1,101 @@
+---
+id: TASK-402
+title: 'PRD: Bekräftelsesteget för inbetalningar — en bekräftelseyta, tre matare'
+status: To Do
+assignee: []
+created_date: '2026-09-05 18:59'
+labels: []
+dependencies: []
+ordinal: 696000
+---
+
+## Description
+
+<!-- SECTION:DESCRIPTION:BEGIN -->
+### Problemformulering
+Lotta registrerar inbetalningar i betalningsinkorgen en i taget: öppna raden, fylla beloppet, välja betalsätt, trycka Registrera, nästa rad. En lördagsmorgon med tio Swish-rader på kontoutdraget är tio omgångar av samma fem handlingar, och överblicken över vad som faktiskt bokförts kommer först efteråt. Kontoutdrags-importen kan matcha raderna åt henne men slutar i en egen bekräftelselista med en annan form än inkorgen, och Åtgärds-sidan registrerar en person i taget i sin panel. Tre vägar in, tre former, ingen av dem byggd för "flera på en gång". Marcus formulerade målet i grillningen (S121 Del 2, 2026-09-04): en yta där Lotta bekräftar flera inbetalningar samtidigt, matad från de tre ställen hon redan står på.
+
+### Lösning
+En bekräftelseyta, tre matare. **Bekräftelsesteget** är en egen fokuserad sida under betalningssidan ("Bulkregistrering"): inkorgens lista med de markerade raderna, grupperade per event, där varje kort är en kryssruta (grönt = markerat) och bär sitt belopp platt på ytan; ett tryck på beloppet öppnar inkorgens formulär i kortet (belopp, utfallsruta, betalsätt, datum, notering, kvitto-kryss) med Klar/Avbryt. Rader utan belopp samlas under "Behöver din hand" med skälet och radens egna förslag. Under listan en avstämning per beloppsklass, summaraden "N inbetalningar", och två helbreddsknappar: "Registrera N inbetalningar" och "Registrera och skicka N kvitton". Registreringen är ETT steg: listan står stilla och dimmad medan raderna registreras en i taget, knappen bär spinnern och tipsraden räkningen "3 av 10 registrerade …"; när allt är klart ritas resultatet en gång — inkorgens "Registrerat nu"-block på listans plats, statusraden "9 inbetalningar registrerade, 1 kunde inte registreras", raden som fallerade kvar i listan med sitt fel och knappen "Försök igen". Kvittona går samma väg som i inkorgen: väntar, "Skicka N kvitton" och "Förhandsgranska", eller köas direkt av "Registrera och skicka"; Ångra öppnar en dialog. Tre matare fyller steget: **markera-läget i inkorgen** (eventdetaljens form: Markera, kryss per öppen rad över alla event, "Registrera N"), **kontoutdraget** (importens sista steg flyttar in i steget med sina radtillstånd) och **Åtgärds-sidans markerade personer** ("Registrera inbetalning för N markerade"). Formen är prototypad och facit-låst av Marcus 2026-09-05 (variant C efter nitton konvergensvarv); den promoveras, den byggs inte om.
+
+### Användarberättelser
+1. Som Lotta vill jag markera flera öppna betalningar i inkorgen och trycka "Registrera N", så att jag bekräftar en hel morgons inbetalningar i ett svep i stället för en i taget.
+2. Som Lotta vill jag att markera-läget i inkorgen ser ut och beter sig som markera-läget på eventsidan (Markera, kryss på raderna, "Markera alla synliga", "Rensa", Esc avbryter), så att jag inte behöver lära mig en ny grammatik.
+3. Som Lotta vill jag att min markering finns kvar när jag söker eller filtrerar i inkorgen, och att räknaren "N markerade" syns även när de markerade raderna är bortfiltrerade, så att jag kan plocka rader från flera event utan att tappa dem.
+4. Som Lotta vill jag att ett tryck på en rad i markera-läget bockar raden i stället för att öppna formuläret, så att markeringen går fort.
+5. Som Lotta vill jag att bekräftelsesteget är en egen sida med ingenting annat på skärmen, så att jag kan koncentrera mig på pengarna.
+6. Som Lotta vill jag komma tillbaka till inkorgen med markeringen kvar när jag trycker tillbaka-pilen, så att ett avbrott inte kostar mig omtaget.
+7. Som Lotta vill jag se raderna grupperade per event med samma kort som i inkorgen, så att jag känner igen mig.
+8. Som Lotta vill jag se varje rads föreslagna belopp direkt på kortet (anmälningsavgiften eller resten som saknas), så att jag bara behöver ändra det som avviker.
+9. Som Lotta vill jag kunna öppna inkorgens formulär i kortet och ändra belopp, betalsätt, datum, notering och kvitto för just den raden, så att undantagen får sin hand utan att jag lämnar sidan.
+10. Som Lotta vill jag att en rad som saknar belopp lyfts ut under "Behöver din hand" med skälet och radens egna förslag, så att jag ser exakt vad som väntar på mig innan jag registrerar.
+11. Som Lotta vill jag kunna avmarkera ett kort på sidan och få det att lämna avstämningen, så att en rad jag ångrar inte registreras.
+12. Som Lotta vill jag se en avstämning per beloppsklass och summan "N inbetalningar" innan jag trycker, så att jag kan jämföra med kontoutdraget.
+13. Som Lotta vill jag att sidan står stilla medan registreringen pågår, med en räkning som säger hur långt det kommit, så att jag inte tror att något gått sönder när tio rader bokförs.
+14. Som Lotta vill jag se resultatet en gång när allt är klart, med registrerade rader i inkorgens "Registrerat nu"-block och statusraden som säger hur många som gick och hur många som inte gick, så att jag vet var jag står.
+15. Som Lotta vill jag att en rad som inte kunde registreras står kvar i listan med felet under sig och att knappen då heter "Försök igen", så att ett fel på en rad aldrig stoppar de andra och omkörningen är ett tryck.
+16. Som Lotta vill jag att "Registrera och skicka N kvitton" registrerar och köar kvittona i samma tryck, så att den vanliga morgonen är en knapp.
+17. Som Lotta vill jag kunna registrera först och skicka kvitton sedan, med "Skicka N kvitton" och "Förhandsgranska" under blocket, så att jag kan titta innan kvittona går iväg.
+18. Som Lotta vill jag se kvittots läge per rad ("Kvitto väntar på att skickas", "Kvitto köat", "Kvitto skickas …", "Kvitto skickat · nummer") och jobbets framsteg i en statusrad, så att jag följer utskicket utan att raderna hoppar.
+19. Som Lotta vill jag kunna ångra en registrering via en dialog som säger vem, hur mycket och vad som händer, med "Behåll" som det ofarliga valet, så att jag aldrig raderar av misstag.
+20. Som Lotta vill jag att kontoutdrags-importens sista steg är samma bekräftelsesteg, med raderna märkta säker, osäker med kandidater, omatchad med sökfält och dubblett, så att importen och den manuella vägen känns som en yta.
+21. Som Lotta vill jag att en redan importerad bankrad aldrig bockas i, så att dubblettskyddet på bankreferensen förblir orört.
+22. Som Lotta vill jag kunna trycka "Registrera inbetalning för N markerade" i Åtgärds-sidans betalningsblock och hamna i samma steg med urvalet förvalt, så att eventets deltagare kan bokföras i ett svep.
+23. Som Lotta vill jag att obekräftade anmälningar registreras som vanligt och förblir märkta Obekräftad, så att pengasteget aldrig skickar bekräftelser åt mig.
+24. Som Lotta vill jag att steget fungerar på iPad (820 px) lika väl som på datorn, så att lördagsmorgonen kan bokföras i soffan.
+25. Som Lotta vill jag att Ctrl/⌘+Enter gör "Registrera och skicka" som i radformuläret, så att tangentbordet räcker.
+26. Som Lotta med skärmläsare vill jag höra när registreringen startar och när den är klar, och kunna fråga räkningen när jag vill utan att bli uppläst tio gånger, så att jag följer förloppet på mina villkor.
+27. Som Lotta med skärmläsare vill jag att varje kort är en kryssruta med "Markerad"/"Inte markerad" och att Ångra-knapparna bär personens namn, så att tio lika knappar går att skilja åt.
+28. Som Roger vill jag att varje registrerad rad blir en inbetalning med samma sanning som en enradsregistrering (belopp, betalsätt, datum, härlett fack), så att bokföringen inte vet skillnad på bulk och enskilt.
+29. Som Roger vill jag att kvittonumren tilldelas först när kvittona skickas, i samma serie som i dag, så att verifikationskedjan är orörd.
+30. Som Marcus vill jag att steget använder inkorgens befintliga registrerings- och kvittovägar utan nya serverkontrakt, så att ett fel i steget aldrig kan regrediera enradsregistreringen.
+31. Som Marcus vill jag att inkorgens "Registrerat nu"-block och radformulär är delade komponenter som steget återanvänder, så att en formändring görs en gång och syns på båda ytorna.
+32. Som Marcus vill jag att prod-inkorgens tre formbyten (räknarchippet bort, Ångra som dialog, "Registrera inbetalning") följer med promoveringen, så att inkorgen och steget aldrig säger olika saker.
+33. Som Marcus vill jag granska den promoverade ytan mot facit-bilderna och stämpla godkännandet själv, så att rivningen av prototypens växlar aldrig sker före mitt ja.
+34. Som utvecklare vill jag att prototypens varianter, växlare och simuleringslager rivs mekaniskt efter godkännandet och att facit-grindens markörer städas i samma landning, så att ingen död prototypkod ligger kvar och fäller nästa pass.
+
+### Implementationsbeslut
+- **Facit och promovering.** Facit-manifestet är `tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/facit.json` (ytan `bekraftelsesteget`, fem låsta bilder: utgångsläget, körningen pågår, efter Registrera, Ångra-dialogen, efter Registrera och skicka; `referenser` är en deklarerad tom lista — ariaSnapshot-paret föds i promoveringsskivan). Manifestet slår varje prosabeskrivning, inklusive denna. Promoveringsordningen är ADR-103 B2: variant C:s form blir den ovillkorliga, datavägarna byts från simuleringen till de skarpa, Marcus granskar mot facit-bilderna och stämplar `godkand` via stämplingsskriptet, därefter rivs varianterna A och B, växlaren och simuleringslagret, och de fem prototyp-markörerna i facit-policyn städas i samma landning. Inget rivs före stämpeln.
+- **Routen och matarna.** Steget bor på betalningssidans undersida "registrera" (redan i prototypen: un-nestad från inkorgen, full bredd, ärver betalningsflaggan via route-grenen). Matarna lämnar över raderna som anmälnings-ID:n i sök-parametern `ids`; steget hämtar de öppna betalningarna för dem via inkorgens befintliga läsväg och bygger raderna. Tillbaka-pilen återvänder till mataren.
+- **Markera-läget i inkorgen** ärver eventdetaljens form: knappen "Markera" slår på läget; kryss på varje öppen rad i alla eventgrupper (klara rader har inget kryss); åtgärdsrad med "Registrera N" som primär, "Markera alla synliga" och "Rensa"; Esc avbryter; i läget bockar ett tryck på raden i stället för att öppna radformuläret. Markeringen bevaras över sök och filter tills hon rensar, registrerar eller lämnar betalningsfamiljen; räknaren "N markerade" syns även när markerade rader är bortfiltrerade. Markeringen bor i ett sessionsbundet markeringsminne (samma klass som inkorgens betalsätts-minne) så den överlever hoppet till steget och tillbaka; den rensas vid registrering, Rensa och navigation utanför betalningsfamiljen.
+- **Sidans form** (facit): rubrik "Bulkregistrering"; statusrad (polite) med räknaren "N av M inbetalningar markerade" före, "Registrerar N inbetalningar …" under, och utfallet efter; listan grupperad per event i inkorgens kort där kortet är kryssrutan (grönt = markerat) och beloppet står platt med chevron som öppnar inkorgens formulär i kortet med Klar/Avbryt (Avbryt återställer radens värden); "Behöver din hand" för rader utan belopp, med skäl och radens förslagsknappar; avstämning per beloppsklass, summaraden "N inbetalningar", tipsraden "Jämför med kontoutdraget innan du registrerar."; knapparna "Registrera N inbetalningar" (primär) och "Registrera och skicka N kvitton" (sekundär, även Ctrl/⌘+Enter). Ordvalet är "inbetalningar" på hela sidan.
+- **Körningen är ett steg.** Raderna registreras sekventiellt med inkorgens befintliga registreringsväg, en post per rad, samma kontrakt och samma idempotensregler som enradsregistreringen; inget nytt batch-kontrakt (avvägning: N anrop om cirka en halv sekund ligger inom spinner-fönstret för en morgons volym; ett batch-kontrakt är en senare optimering om mätning kräver det). Under körningen bär en ögonblicksbild av raderna listan (dimmad, upptagen, korten tar inga tryck), knappen bär spinnern med skärmläsarbesked, tipsraden bär räkningen "k av N registrerade …" som förloppsindikator som kan frågas men inte annonseras per steg, och summan räknas ur ögonblicksbilden. Resultatet ritas en gång när alla anrop svarat. En rad vars anrop fallerar stannar i listan, markerad, med felet under kortets huvud; primärknappen heter då "Försök igen" ("Försök igen med N inbetalningar" vid flera) och kör bara de rader som fallerat.
+- **Efterläget** är inkorgens "Registrerat nu"-block, bruten ut till en delad komponent som både inkorgen och steget renderar: guldton medan något pågår, neutral i vila; rad = namn · "betalsätt · kvittoläge" · belopp · åtgärder (Förhandsgranska per rad när kvittot väntar, Skicka igen vid fel, Ångra när det går), åtgärdskolumnen med fast höjd så raderna aldrig byter höjd under utskicket, ingen makuleringstext per rad; under raderna "Skicka N kvitton" och "Förhandsgranska" (utan räknarchip, antalet i det tillgängliga namnet) och statusraden ur inkorgens jobbhärledning. "Registrera och skicka" köar kvittona direkt via inkorgens befintliga köväg. Ångra öppnar husets dialog (md-bredd, kortens hörnradie, rubrik "Ångra registreringen?", kropp "Namn · belopp · betalsätt" och konsekvensen, knappar "Behåll" och "Ångra registreringen") och raderar inbetalningen via inkorgens befintliga ångra-väg; raden går tillbaka till listan.
+- **Radformuläret i kortet** är inkorgens registreringsformulär i ett delat läge med Klar/Avbryt i stället för Registrera — samma fält i samma ordning, samma utfallsruta, samma fördröjning och autofokus. En komponent, två konsumenter.
+- **Prod-inkorgens tre formbyten** görs i de delade komponenterna, så inkorgen och steget byter samtidigt: Förhandsgranska-knappens räknarchip tas bort (antalet i det tillgängliga namnet), Ångra går via dialogen, etiketten "Registrera betalning" blir "Registrera inbetalning". Räknarchip-primitiven behålls för filterknappen och rörs inte.
+- **Kontoutdraget.** Filläsning och kolumnmappning står kvar i inkorgen under "Importera kontoutdrag"; importens sista steg (bekräftelselistan) flyttar in i steget och rader från importen bär sitt tillstånd som märke på kortet: säker (förbockad, beloppet och datumet från bankraden), osäker med kandidater (under "Behöver din hand" med kandidaterna som förslag), omatchad (under "Behöver din hand" med sökfält för anmälan) och dubblett (visas låst utan kryss, aldrig registrerbar). Dubblettskyddet på bankreferensen och 409-svaret är oförändrade. Dessa tillstånd prövades inte i prototypen och designas i sin skiva inom C:s form; avviker formen från facit bokförs det som amendering i facit-katalogen, aldrig som tyst ändring.
+- **Åtgärds-sidan.** Betalningsblocket får knappen "Registrera inbetalning för N markerade" som öppnar steget med urvalet förvalt; per-person-panelen står kvar för läsning, enstaka registrering och återbetalning.
+- **Obekräftade anmälningar** registreras som vanligt och förblir märkta Obekräftad; bekräftelsen sköts på Åtgärds-sidan. Berättelse 27 (länk in i Åtgärds-flödet med urvalet förvalt) bokförs öppet som obyggd och får en egen skiva senare.
+- **Miljö och flagga.** Steget och markera-läget ligger bakom samma betalningsflagga som inkorgen och når prod med den.
+- **iPad 820** granskas av Marcus i promoveringsskivan innan stämpeln; facit saknar iPad-bild med avsikt.
+- **Ordlista.** Bekräftelsesteget-posten uppdateras till facit (bulkvalen borta), ny post "Bulkregistrering" (sidans rubrik), Matare oförändrad.
+
+### Testbeslut
+Två befintliga skarvar, ingen ny, plus promoveringsgrinden som ADR-103 B4 kräver:
+1. **api-pure** — samma skarv som inkorgens befintliga härlednings-tester: avstämningen per beloppsklass, summeringen, grupperingen per event, "vad kan registreras nu", omkörnings-urvalet (bara fallerade rader) och importradernas tillståndsklassning testas som rena funktioner på indata → utdata. Ett bra test här prövar en rad-uppsättning och läser resultatet, aldrig interna hjälpare.
+2. **Staging-e2e med inloggad session och mockade svarsvägar** — samma skarv och samma skäl som inkorgens utskicksflödes-test (betalningsflaggan är av i den hermetiska fixturvärlden; att slå på den där äger TASK-346.7). Testar externt beteende: markera-läget i inkorgen (markera, filtrera, räknaren, Registrera N), steget med tio rader (sidan står stilla under körningen — mätt som konstant sidhöjd —, räkningen, resultatet ritat en gång, fallerad rad kvar med "Försök igen", omkörning), Ångra-dialogen, kvittokön via "Registrera och skicka", tillbaka-pilen med markeringen kvar, Åtgärds-sidans matare, importens fyra radtillstånd, samt axe-svep utan fel. Förebild: inkorgens utskicksflödes-test och Åtgärds-sidans kvitto-test.
+3. **Promoveringsgrinden** (ADR-103 B4): ariaSnapshot-par per yta — variant-läget FÖRE flippen mot den promoverade ytan EFTER — fäller på varje skillnad; visual-baslinjen tas om på den godkända ytan efter Marcus stämpel; facit-bilderna är regressionsstöd för granskningen.
+Ett staging-skarpbevis avslutar promoveringsskivan: tio rader registrerade via steget mot staging, kvitton köade, inbetalningarna verifierade i Postgres och basens spegel.
+
+### Utanför omfattningen
+Batch-kontrakt på servern. Berättelse 27 (bekräftelseutskick ur pengasteget). Server-härledd kvittokö. Kontoutdrags-parsern och kolumnmappningen. Återbetalningar i bulk. Radformuläret för en enskild betalning i inkorgen (formen orörd, bara etiketten byts). Modal-primitivens hörnradie i hela huset (kandidat, eget kort). Steget som yta för andra betalningsobjekt än öppna anmälningsbetalningar.
+
+### Estimat
+Sju skivor, S–L: markera-läget i inkorgen (M) · promoveringen av steget — flippen, delade komponenter, datakoppling, tillgänglighet, tester, promoveringsgrind, iPad-granskning och staging-skarpbevis (L; delas i form/delning respektive datakoppling om skivan växer) · prod-inkorgens tre formbyten (S, i de delade komponenterna) · kontoutdraget in i steget (M) · Åtgärds-sidans matare (S) · rivningen efter Marcus stämpel (S) · QA-vandring (ready-for-human).
+
+### ADR-koppling
+ADR-128 (inbetalningen är arbetsenheten; beloppet sätter aldrig ett fack — steget sätter belopp, servern härleder) · ADR-129 (jobbmotorn: kvittokön är samma kö) · ADR-102, ADR-103, ADR-104 (facit, promovering, godkännande-stämpling — styr hela leveransordningen) · ADR-074 (prototyp-URL-kontraktet, vinnaren behåller nyckeln c till flippen) · ADR-044 (dialogprimitiven för Ångra) · ADR-112 och ADR-113 (förloppsindikator med två skärmläsarkanaler; knappens laddläge) · ADR-126 (räknarchippet: en konsument mindre, primitiven kvar). Inget beslut i denna PRD når ADR-baren; "en bekräftelseyta, tre matare" prövades mot baren i S121 Del 2 och bor här och i sessionsdoket.
+
+### Ytterligare anteckningar
+Grillningen: sessionsdok S121 Del 2 (åtta beslut med kvittens). Divergensen: Del 3 (tre varianter, Marcus valde C). Konvergensen: Del 4 (nitton varv; bulkvalen ur beslut 2 och 3 revs i varv 12 och PRD:n skrivs på den konvergerade formen). Prototyp-PR:n är draft #2325 på prototypgrenen. Branschgrund för körningen: NN/g Progress indicators, GOV.UK notification banner, husets Förberedelseskärm. Sidofynd att bära: Åtgärds-sidans två noteringsfält per person (skrivväg till anmälans avgift-/slutbetalningsnotering, sparas vid blur, saknar synlig etikett) är en öppen fråga hos Marcus, eget kort.
+<!-- SECTION:DESCRIPTION:END -->
+
+## Definition of Done
+<!-- DOD:BEGIN -->
+- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [ ] #4 Promoveringsgrinden grön: ariaSnapshot-par (variant-läget FÖRE flippen mot den promoverade ytan EFTER) utan skillnad, och visual-baslinjen omtagen på den godkända ytan efter Marcus stämpel (ADR-103 B4)
+- [ ] #5 facit.json för s121-bekraftelsesteget-konvergens stämplad godkand via stämplingsskriptet efter Marcus granskning (desktop och iPad 820); rivningen av varianterna A/B, växlaren och simuleringslagret samt städningen av de fem markörerna i facit-policyn görs i SAMMA landning (ADR-103 B2 steg 4)
+- [ ] #6 Staging-skarpbevis: tio rader registrerade via steget mot staging med kvitton köade, inbetalningarna verifierade i Postgres och basens spegel
+<!-- DOD:END -->
