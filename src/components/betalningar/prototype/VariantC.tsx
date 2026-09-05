@@ -1,6 +1,6 @@
 import { ChevronDown, CircleCheck, Info, type LucideIcon, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
-import { Checkbox } from 'react-aria-components';
+import { Button as AriaButton, Checkbox } from 'react-aria-components';
 import {
   Button,
   Input,
@@ -622,11 +622,17 @@ function MarkerbartKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekrafte
           <KortHuvud rad={rad} vald={vald} />
         </Checkbox>
         {!oppen && (
-          <Button
-            intent="primary"
-            emphasis="outline"
-            size="sm"
-            className="self-start sm:self-auto"
+          /* BELOPPET SOM PILL, INTE SOM KONTURKNAPP (Marcus varv 8: *"lite
+             kaka på kaka med samma kontur på beloppsrutan som på
+             markeringen"*). Husets pillgrammatik — betalsättsväljarens valda
+             pill (`ToggleButtonGroup` § itemVariants: `rounded-full bg-bg
+             font-semibold shadow-sm`) — utan kant: en vit pill på det gröna
+             kortet, en ljusgrå på det vita. Kortets kant förblir markeringens
+             ENDA kontur. */
+          <AriaButton
+            className={`inline-flex min-h-8 select-none items-center gap-1 self-start rounded-full px-3 font-semibold text-small text-text shadow-sm data-[disabled]:cursor-not-allowed data-[hovered]:bg-(--mm-state-hover) data-[disabled]:opacity-50 motion-safe:transition-[background-color] sm:self-auto ${
+              vald ? 'bg-bg' : 'bg-bg-muted'
+            }`}
             isDisabled={!vald}
             aria-expanded={false}
             aria-label={`Ändra belopp för ${rad.inkorg.namn}`}
@@ -636,7 +642,7 @@ function MarkerbartKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekrafte
               {belopp === null ? 'Saknar belopp' : `${visaKronor(belopp)} kr`}
             </span>
             <ChevronDown aria-hidden="true" size={14} className="shrink-0" />
-          </Button>
+          </AriaButton>
         )}
       </div>
       {oppen && vald && (
