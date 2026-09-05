@@ -13,7 +13,7 @@ import {
 } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { VALBARA_BETALSATT } from '@/domain/schemas';
-import { beloppsFel, visaKronor } from '../belopp-inmatning';
+import { beloppsFel, normaliseraBeloppKlient, visaKronor } from '../belopp-inmatning';
 import type { Betalsatt } from '../betalsatt-minne';
 import { type Beloppsutfall, beloppsutfall } from '../inkorg-harledningar';
 import {
@@ -413,25 +413,19 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
 }
 
 /**
- * Kortets huvud — avatar · namn · "kvar att betala" · märkesrad, inkorgens
- * `BetalningsradKort` klass för klass. MÄRKESRADEN RESERVERAR SIN HÖJD
- * (`min-h-[22px]` = `StatusBadge sm`: `py-0.5` + `text-caption`s radhöjd)
- * även när den är tom, så alla kort är exakt lika höga (Marcus varv 6).
+ * Kortets huvud — avatar · namn (· märke), inkorgens `BetalningsradKort` med
+ * EN rad: Marcus varv 7 rev "kvar att betala"-raden och bad om namnet
+ * centrerat mot initialerna. Märket (Förfallen/Obekräftad) står inline efter
+ * namnet i stället för på en egen rad, så alla kort förblir exakt lika höga.
  */
 function KortHuvud({ rad, vald }: { rad: BekraftelseRad; vald: boolean }) {
-  const kvar = rad.inkorg.kvar;
   const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
   return (
     <>
       <InitialAvatar namn={rad.inkorg.namn} />
-      <span className="flex min-w-0 flex-1 flex-col gap-1">
-        <span className="font-medium text-body sm:truncate">{rad.inkorg.namn}</span>
-        <span className="text-caption text-text-muted sm:truncate">
-          {kvar === null ? 'Pris saknas i basen' : `${visaKronor(kvar)} kr kvar att betala`}
-        </span>
-        <span className="flex min-h-[22px] flex-wrap items-center gap-2">
-          {harMarken && <RadMarken rad={rad} />}
-        </span>
+      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+        <span className="font-medium text-body">{rad.inkorg.namn}</span>
+        {harMarken && <RadMarken rad={rad} />}
         <span className="sr-only">{vald ? 'Markerad' : 'Inte markerad'}</span>
       </span>
     </>
@@ -459,14 +453,37 @@ function RadFormular({
 }) {
   const fel = beloppsFel(rad.belopp);
   const belopp = radbelopp(rad);
-  const utfall = belopp === null ? null : beloppsutfall(rad.inkorg, belopp);
   const felId = useId();
+  const beloppRef = useRef<HTMLInputElement>(null);
+
+  // FÖRDRÖJNINGEN — inkorgens `UTFALL_FORDROJNING_MS`: rutan byts EN sekund
+  // efter att Lotta slutat skriva, eller direkt när hon lämnar fältet. Med
+  // förifyllt värde står den rätt från start utan timeout.
+  const [visatBelopp, setVisatBelopp] = useState(rad.belopp);
+  useEffect(() => {
+    if (visatBelopp === rad.belopp) return;
+    const id = window.setTimeout(() => setVisatBelopp(rad.belopp), 1000);
+    return () => window.clearTimeout(id);
+  }, [rad.belopp, visatBelopp]);
+  const visatTal = normaliseraBeloppKlient(visatBelopp);
+  const utfall = visatTal === null || visatTal <= 0 ? null : beloppsutfall(rad.inkorg, visatTal);
+
+  // Inkorgen fokuserar och markerar beloppet när formuläret öppnas.
+  useEffect(() => {
+    const falt = beloppRef.current;
+    if (!falt) return;
+    falt.focus();
+    falt.select();
+  }, []);
+
   return (
     <div className="flex flex-col gap-3 pt-3">
       <Input
+        ref={beloppRef}
         label="Belopp i kronor"
         value={rad.belopp}
         onChange={(v) => modell.sattRadBelopp(rad.nyckel, v)}
+        onBlur={() => setVisatBelopp(rad.belopp)}
         // Enter i beloppsfältet = Klar (inkorgens submit-på-Enter), aldrig
         // sidans registrering — ett nästlat `<form>` vore ogiltig HTML.
         onKeyDown={(e) => {
@@ -489,7 +506,13 @@ function RadFormular({
         (() => {
           const { intent, Ikon } = UTFALL_FORM[utfall.ton];
           return (
-            <MessageBox intent={intent}>
+            <MessageBox
+              intent={intent}
+              // `border-y border-r` sluter rutan hos konsumenten, som inkorgen
+              // (`RegistreraForm` § EN RIKTIG BOX): primitiven bär bara
+              // vänsterkanten, och de tre kantbredderna tar intent-färgen.
+              className="border-y border-r"
+            >
               <span aria-hidden="true" className="flex items-start gap-2">
                 <Ikon size={18} className="mt-0.5 shrink-0" />
                 <span>{utfall.text}</span>
