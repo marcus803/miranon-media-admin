@@ -15,6 +15,11 @@ import type { OppenBetalning } from '@/domain/schemas';
  * Raderna är litteraler i `OppenBetalning`-form, samma kontrakt som
  * `useOppnaBetalningar` levererar. Ingen läsning ur basen, ingen mutation.
  *
+ * EVENTNAMNEN BÄR ORTEN ("RIM 1, Skövde") — så ser `eventNamn` ut i datat
+ * (inkorgen visar "Fjärrskådning, ZZ-GRANSKNING-S113B · 2026-09-07"), och
+ * rubriken ska läsa exakt som där (Marcus varv 4/5: *"Lotta måste känna
+ * igen sig"*). Utan orten såg gruppens rubrik kortare ut än inkorgens.
+ *
  * ═══════════════════════════════════════════════════════════════════════════
  * BERÄTTELSEN I RADER
  * ═══════════════════════════════════════════════════════════════════════════
@@ -73,7 +78,7 @@ function rad(
 
 const RIM = {
   eventId: 'rec-event-rim1',
-  eventNamn: 'RIM 1',
+  eventNamn: 'RIM 1, Skövde',
   eventStartdatum: '2026-09-20',
   eventTyp: 'Kurs',
   gallandePris: 2500,
@@ -82,7 +87,7 @@ const RIM = {
 
 const FJARR = {
   eventId: 'rec-event-fjarr',
-  eventNamn: 'Fjärrskådning',
+  eventNamn: 'Fjärrskådning, Göteborg',
   eventStartdatum: '2026-09-27',
   eventTyp: 'Kurs',
   gallandePris: 3500,
@@ -91,7 +96,7 @@ const FJARR = {
 
 const PSIO = {
   eventId: 'rec-event-psio',
-  eventNamn: 'Psionautics',
+  eventNamn: 'Psionautics, Stockholm',
   eventStartdatum: '2026-10-25',
   eventTyp: 'Kurs',
   gallandePris: 4500,

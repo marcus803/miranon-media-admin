@@ -53,6 +53,13 @@ export type BekraftelseRad = {
   datum: string;
   medKvitto: boolean;
   /**
+   * Markerad = med i registreringen (konvergens varv 5). Raderna kommer
+   * markerade från inkorgen; ett tryck på kortet avmarkerar, som på
+   * eventdetaljen och Åtgärds-sidan (`MarkerbartKort`). En avmarkerad rad
+   * står kvar i listan, vit, och räknas ingenstans.
+   */
+  markerad: boolean;
+  /**
    * Satt när det SENASTE bulk-beloppsvalet inte gick ihop för raden (avgiften
    * redan betald, eller en föreläsning utan fack). Raden får ingen siffra utan
    * en markering och väntar på hennes hand (beslut 2). Bär vilket val det var.
@@ -146,8 +153,9 @@ export function radbelopp(rad: BekraftelseRad): number | null {
   return tal !== null && tal > 0 ? tal : null;
 }
 
-/** Kan raden registreras nu? (Har ett giltigt belopp och inget utfall än.) */
+/** Kan raden registreras nu? (Markerad, giltigt belopp, inget utfall än.) */
 export function arRegistrerbar(rad: BekraftelseRad): boolean {
+  if (!rad.markerad) return false;
   return rad.utfall === null && radbelopp(rad) !== null;
 }
 
@@ -256,6 +264,7 @@ function byggRader(oppna: readonly OppenBetalning[], idag: string, betalsatt: Be
       betalsatt,
       datum: idag,
       medKvitto: true,
+      markerad: true,
       ejGenomforbar: null,
       utfall: null,
     };
@@ -296,6 +305,8 @@ export type BekraftelsestegModell = {
   sattRadBetalsatt: (nyckel: string, betalsatt: Betalsatt) => void;
   sattRadDatum: (nyckel: string, datum: string) => void;
   sattRadKvitto: (nyckel: string, medKvitto: boolean) => void;
+  /** Markera/avmarkera en rad (varv 5). */
+  sattRadMarkerad: (nyckel: string, markerad: boolean) => void;
   /** Kör den simulerade registreringen, en rad i taget (beslut 4). */
   registrera: () => void;
   /** Återställ till redigeringsläget (ny körning). */
@@ -388,6 +399,12 @@ export function useBekraftelsesteg(
     );
   }, []);
 
+  const sattRadMarkerad = useCallback((nyckel: string, markerad: boolean) => {
+    setRader((tidigare) =>
+      tidigare.map((rad) => (rad.nyckel === nyckel ? { ...rad, markerad } : rad)),
+    );
+  }, []);
+
   const registrera = useCallback(() => {
     // Ögonblicksbild av vilka rader som körs, tagen FÖRE loopen ur den
     // synkront speglade refen — så loopen inte påverkas av utfalls-
@@ -440,6 +457,7 @@ export function useBekraftelsesteg(
     sattRadBetalsatt,
     sattRadDatum,
     sattRadKvitto,
+    sattRadMarkerad,
     registrera,
     aterstall,
   };

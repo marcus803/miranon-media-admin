@@ -1,5 +1,6 @@
 import { ChevronDown } from 'lucide-react';
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
+import { Checkbox } from 'react-aria-components';
 import { Button, MessageBox, Radio, RadioGroup, RaknarChip } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { visaKronor } from '../belopp-inmatning';
@@ -193,14 +194,15 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
   const handId = useId();
   const { rader } = modell;
 
-  const handhogen = rader.filter(saknarBelopp);
-  const klarhogen = rader.filter((r) => !saknarBelopp(r));
+  // MARKERINGEN (varv 5, eventdetaljens/Åtgärders grammatik): raderna kom
+  // markerade från inkorgen; avmarkerade står kvar i listan (vita) men
+  // räknas ingenstans — inte i högarna, inte i bulkvalen, inte i avstämningen.
+  const markerade = rader.filter((r) => r.markerad);
+  const handhogen = markerade.filter(saknarBelopp);
+  const klarhogen = rader.filter((r) => !r.markerad || !saknarBelopp(r));
   const klaraGrupper = useMemo(() => grupperaRader(klarhogen), [klarhogen]);
   const registrerbara = rader.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
-  const antalEvent = new Set(
-    rader.map((r) => r.inkorg.betalning.eventId ?? r.inkorg.betalning.eventNamn ?? 'utan-event'),
-  ).size;
   const vald: BulkNyckel =
     modell.aktivGenvag === 'avgift' || modell.aktivGenvag === 'allt'
       ? modell.aktivGenvag
@@ -208,13 +210,13 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
 
   // Vad varje bulkval ger, räknat på raderna INNAN valet görs.
   const utfallPerVal = useMemo(
-    () => new Map(BULKVAL.map((v) => [v.nyckel, bulkutfall(rader, v.nyckel)] as const)),
-    [rader],
+    () => new Map(BULKVAL.map((v) => [v.nyckel, bulkutfall(markerade, v.nyckel)] as const)),
+    [markerade],
   );
   // Förslagets egen klumpsammanfattning ("6 anmälningsavgifter · 4 slutbetalningar").
   const forslagsklumpar = useMemo(() => {
     const antal = new Map<Beloppsklass, number>();
-    for (const rad of rader) {
+    for (const rad of markerade) {
       const avgift = rad.beloppsknappar.find((k) => k.nyckel === 'avgift');
       const allt = rad.beloppsknappar.find((k) => k.nyckel === 'allt');
       let klass: Beloppsklass = 'saknas';
@@ -226,8 +228,8 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
     return ordning
       .filter((k) => antal.has(k))
       .map((k) => plural(antal.get(k) ?? 0, KLASS_ORD[k].ett, KLASS_ORD[k].flera));
-  }, [rader]);
-  const avstamda = useMemo(() => avstamning(rader), [rader]);
+  }, [markerade]);
+  const avstamda = useMemo(() => avstamning(markerade), [markerade]);
 
   return (
     <form
@@ -247,9 +249,10 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
     >
       <header className="flex flex-col gap-1 px-4">
         <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
-        <p className="text-small text-text-secondary">
-          {plural(rader.length, 'betalning', 'betalningar')} i{' '}
-          {plural(antalEvent, 'event', 'event')}
+        {/* RÄKNAREN FÖRST — Åtgärds-sidans ordval ("7 av 19 deltagare
+            markerade"), live så skärmläsaren hör när ett kort avmarkeras. */}
+        <p role="status" aria-live="polite" className="text-small text-text-secondary">
+          {`${markerade.length} av ${rader.length} betalningar markerade`}
         </p>
       </header>
 
@@ -303,12 +306,12 @@ function RedigeraC({ modell }: { modell: BekraftelsestegModell }) {
           >
             {BULKVAL.map((v) => {
               const u = utfallPerVal.get(v.nyckel) ?? { antal: 0, summa: 0 };
-              const utan = rader.length - u.antal;
+              const utan = markerade.length - u.antal;
               let under: string;
               if (v.nyckel === 'forslag') under = forslagsklumpar.join(' · ');
-              else if (utan === 0) under = `${u.antal} av ${rader.length} rader`;
+              else if (utan === 0) under = `${u.antal} av ${markerade.length} rader`;
               else
-                under = `${u.antal} av ${rader.length} rader · ${plural(utan, 'rad får inget belopp', 'rader får inget belopp')}`;
+                under = `${u.antal} av ${markerade.length} rader · ${plural(utan, 'rad får inget belopp', 'rader får inget belopp')}`;
               return (
                 <Radio
                   key={v.nyckel}
@@ -543,14 +546,19 @@ function HandKort({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelseste
 }
 
 /**
- * En förslagsrad = INKORGENS KORT (`BetalningsradKort`), klass för klass:
- * `li rounded-2xl border p-3`, avatar · namn/meta-kolumn · trailing knapp
- * (`primary`/`outline`/`sm`, `self-start sm:self-auto`), staplad under `sm`.
- * Skillnaden mot inkorgen är EN: knappen bär beloppet i stället för
- * "Registrera betalning" och fäller ut redigeraren i kortet — som inkorgens
- * kort fäller ut sitt formulär. Öppet kort får samma markerade yta
- * (`--mm-betalningskort-markerad-*`). Marcus varv 3: *"tryck på beloppet för
- * att ändra"*; varv 4: *"Lotta måste känna igen sig"*.
+ * En förslagsrad = INKORGENS KORT, och KORTET ÄR KRYSSRUTAN — samma grammatik
+ * som eventdetaljens `MarkerbartKort` och Åtgärds-sidans
+ * `MarkerbartDeltagarKort`: valt kort får `border-(--mm-success)` +
+ * `bg-(--mm-success-bg)`, avmarkerat kort är vitt (inkorgens vilande kort)
+ * och räknas ingenstans. Raderna kom markerade från inkorgen (Marcus varv 5:
+ * *"det måste 'funka' på samma sätt som när Lotta markerar på eventdetaljer
+ * och 'drar med dem' in i åtgärder"*).
+ *
+ * Kryssrutan täcker avatar + namn + meta (ett tryck var som helst där
+ * växlar). Beloppsknappen är ett SYSKON till kryssrutan, inte ett barn: en
+ * knapp inuti en `<label>` är ogiltig HTML och hade växlat markeringen vid
+ * varje belopps-tryck. Kortet (`<li>`) bär den gröna ytan så båda läser som
+ * en enhet.
  */
 function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: BekraftelsestegModell }) {
   const [oppen, setOppen] = useState(false);
@@ -558,36 +566,43 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
   const belopp = radbelopp(rad);
   const kvar = rad.inkorg.kvar;
   const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
+  const vald = rad.markerad;
 
   return (
     <li
       className={`rounded-2xl border p-3 ${
-        oppen
-          ? 'border-(--mm-betalningskort-markerad-border) bg-(--mm-betalningskort-markerad-bg) contrast-more:border-(--mm-betalningskort-markerad-border)'
+        vald
+          ? 'border-(--mm-success) bg-(--mm-success-bg) contrast-more:border-(--mm-success)'
           : 'border-transparent bg-surface contrast-more:border-border-strong'
       }`}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+        <Checkbox
+          isSelected={vald}
+          onChange={(v) => modell.sattRadMarkerad(rad.nyckel, v)}
+          className="flex min-w-0 cursor-pointer items-center gap-3 sm:flex-1"
+        >
           <InitialAvatar namn={rad.inkorg.namn} />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <span className="flex min-w-0 flex-1 flex-col gap-1">
             <span className="font-medium text-body sm:truncate">{rad.inkorg.namn}</span>
             <span className="text-caption text-text-muted sm:truncate">
               {kvar === null ? 'Pris saknas i basen' : `${visaKronor(kvar)} kr kvar att betala`}
             </span>
             <RadSammanfattning rad={rad} />
             {harMarken && (
-              <div className="flex flex-wrap items-center gap-2">
+              <span className="flex flex-wrap items-center gap-2">
                 <RadMarken rad={rad} />
-              </div>
+              </span>
             )}
-          </div>
-        </div>
+            <span className="sr-only">{vald ? 'Markerad' : 'Inte markerad'}</span>
+          </span>
+        </Checkbox>
         <Button
           intent="primary"
           emphasis="outline"
           size="sm"
           className="self-start sm:self-auto"
+          isDisabled={!vald}
           aria-expanded={oppen}
           aria-controls={oppen ? panelId : undefined}
           aria-label={`Ändra belopp för ${rad.inkorg.namn}`}
@@ -603,8 +618,8 @@ function KlarRad({ rad, modell }: { rad: BekraftelseRad; modell: Bekraftelsesteg
           />
         </Button>
       </div>
-      {oppen && (
-        <div className="mt-3 border-border border-t pt-3">
+      {oppen && vald && (
+        <div className="mt-3 border-(--mm-success) border-t pt-3">
           <RadRedigerare id={panelId} rad={rad} modell={modell} visaBelopp />
         </div>
       )}
@@ -674,10 +689,14 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
             Kunde inte registreras
           </SektionsRubrik>
           <ul className="flex flex-col gap-2 rounded-2xl bg-bg-muted p-2">
+            {/* FALLNA KORT BEHÅLLER MARKERINGS-FORMEN (Åtgärds-sidans
+                `UtfallsKort`): grönt betyder VALD, och de fallna är fortfarande
+                valda så en omkörning träffar just dem. De lyckade är avbetade
+                och därför vita. */}
             {misslyckade.map((rad) => (
               <li
                 key={rad.nyckel}
-                className="flex flex-col gap-3 rounded-2xl border border-transparent bg-surface p-3 contrast-more:border-border-strong"
+                className="flex flex-col gap-3 rounded-2xl border border-(--mm-success) bg-(--mm-success-bg) p-3 contrast-more:border-(--mm-success)"
               >
                 <UtfallRad rad={rad} visaEvent />
                 <div className="flex flex-wrap gap-2 pl-12">
@@ -701,9 +720,12 @@ function ResultatC({ modell }: { modell: BekraftelsestegModell }) {
           registreradeGrupper.map((grupp) => (
             <div key={grupp.eventId} className="flex flex-col gap-2 px-4">
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
-              <ul className="-mx-4 flex flex-col divide-y divide-border rounded-2xl bg-bg-muted px-1">
+              <ul className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
                 {grupp.rader.map((rad) => (
-                  <li key={rad.nyckel} className="px-3 py-3">
+                  <li
+                    key={rad.nyckel}
+                    className="rounded-2xl border border-transparent bg-surface p-3 contrast-more:border-border-strong"
+                  >
                     <UtfallRad rad={rad} />
                   </li>
                 ))}
