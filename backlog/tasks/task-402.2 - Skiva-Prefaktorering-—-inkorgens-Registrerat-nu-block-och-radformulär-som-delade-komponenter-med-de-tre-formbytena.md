@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-05 21:31'
+updated_date: '2026-09-05 22:11'
 labels:
   - ready-for-agent
 dependencies: []
@@ -107,4 +107,6 @@ Grindar, alla gröna (se PR-kroppen för fullständig tabell):
 Bokförda fynd (se PR-kroppen för fullständig lista): OmbokningsKvitto.tsx-inkonsekvensen ("Registrera betalning" kvar där trots att den klickar på en trigger som nu heter "Registrera inbetalning"), ingen visuell baslinje för filterraden, Modal-hörnradie-kandidaten.
 
 Ingen ytterligare handoff behövs — skivan är komplett från byggagentens sida. Nästa steg ägs av orkestreraren (review-agent i färsk kontext, sedan armering).
+
+RUNDA 2 2026-09-05 22:11 UTC: fynd 1-3 (review-agentens utlåtande, granskad SHA 71f40c5e) rättade — SHA 0372f854. Fynd 1: facit-skärmdumparna i tasks/sessions/bilagor/task-402.2-facit-jamforelse/ regenererade mot SHA 0372f854 (samma metod: mockade nätverksanrop via page.route, egen lokal dev-server port 5174, staging-semaforen; desktop 1440x900 @2x). RGB vid (1700,460): efter Registrera = rgb(251,243,224) (TON_AKTIV, korrekt guld), efter Registrera och skicka = rgb(245,245,243) (TON_VILA). Ingen avvikelse mot facit, ingen AMENDERING behövs. Fynd 2: stale default-fokus-kommentarer i RegistreratNuBlock.tsx och betalningar-inkorg-utskicksflode.staging.test.ts rättade (dialogen sjalv far fokus, inte Behall) - ingen kodandring, testets assertion var redan korrekt. Fynd 3: OmbokningsKvitto.tsx TillBetalning-knappens text 'Registrera betalning' -> 'Registrera inbetalning' (orkestrerarens beslut), motsvarande assertion i anmalan-ombokning.acceptance.test.ts uppdaterad. Grindar grona: typecheck/biome/build/langa-streck 0; test:api 1 fel (opaverkat, forhandsexisterande, generate-event-attachment.staging.test.ts, annan modul); acceptance-filen 19/19; alla tre e2e-filer 24/24. PR #2360 fortsatt draft.
 <!-- SECTION:NOTES:END -->
