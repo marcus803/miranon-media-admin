@@ -7,6 +7,18 @@ och projektet följer [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed — Fem fynd ur Marcus egen användning, stämplade i webbläsaren (Session 120, 2026-09-04 → 2026-09-05)
+
+- **Mer → Anmälningar-raden leder till anmälans sida** i stället för eventets gamla Anmälda-lista; den gamla ytan är riven (TASK-389, PR #2313)
+- **Segmentsidans tomläge har en yta**: vit platta med streckad ram i stället för tom luft (TASK-392, PR #2308)
+- **"Inget kvar att betala" lyder "Inget att betala"** på de fyra ytor som visar nolläget (TASK-391, PR #2311)
+- **Eventväljaren visar den stora formen överallt**, även på åtgärdssidan, i betalningsinkorgen och i manuell anmälan; pill-formen är riven (TASK-394, PR #2319)
+- **Segmentets detaljvy** efter fem iterationer med Marcus: knappen lyder "Gör ett utskick till det här segmentet", publiklistan har samma kant som sidans kort och en rullningslist som börjar vid första raden, namnlösa medlemmar visas som "Namn saknas" med person-ikon, Form- och Motsvarar-raderna är rivna, regeln visas som chips under avsiktsmeningen, "Räknas ur: Närvaro", ingen pennikon före "Ändra regeln" (TASK-390, PR #2312)
+
+### Removed — Den döda "Koppla till event"-dialogen (Session 120, 2026-09-05)
+
+- `KopplaTillEventDialog.tsx` saknade anropsplatser sedan helrads-resolutionen tog över på Mer → Anmälningar; filen är riven och kommentarerna som pekade på den bär nu historiken i en mening (TASK-400, PR #2345)
+
 ### Fixed — Manuell anmälan visade "(okänt event)" i aktivitetsloggen (Session 113, 2026-09-02)
 
 Marcus prod-observation (Hem-kortets aktivitetsrad): *"Marcus Johansson skapade en anmälan · Marcus Test (okänt event)"*. Rotorsaken satt i `create-registration`-EF:en — den skrev aldrig Anmälans egna `Vill anmäla sig till`, så formeln `Event (namn)` (`{Vill anmäla sig till}`) var alltid tom för en manuell/+1/väntelista-anmälan och `eventNamn` föll till `null` i EF-svaret. Samma tomma formel lästes av läsvägen (`get-registrations`/`get-registration`), så bugg-ytan var bredare än enbart skapelseögonblicket.
