@@ -400,7 +400,10 @@ async function importera(page: Page): Promise<Mockar> {
   // meny (Marcus: "gör Titeln 'Betalningar' till en dropdown") — INTE
   // längre en egen knapp i sidhuvudet, och inte längre en separat ⋯-knapp
   // (den vägen prövades och revs igen samma dag).
-  await page.getByRole('button', { name: 'Betalningar' }).click();
+  // `exact: true` — annars matchar Playwrights default substräng-jämförelse
+  // ÄVEN "Markera betalningar" (radens Markera-knapp, TASK-402.1), en
+  // strict-mode-krock mätt live (8 test föll på precis detta innan fixen).
+  await page.getByRole('button', { name: 'Betalningar', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
   const panel = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
   await expect(panel).toBeVisible();
@@ -664,7 +667,9 @@ test.describe('TASK-412 — importen som dialog', () => {
   }) => {
     await mocka(page);
     await page.goto('/mer/betalningar');
-    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar' });
+    // `exact: true` — se `importera()`s kommentar om samma strict-mode-krock
+    // mot radens "Markera betalningar"-knapp.
+    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar', exact: true });
     await expect(rubrikTrigger).toBeVisible({ timeout: 15_000 });
 
     await rubrikTrigger.click();
