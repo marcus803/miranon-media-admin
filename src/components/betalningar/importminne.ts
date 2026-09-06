@@ -122,6 +122,31 @@ export type Importminne = z.infer<typeof ImportminneSchema>;
 /** Det steget behöver veta om KÄLLAN, utan raderna. */
 export type Importoversikt = Omit<Importminne, 'rader' | 'skapad'>;
 
+/**
+ * [TASK-416.6 fix-runda 2, fynd 1] `Importoversikt` UR ETT MINNE — DELAD, INTE
+ * DUBBLERAD.
+ *
+ * `useBekraftelsesteg.ts`s modell och `Bekraftelsesteget.tsx`s laddläges-
+ * skelett behöver EXAKT samma härledning: `kalla`/`minne` är BÅDA kända
+ * SYNKRONT vid monteringen (`kalla` är en route-prop, `minne` läses via
+ * `lasImport()` i en `useState`-initierare — ingendera väntar på
+ * `hamta-oppna-betalningar`). Skelettet kan alltså visa den RIKTIGA
+ * `Kallrad`-datan i stället för att gissa eller reservera en tom rad, men bara
+ * om härledningen är BYTE-IDENTISK med modellens — annars kan de två glida
+ * isär utan att någon grind ser det. En ren funktion, ett anropsställe per
+ * konsument, är den enda formen som garanterar det.
+ */
+export function importoversiktFranMinne(minne: Importminne | null): Importoversikt | null {
+  if (minne === null) return null;
+  return {
+    filnamn: minne.filnamn,
+    bank: minne.bank,
+    lasta: minne.lasta,
+    bortfiltrerade: minne.bortfiltrerade,
+    fel: minne.fel,
+  };
+}
+
 /* ═══════════════════════════ REGLERNA (RENA) ═══════════════════════════ */
 
 /** De fyra radtillstånden ur kortets AC #2. */

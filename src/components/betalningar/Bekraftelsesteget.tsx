@@ -5,12 +5,16 @@ import { MessageBox } from '@/components/primitives';
 // exporterar bara `SidRam`. Samma importform som den andra konsumenten redan
 // använder (`segment/prototyp/VariantD.tsx`).
 import { SidRamKnapp } from '@/components/primitives/SidRam';
+import { Skeleton } from '@/components/primitives/Skeleton';
 import { useOppnaBetalningar } from '@/data/betalningar/useBetalningar';
 import type { OppenBetalning } from '@/domain/schemas';
 import { idagIso } from './idag';
-import { type Importminne, lasImport } from './importminne';
+import { type Importminne, importoversiktFranMinne, lasImport } from './importminne';
 import { rensaMarkering } from './markerings-minne';
-import { VariantC } from './prototype/VariantC';
+// `Kallrad` — se dess docblock i VariantC.tsx (export tillagd TASK-416.6
+// fix-runda 2, fynd 1): laddläges-skelettet renderar SAMMA komponent, inte
+// en kopia, för importflödets header-rad.
+import { Kallrad, VariantC } from './prototype/VariantC';
 import { useBekraftelsesteg } from './useBekraftelsesteg';
 
 /**
@@ -90,6 +94,203 @@ function efterRegistrering(): void {
   rensaMarkering();
 }
 
+/** Tre rader räcker för att fylla listkortet visuellt (samma tal som
+ *  `AnmalningarSida.tsx`/`EventCheckin.tsx`s skelettlistor) — bara den
+ *  FÖRSTA radens geometri är mätt (AC #3), resten är utfyllnad. */
+const SKELETT_RADER = ['a', 'b', 'c'] as const;
+
+/**
+ * [TASK-416.6, ADR-113 steg 4] LADDLÄGETS SKELETT — sidkromet renderat, den
+ * nakna textraden ersatt med ett skelett i listkroppens SLUTGEOMETRI.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * VARFÖR DENNA FIL DUPLICERAR STRUKTUR UR `VariantC.tsx` I STÄLLET FÖR ATT
+ * ÅTERANVÄNDA DEN
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `VariantC`/`BulkC` är FACIT-LÅST (promoverings-grinden,
+ * `bekraftelsesteget-promoverings-grind.staging.test.ts`, ariaSnapshot
+ * scopad till `data-testid="bekraftelsesteget"` — dess FÖRSTA rad är
+ * `heading "Bulkregistrering"`). Rubriken lever alltså inuti den låsta
+ * ytan och kan inte lyftas ut till ett delat `headerBlock` (AnmalningarSidas
+ * mönster) utan att FLYTTA den ur snapshotens scope, vilket hade fällt
+ * grinden. Vägen är i stället att SPEGLA klasserna hit, oberört av
+ * `BulkC`: samma rot (`flex flex-col gap-6`), samma `<header
+ * className="flex flex-col gap-1 px-4">`, samma `<h1
+ * className="font-semibold text-3xl">Bulkregistrering</h1>` — så att
+ * rubrikens `boundingBox()` blir IDENTISK i ladd- och laddat läge trots att
+ * det är TVÅ olika DOM-noder som råkar rendera på samma plats (AC #3).
+ *
+ * PRD TASK-416s regel, ordagrant: "sidkromet — chevron, h1, sidhuvud,
+ * filter-/sökrad, handlingsrad — renderas i ALLA query-tillstånd; bara
+ * datakroppen växlar mellan skeleton och innehåll." Sidkromet HÄR är
+ * `SidRamKnapp` (renderas redan ovillkorligt av `Bekraftelsesteget`) plus
+ * denna rubrik.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * VARFÖR MELLANRUMMET MELLAN RUBRIK OCH FÖRSTA KORTET MÅSTE STÄMMA EXAKT
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `EfterlagetsBlock` (`RegistreratNuBlock`) renderar `null` när ingenting är
+ * registrerat än — modellens utgångsläge — så `BulkC`s FÖRSTA två
+ * flex-barn under rubriken är i praktiken `header` och sektionen "Markerade
+ * inbetalningar" (`flex flex-col gap-4 px-4`), separerade av rotens EGEN
+ * `gap-6`. Skelettet härmar precis den kedjan (rot → header → sektion →
+ * gruppwrapper → `<ul>` → `<li>`) utan ett extra lager, så avståndet ovanför
+ * första kortet blir detsamma tal av samma skäl — inte en tillfällighet som
+ * håller för just denna fixtur.
+ *
+ * Grupprubriken (`GruppRubrik`, en `<h2 className="font-semibold
+ * text-lg">`) ersätts av ett `Skeleton`-block MED SAMMA `text-lg`-klass:
+ * eventnamnet är okänt före hämtningen, men `text-lg` ensam räcker för att
+ * blockets `1lh`-höjd matcha en riktig rubrikrad (`Skeleton.tsx`s egna
+ * kontrakt — häromkring är det samma idiom `AnmalningarSida.tsx` redan
+ * bevisat, `<Skeleton variant="text" className="w-40 text-small" />` bredvid
+ * en riktig `text-small`-rad).
+ *
+ * KORTETS ANATOMI (`MarkerbartKort`/`KortHuvud`/beloppsknappen i
+ * `VariantC.tsx`) speglas rad för rad: avatar-cirkeln (`size-9
+ * shrink-0 rounded-full`), namnet (en textrad, `text-body`), beloppet
+ * (`text-body`) och chevron-cirkeln. Chevronen är en INERT reserverad yta
+ * utan shimmer — samma idiom som `EventCheckin.tsx`s kryssrute-reservation
+ * (`size-11 shrink-0`, TASK-416.1) — den bär ingen data att vänta på, bara en
+ * plats att inte hoppa till.
+ *
+ * Roselli-kontraktet (`Skeleton.tsx` filhuvud): blocken är `aria-hidden`
+ * (dekorativa), och LISTKROPPENS EGEN container äger `aria-busy` + det
+ * dolda textbeskedet — se `[FIX-RUNDA 3, FYND 2]` nedan för var den
+ * containern faktiskt sitter sedan importflödets `Kallrad`-rad tillkom.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [TASK-416.6 FIX-RUNDA 2, FYND 1] IMPORTFLÖDETS `Kallrad`-RAD ÄR KÄND
+ * SYNKRONT — DEN RENDERAS ALLTSÅ RIKTIG, INTE SOM GISSNING ELLER RESERVATION
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `BulkC`s header bär en TREDJE, villkorad rad utöver rubrik och statusrad:
+ * `{importkalla !== null && <Kallrad kalla={importkalla} />}`. Review-runda 1
+ * fångade att denna fils skelett saknade den — men `importkalla` är INTE
+ * hämtad data. `kalla` är en route-prop och `minne` läses via `lasImport()` i
+ * en `useState`-initierare (`Bekraftelsesteget` nedan) — BÅDA kända på FÖRSTA
+ * bildrutan, oberoende av `hamta-oppna-betalningar`. Skelettet kan alltså
+ * beräkna EXAKT samma `Importoversikt` som modellen kommer att bygga
+ * (`importoversiktFranMinne`, delad ren funktion i `importminne.ts` — se dess
+ * docblock för varför härledningen INTE får dupliceras) och rendera SAMMA
+ * `Kallrad`-komponent (nu exporterad ur `VariantC.tsx`, se den exportens egen
+ * kommentar) — inte en kopia, inte ett skelett-block. DOM:en för denna rad
+ * blir därför byte-identisk ladd-/laddat läge när importen gick att läsa.
+ *
+ * NÄR `minne === null` (importen kunde INTE läsas — trasig `sessionStorage`,
+ * ny flik, delad länk) renderar varken skelettet eller `BulkC` någon
+ * `Kallrad`-rad, och `Bekraftelsesteget`s egen ternär visar då "Importen
+ * kunde inte läsas …" UTAN sidkrom alls när hämtningen avslutas — en
+ * FÖREFINTLIG, egen gren (`TASK-402.4`) som varken denna skiva eller
+ * fix-rundan rör. Den enda kanten det lämnar: hinner `hamta-oppna-
+ * betalningar` fortfarande laddas MEDAN `minne` redan är känt `null`, visar
+ * skelettet ändå rubriken (sidkromet) i väntan, som sedan försvinner
+ * tillsammans med hela headern när "kunde inte läsas"-meddelandet tar över.
+ * Bokfört här som en observerad, oadresserad kant — inte tyst, men utanför
+ * denna fix-rundans scope (ADR-053: värdefullt, blockerar inte).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [TASK-416.6 FIX-RUNDA 3, FYND 2] LIVE-REGIONEN ÄR SNÄVAD TILL DEN DEL SOM
+ * FAKTISKT LADDAR — HEADERN (RUBRIK + `Kallrad`) LIGGER UTANFÖR
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Sedan fix-runda 2 renderar headern `Kallrad`s RIKTIGA, meningsbärande text
+ * (filnamn/bank/radantal, "N rader … togs inte med", per-rad-fel med en
+ * `TriangleAlert`-ikon) — inte längre bara dekorativa `Skeleton`-block.
+ * Review-runda 2 fångade att den rådde INUTI samma `role="status"
+ * aria-live="polite" aria-busy="true"`-container som resten av skelettet:
+ * `aria-atomic` är IMPLICIT `true` på `role="status"` (WAI-ARIA), så det
+ * dolda beskedet "Hämtar öppna betalningar …" och `Kallrad`s upp till tre
+ * textrader hade annonserats som EN enda enhet — och `aria-busy="true"`
+ * säger uttryckligen till hjälpmedel att de FÅR skjuta upp exponeringen av
+ * regionens innehåll, korrekt för Skeleton-block men fel för text som redan
+ * är SLUTGILTIG och aldrig kommer att ändras.
+ *
+ * Roten (`<div className="flex flex-col gap-6">` nedan) bär därför INGEN
+ * ARIA-roll längre. `role="status"`/`aria-live`/`aria-busy` och det dolda
+ * beskedet flyttade till listkroppens EGEN wrapper — den delen som
+ * FAKTISKT laddar (grupprubrik-skelettet + de tre kortplatshållarna).
+ * Rubriken, statusrad-skelettet och `Kallrad` står OVANFÖR, utanför
+ * live-regionen, exakt som `BulkC`s egen laddade header (dess `<p
+ * role="status">` är EN egen, smal region — se `VariantC.tsx`). Ingen
+ * dubbel statusregion uppstår: skelettets region unmountas helt när
+ * `BulkC` monterar sin, de två existerar aldrig samtidigt i DOM:en.
+ *
+ * `boundingBox()`-paritetsmätningen (AC #3) berörs INTE: `sr-only` (Tailwinds
+ * `position: absolute`-utility) deltar aldrig i en flex-förälders layout,
+ * flyttar den mellan flex-syskon ändrar därför ingen `gap`-beräkning eller
+ * någon boundingBox — mätt om efter flytten, samma tal som innan.
+ */
+function BekraftelsestegetSkelett({ minne }: { minne: Importminne | null }) {
+  const importkalla = importoversiktFranMinne(minne);
+  return (
+    <div className="flex flex-col gap-6">
+      <header className="flex flex-col gap-1 px-4">
+        <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
+        <Skeleton variant="text" className="w-48 text-small" />
+        {importkalla !== null && <Kallrad kalla={importkalla} />}
+      </header>
+      <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-4 px-4">
+        <span className="sr-only">Hämtar öppna betalningar …</span>
+        <div className="flex flex-col gap-2">
+          {/* [FIX-RUNDA 2, FYND 2 — KALIBRERING RÄTTAD FIX-RUNDA 3, FYND 1]
+              GRUPPRUBRIKENS SKELETT REDOVISAR TVÅ RADER UNDER `sm` — EN
+              APPROXIMATION AV DET VANLIGASTE UTFALLET, INTE EN GARANTI.
+              `GruppRubrik` (`VariantC.tsx`) bär VARKEN `truncate` eller
+              `whitespace-nowrap` — till skillnad från `KortHuvud`s namnrad —
+              så radantalet styrs av TEXTLÄNGD × tillgänglig bredd, inte av
+              viewporten ensam. Denna rad villkorar ändå på `sm:hidden`
+              (viewport), vilket review-runda 2 fångade som fel variabel:
+              rätt fix (`whitespace-nowrap`/`truncate` på `GruppRubrik`) hade
+              ÄNDRAT den facit-låsta filens rendering och är Marcus
+              designbeslut, inte agentens.
+              MÄTT MOT DET VANLIGASTE FALLET: `<main>`s `max-w-[600px]`
+              kapar bredden ÖVER `sm` (640 px) till samma 536 px oavsett
+              viewport, gott om plats för "Resor i medvetandet 1, Skövde ·
+              2026-09-20" (29 tecken + datum, mätt: 1280 px → EN rad, 61 px
+              header). UNDER 640 px krymper bredden med SJÄLVA viewporten
+              (326 px vid 390) och SAMMA rubrik radbryter till TVÅ (mätt:
+              49,5 px — en enradig platshållare gav 24,75 px för lite och
+              fällde boundingBox-paritetstestet i mobilläget).
+              DEN ÖPPNA KANTEN (bokförd, inte gömd): fixturen bär TVÅ
+              KORTARE gruppnamn i samma fil — "Fjärrskådning, Göteborg"
+              (23 tecken) och "Psionautics, Stockholm" (22) — och
+              produktionens eventnamn är inte längdgaranterade. Ett namn
+              som ryms på EN rad även under `sm` möter denna tvåradiga
+              reservation och hoppar 24,75 px åt det MOTSATTA hållet mot
+              defekten fixen skulle eliminera — samma hopp-klass AC #1 och
+              ADR-113 steg 4 förbjuder, nu villkorad på fel variabel för de
+              KORTA namnen. Detta test-svep kan strukturellt inte fånga den
+              kanten: båda viewport-fallen delar samma fixtur, alltså samma
+              namnlängd. Kvarstår tills `GruppRubrik` får en deterministisk
+              radhöjd — ett designval hos Marcus, inte en kodfix härifrån. */}
+          <div className="flex flex-col">
+            <Skeleton variant="text" className="w-40 text-lg" />
+            <Skeleton variant="text" className="w-24 text-lg sm:hidden" />
+          </div>
+          <ul className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
+            {SKELETT_RADER.map((k) => (
+              <li
+                key={k}
+                className="rounded-2xl border border-transparent bg-surface p-3 contrast-more:border-border-strong"
+              >
+                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+                    <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                    <Skeleton variant="text" className="w-2/5 text-body" />
+                  </div>
+                  <div className="inline-flex items-center gap-3 self-start sm:self-auto">
+                    <Skeleton variant="text" className="w-16 text-body" />
+                    <span aria-hidden="true" className="mr-1 size-9 shrink-0 rounded-full" />
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function Bekraftelsesteget({ ids, kalla }: { ids?: string; kalla?: 'import' }) {
   const fraga = useOppnaBetalningar();
   const navigate = useNavigate();
@@ -144,7 +345,7 @@ export function Bekraftelsesteget({ ids, kalla }: { ids?: string; kalla?: 'impor
     <section className="flex flex-col gap-4">
       <SidRamKnapp tillbakaEtikett="Tillbaka" onTillbaka={tillbaka} />
       {fraga.isLoading ? (
-        <p className="px-4 py-8 text-body text-text-secondary">Hämtar öppna betalningar …</p>
+        <BekraftelsestegetSkelett minne={minne} />
       ) : fraga.isError ? (
         <div className="px-4">
           <MessageBox intent="warning" title="Betalningarna kunde inte hämtas">
