@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 11:16'
-updated_date: '2026-09-06 11:57'
+updated_date: '2026-09-06 12:26'
 labels:
   - ready-for-agent
 dependencies: []
@@ -92,4 +92,58 @@ låg redan på den gränsen (senast lyckade deploy 2026-08-23, version 10,
 oförändrad av detta försök). Bokfört som avvikelse, ej löst här.
 
 Rättelse: föregående styckes 'overifierat oförändrad' ska läsas 'verifierat oförändrad' (skrivfel; sha256-digest + updated_at jämfördes faktiskt före/efter, se ovan).
+
+GRANSKNINGSFYND + Marcus-beslut 2026-09-06 (efter denna skivas första leverans, PR #2388):
+
+Granskningen av #2388 fann att mönstret `https://miranon-media-admin-*.vercel.app`
+kan träffas av VEM SOM HELST som skapar ett eget Vercel-projekt med samma
+prefix — projektnamn på `*.vercel.app` är INTE globalt reserverade åt oss.
+En främmande sida kunde alltså i teorin få sin OPTIONS-preflight godkänd av
+staging-EF:erna. Mildrande faktorer (bekräftade i denna skivas eget
+research-underlag, oförändrade av fyndet): mönstret sattes ENBART i staging
+(prod orörd), anropen bär ingen kaka (`credentials` sätts aldrig av
+supabase-client.ts) så en främmande sida kan inte läsa ut vår
+`Authorization`-token ur en annan origins lagring, och sessioner ligger i
+webbläsarens `localStorage` — en spoofad origin kan alltså få CORS-godkännande
+men saknar fortfarande en giltig token att skicka. Ändå: bredden är en verklig
+svaghet mönstret inte borde ha, och Marcus GO:ns "kör staging-vägen" avsåg
+inte att acceptera ett spoofbart prefix-mönster som permanent lösning.
+
+Marcus beslut (verbatim): "Vänta tills preview domänen finns."
+
+Åtgärdat i denna skiva, samma dag:
+- `CORS_ALLOWED_ORIGIN_PATTERNS` TÖMD i staging (pqtshyierkdgwdnxuirz) via
+  `npx supabase@2.115.0 secrets unset CORS_ALLOWED_ORIGIN_PATTERNS
+  --project-ref pqtshyierkdgwdnxuirz` — bekräftat borta ur `secrets list`.
+- Koden (cors.ts, cors-origin-policy.ts) ligger KVAR deployad i staging —
+  utan mönster-secreten faller `isAllowedOrigin` tillbaka till exakt samma
+  beteende som INNAN TASK-415.1 (bara CORS_ALLOWED_ORIGINS-exaktlistan).
+- Skarpbevis (OPTIONS-preflight mot get-events, staging, verbatim):
+
+  Preview-origin som TIDIGARE godkändes av mönstret, nu utan secreten:
+    $ curl -sS -D - -o /dev/null -X OPTIONS \
+        -H "Origin: https://miranon-media-admin-462he0s8t.vercel.app" \
+        -H "Access-Control-Request-Method: GET" \
+        https://pqtshyierkdgwdnxuirz.supabase.co/functions/v1/get-events
+    HTTP/2 403
+    (ingen access-control-allow-origin, ingen Vary: Origin — vary: Accept-Encoding enbart)
+
+  Exaktlistans origin, oförändrat:
+    $ curl -sS -D - -o /dev/null -X OPTIONS \
+        -H "Origin: http://localhost:5173" \
+        -H "Access-Control-Request-Method: GET" \
+        https://pqtshyierkdgwdnxuirz.supabase.co/functions/v1/get-events
+    HTTP/2 200
+    access-control-allow-origin: http://localhost:5173
+    vary: Accept-Encoding, Origin
+    access-control-allow-headers: authorization, x-client-info, apikey, content-type
+    access-control-allow-methods: GET, POST, PATCH, OPTIONS
+
+Väg framåt (blockerar armering av #2388 tills klar): mönstret ska bli
+`https://*.preview.miranon.dev` (eller den domän Marcus faktiskt väljer) —
+en domän VI ÄGER, inte ett spoofbart `*.vercel.app`-prefix. Kräver Vercel
+Preview Deployment Suffix satt mot en egen underdomän under miranon.dev
+(wildcard-DNS) INNAN mönster-secreten sätts på nytt i staging — se
+TASK-415.2:s nya första steg. Denna PR (#2388) förblir DRAFT och armeras
+INTE förrän det steget är klart och mönstret pekar dit.
 <!-- SECTION:NOTES:END -->
