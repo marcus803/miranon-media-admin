@@ -92,7 +92,7 @@
  * som binder Session till datum — härledningen är en kvalificerad gissning
  * och får därför aldrig vara tyst.
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { BedDouble, Check, ChevronDown, RotateCcw, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -137,6 +137,10 @@ const DATUM_LANG = new Intl.DateTimeFormat('sv-SE', {
   month: 'long',
 });
 
+/** Antal skeletonrader i arbetslistans laddläge (TASK-416.1) — strängnycklar,
+ *  inte index, samma idiom som `EventsList.tsx`s `['a','b','c'].map(...)`. */
+const DORR_SKELETON_RADER = ['a', 'b', 'c'] as const;
+
 // ═══════════════════════════════════════════════════════════════════════════
 //  DATA — läsning + klient-join
 // ═══════════════════════════════════════════════════════════════════════════
@@ -148,8 +152,9 @@ type Dorrad = {
   namn: string;
   email: string | null;
   session: AttendanceSessionValue;
-  /** Status som den står i basen. Fältet matas av `byggRader`/`useDorrData`
-   *  men läses inte av D — D:s egen statusöverlagring bor i `useDorrLageD`,
+  /** Status som den står i basen. Fältet matas av `byggRader` (kallas från
+   *  `VariantD`, TASK-416.1) men läses inte av D — D:s egen statusöverlagring
+   *  bor i `useDorrLageD`,
    *  över `DorradD[]`, inte över denna delade `Dorrad[]`-typ (`useDorrLage`,
    *  A/B/C:s motsvarighet, är riven med dem, TASK-214.4). */
   basStatus: AttendanceStatusValue;
@@ -184,33 +189,30 @@ function byggRader(attendance: Attendance[], registrations: Registration[]): Dor
     .sort((a, b) => a.namn.localeCompare(b.namn, 'sv-SE'));
 }
 
-function useDorrData(eventId: string) {
+/**
+ * Eventet ENSAMT (TASK-416.1) — attendance/registrations hör INTE hemma här
+ * längre. Den gamla `useDorrData` väntade ihop alla tre queries i EN
+ * `isPending`, vilket gjorde att sidkromet försvann varje gång attendance
+ * (som aldrig värms, till skillnad från events-listan, ADR-112) ännu inte
+ * hunnit landa — mätt: laddläget nåddes VARJE gång (S123-audit, rapport D §4
+ * #2). `EventCheckin` gaterar numera BARA på eventet; attendance/
+ * registrations lever i `VariantD` och styr uteslutande listkroppen.
+ *
+ * `placeholderData` seedar ur den redan värmda `events.list`-cachen — EXAKT
+ * samma trick som `EventDetail.tsx` (ADR-078 beslut 1): dörren nås alltid
+ * FRÅN eventet, så listan är i praktiken alltid varm och eventnamnet/datumet
+ * står skarpt från första bildrutan i stället för att vänta ut ett eget
+ * `get-event`-anrop.
+ */
+function useDorrEvent(eventId: string) {
   const dataSource = useDataSource();
-  const event = useQuery({
+  const queryClient = useQueryClient();
+  return useQuery({
     queryKey: queryKeys.events.detail(eventId),
     queryFn: () => dataSource.fetchEvent(eventId),
+    placeholderData: () =>
+      queryClient.getQueryData<Event[]>(queryKeys.events.list)?.find((e) => e.id === eventId),
   });
-  const attendance = useQuery({
-    queryKey: queryKeys.events.attendance(eventId),
-    queryFn: () => dataSource.fetchAttendance({ eventId }),
-  });
-  const registrations = useQuery({
-    queryKey: queryKeys.registrations.byEvent(eventId),
-    queryFn: () => dataSource.fetchRegistrations({ eventId }),
-  });
-
-  const rader = useMemo(
-    () =>
-      attendance.data && registrations.data ? byggRader(attendance.data, registrations.data) : [],
-    [attendance.data, registrations.data],
-  );
-
-  return {
-    event: event.data,
-    rader,
-    isPending: event.isPending || attendance.isPending || registrations.isPending,
-    isError: event.isError || attendance.isError || registrations.isError,
-  };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -424,46 +426,156 @@ function FramstegskortD({
   totalt,
   kvitto,
   klass,
+  isPending = false,
+  isError = false,
 }: {
   klara: number;
   totalt: number;
   kvitto: React.ReactNode;
   /** Yttre luft — sätts av anroparen, se `VariantD` § LUFTEN. */
   klass?: string;
+  /**
+   * TASK-416.1 — sant tills attendance/registrations landat. Kortets YTTRE
+   * geometri (breddlåset, `min-h-9`-kvittoraden) är redan höjdlåst oavsett
+   * `klara`/`totalt`, så boxen växer/krymper aldrig; det som skiljer är
+   * ENDAST vad som ritas i den — siffror/stapel eller skelett — samma idiom
+   * som `FilterRad`s `isPending`-gren (`primitives/FilterRad.tsx`). Utan
+   * detta hade `totalt === 0` under laddning renderat den felaktiga texten
+   * "Alla är incheckade" (samma uträkning som `kvar === 0`).
+   *
+   * `isPending`/`isError` är MEDVETET separata (review-runda 2, FYND 3) —
+   * VariantD skickade tidigare `isPending || isListError`, vilket gav evig
+   * shimmer på ett genuint fel (`isListPending` blir aldrig sant för en
+   * TanStack-query som redan bytt status till `'error'`, så animationen
+   * hade fortsatt utan att någonsin lösa upp sig). Principen är fastslagen
+   * tvärs S123:s skivor (416.4, 416.8): skeleton/shimmer ENBART i pending;
+   * ett fel visar en STATISK platshållare i samma geometri, ingen animation,
+   * och felbeskedet i listkroppen bär tillståndet — kortet upprepar det inte.
+   */
+  isPending?: boolean;
+  isError?: boolean;
 }) {
   const kvar = Math.max(0, totalt - klara);
   const andel = totalt === 0 ? 0 : Math.round((100 * klara) / totalt);
   return (
     <section
       aria-label="Framsteg"
+      // Roselli-kontraktet (`Skeleton.tsx` filhuvud: "konsumenten äger
+      // innehålls-containern som laddar och sätter aria-busy + ett visuellt
+      // dolt textbesked på den") — SAMMA kontrakt som EventCheckins
+      // event-pending-gren och VariantD:s isListPending-block redan följer.
+      // Review-runda 1 fångade att just DENNA sektion saknade det: dess
+      // `Skeleton`-block är `aria-hidden` (dekorativa), så en skärmläsare
+      // som navigerar hit direkt via landmärken (sektionen har eget
+      // `aria-label`) hade upplevt regionen som tom under laddning.
+      //
+      // INGET `role="status"` här, MEDVETET: kontraktet Skeleton.tsx citerar
+      // är "aria-busy + textbesked" — role=status nämns inte, och att lägga
+      // till en ANDRA live-annonserande region hade riskerat att beskedet
+      // läses upp dubbelt tillsammans med listkroppens EGNA `role="status"`
+      // (samma `isListPending`/`isListError` styr båda, så de kan bli
+      // aktiva SAMTIDIGT). `aria-busy` ensam räcker för att regionen inte
+      // ska läsas som tom vid landmärkes-navigering, utan att skapa en andra
+      // automatisk annonsering.
+      aria-busy={isPending}
       className={`flex flex-col gap-2 rounded-2xl border border-transparent bg-primary-tint p-4 contrast-more:border-border-strong print:border-border-strong ${klass ?? ''}`}
     >
+      {isPending && <span className="sr-only">Laddar framsteg…</span>}
+      {/* Review-runda 3, FYND 2: `isError`-grenens tankstreck är
+          `aria-hidden` (dekorativt, precis som `Skeleton`-blocken), så utan
+          ett eget besked här hade en skärmläsare som navigerar in i
+          "Framsteg"-landmärket under ett ihållande fel hört en TOM region —
+          samma "annonseras som tom"-brist review-runda 1 FYND 1 redan
+          fångade för pending-läget. `aria-busy` förblir MEDVETET kopplad
+          till `isPending` ENSAM (inte hit) — regionen väntar inte längre på
+          något, den har bara inget att visa. */}
+      {isError && <span className="sr-only">Framsteg kunde inte hämtas</span>}
       <div className="flex items-baseline justify-between gap-3">
         {/* Breddlåset: osynlig maxform i samma grid-cell som det verkliga talet. */}
         <span className="grid font-semibold text-xl">
           <span aria-hidden="true" className="invisible col-start-1 row-start-1 whitespace-nowrap">
             99 kvar att checka in
           </span>
-          <span className="col-start-1 row-start-1 whitespace-nowrap tabular-nums">
-            {kvar === 0 ? 'Alla är incheckade' : `${kvar} kvar att checka in`}
+          {isPending ? (
+            <Skeleton variant="text" className="col-start-1 row-start-1 w-2/5" />
+          ) : isError ? (
+            // Statisk platshållare (review-runda 2, FYND 3) — ett tankstreck,
+            // ÄKTA text (inte ett `Skeleton`-block): bär sin egen textbaslinje
+            // precis som den riktiga raden hade gjort, så `items-baseline`
+            // inte behöver den osynlig-mät-text-omväg badge-cellen nedan
+            // kräver (den cellen saknar egen text i BÅDA sina andra grenar).
+            <span
+              aria-hidden="true"
+              className="col-start-1 row-start-1 whitespace-nowrap text-text-muted"
+            >
+              —
+            </span>
+          ) : (
+            <span className="col-start-1 row-start-1 whitespace-nowrap tabular-nums">
+              {kvar === 0 ? 'Alla är incheckade' : `${kvar} kvar att checka in`}
+            </span>
+          )}
+        </span>
+        {isPending ? (
+          // EGEN osynlig-mät-text-cell (samma knep som `kvar`-texten ovan),
+          // INTE en ändring av den riktiga plattan nedan — den grenen rörs
+          // inte alls (den promoverade ytans facit får inte glida på grund
+          // av ett laddläge-fix). Nödvändigt, inte kosmetiskt (mätt i TRE
+          // tidigare varv av just denna mätning, AC #3): radens
+          // `items-baseline` linjerar syskon mot TEXTENS baslinje. Ett tomt
+          // `Skeleton`-block har ingen text och faller tillbaka på sin NEDRE
+          // marginalkant som "baslinje" (CSS2 §10.8.1) — varken en
+          // fristående höjd (`h-[22px]`, identisk med plattans riktiga
+          // 22 px) eller `self-center` (som tar bort blocket ur baslinje-
+          // beräkningen helt) råkar träffa exakt det korsmått-bidrag en
+          // ÄKTA textbaslinje ger. En osynlig mät-text ("00 av 00") ger
+          // cellen en äkta baslinje att bidra med, precis som `kvar`-cellen
+          // redan gör (dess egen höjd mätte identiskt, 26 px, i båda
+          // lägena redan innan detta fixades).
+          <span className="grid shrink-0 rounded-full px-2.5 py-0.5 font-medium text-caption tabular-nums">
+            <span
+              aria-hidden="true"
+              className="invisible col-start-1 row-start-1 whitespace-nowrap"
+            >
+              00 av 00
+            </span>
+            <Skeleton variant="text" className="col-start-1 row-start-1 rounded-full" />
           </span>
-        </span>
-        <span className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 font-medium text-caption tabular-nums">
-          {`${klara} av ${totalt}`}
-        </span>
+        ) : isError ? (
+          <span
+            aria-hidden="true"
+            className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 font-medium text-caption text-text-muted tabular-nums"
+          >
+            —
+          </span>
+        ) : (
+          <span className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 font-medium text-caption tabular-nums">
+            {`${klara} av ${totalt}`}
+          </span>
+        )}
       </div>
       <div aria-hidden="true" className="h-1.5 rounded-full bg-surface">
         <div
+          // `isError` fryser bredden på 0 % precis som `isPending` — ingen
+          // animation uppstår ändå (`transition-[width]` reagerar bara på en
+          // FAKTISK förändring, och båda felfallen står stilla på 0), men
+          // uttryckt explicit hellre än att luta sig på den bieffekten.
           className="h-full rounded-full bg-primary-muted motion-safe:transition-[width]"
-          style={{ width: `${andel}%` }}
+          style={{ width: isPending || isError ? '0%' : `${andel}%` }}
         />
       </div>
       {/* HÖJDLÅSET (S103-konvergensvarvet, Marcus punkt 4): kortet får ALDRIG
           växa. Kvitto-raden renderas ALLTID i sin slutgeometri och står tom
           tills första incheckningen - samma regel som personlistans
           e-postrad (`DorrRadD` § HÖJDLÅSET). Tidigare växte kortet ~40 px
-          vid första incheckningen. */}
-      <div className="-mb-1 flex min-h-9 items-center gap-2 pt-1">{kvitto}</div>
+          vid första incheckningen. Under laddning ELLER fel (`isPending`/
+          `isError`) finns inget kvitto att visa — samma tomma slutgeometri,
+          aldrig `kvitto`-propen (den bär `senaste`-härledningen som alltid är
+          `null` innan datan finns ändå, men explicit är säkrare än implicit
+          här). */}
+      <div className="-mb-1 flex min-h-9 items-center gap-2 pt-1">
+        {isPending || isError ? null : kvitto}
+      </div>
     </section>
   );
 }
@@ -624,12 +736,46 @@ function SessionsRadD({
   onValj,
 }: {
   sessioner: readonly AttendanceSessionValue[];
-  vald: AttendanceSessionValue;
+  /** `null` = session ännu inte härledd (review-runda 2, FYND 2) — eventet
+   *  har inte landat. Se `useSessionsval` för varför härledningen väntar. */
+  vald: AttendanceSessionValue | null;
   onValj: (s: AttendanceSessionValue) => void;
 }) {
   if (sessioner.length <= 1) return null;
+
+  if (vald === null) {
+    // SESSION ÄNNU INTE HÄRLEDD. `ToggleButtonGroup`s `disallowEmptySelection`
+    // är ett FÖRSEGLAT beslut (primitivens egen docblock: "alltid en vald …
+    // en annan mönsterklass", `disallowEmptySelection` finns inte ens i dess
+    // konsument-typade props) — primitiven kan alltså strukturellt INTE
+    // uttrycka "inget val". Renderar därför INTE primitiven här: samma
+    // spårgeometri (track `rounded-full bg-bg-muted p-1`, segment `grid
+    // auto-cols-fr`, pill-storleken `min-h-11`) som INERTA `<span>`:ar utan
+    // någon markerad pill. `aria-hidden`: inget att interagera med eller
+    // annonsera förrän ett värde finns — samma idiom som kryssrute-
+    // reservationen i listkroppens skelettrader (`size-11 shrink-0` span).
+    return (
+      <div
+        data-testid="dorrlista-sessionsrad"
+        className="mt-1 flex flex-col gap-1.5"
+        aria-hidden="true"
+      >
+        <div className="grid w-full auto-cols-fr grid-flow-col rounded-full bg-bg-muted p-1">
+          {sessioner.map((s) => (
+            <span
+              key={s}
+              className="flex min-h-11 select-none items-center justify-center rounded-full px-2.5 py-2 text-center font-medium text-small text-text-secondary opacity-50"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-1 flex flex-col gap-1.5">
+    <div data-testid="dorrlista-sessionsrad" className="mt-1 flex flex-col gap-1.5">
       <ToggleButtonGroup
         label="Vilken session checkar du in?"
         spread
@@ -688,16 +834,61 @@ function initialerD(namn: string): string {
  * (`PersonsList.tsx:317-319`). På mobil öppnar autofokus dessutom tangent-
  * bordet direkt och täcker listan — precis den överblick dörren behöver.
  */
+/**
+ * `event: Event | undefined` (review-runda 1, FYND 2) — INTE längre garanterat
+ * satt. PRD TASK-416:s regel ("sidkromet renderas i ALLA query-tillstånd")
+ * gäller utan undantag för sällsynta vägar: kall cache (`useDorrEvent`s
+ * `placeholderData` hittar inget i `events.list`), en djuplänk, eller
+ * ADR-112-startvärmningens timeout. `EventCheckin` monterar därför ALLTID
+ * `VariantD` — det fanns ingen separat "eventet är otillgängligt"-gren kvar
+ * att hoppa över kromet i (se `EventCheckin` nedan). `event` kan vara
+ * `undefined` medan `eventIsPending`/`eventIsError` säger VARFÖR: kromet
+ * (namn/datum, `FramstegskortD`, sökfältet) degraderar sig självt per fält —
+ * ALDRIG genom att hoppa över hela sektionen.
+ */
 function VariantD({
   eventId,
   event,
-  rader: alla,
+  eventIsPending,
+  eventIsError,
 }: {
   eventId: string;
-  event: Event;
-  rader: Dorrad[];
+  event: Event | undefined;
+  eventIsPending: boolean;
+  eventIsError: boolean;
 }) {
   const dataSource = useDataSource();
+
+  // TASK-416.1 + review-runda 1 (FYND 2): attendance/registrations lever HÄR,
+  // inte hos föräldern (`EventCheckin` monterar alltid `VariantD` numera).
+  // `isListPending`/`isListError` VÄVER IN eventets egen `isPending`/
+  // `isError` (INTE bara attendance/registrations) — annars hade "eventet
+  // självt saknas"-vägen inte fått samma listkropps-gating som de två andra
+  // datamängderna, exakt den lucka review-rundan fångade. Sidkromets STATISKA
+  // delar (SidRam, h1) är ändå monterade oavsett — se JSX nedan.
+  const registrations = useQuery({
+    queryKey: queryKeys.registrations.byEvent(eventId),
+    queryFn: () => dataSource.fetchRegistrations({ eventId }),
+  });
+  const attendance = useQuery({
+    queryKey: queryKeys.events.attendance(eventId),
+    queryFn: () => dataSource.fetchAttendance({ eventId }),
+  });
+  const isListPending = eventIsPending || registrations.isPending || attendance.isPending;
+  const isListError = eventIsError || registrations.isError || attendance.isError;
+
+  // Sessionsuppsättningen härleds ur ALLA attendance-rader (`byggRader`,
+  // ojoinad av session) — INTE ur `rader`/`byggRaderD` nedan, som redan är
+  // filtrerad till den VALDA sessionen och därför inte kan avslöja att en
+  // andra session finns (samma nödvändiga åtskillnad som promoverings-
+  // grinden dokumenterar, `dorrlista-promoverings-grind.spec.ts` § VÄRLD A).
+  // Tom lista under laddning ⇒ `sessioner=[]` ⇒ `SessionsRadD` renderar
+  // `null`, exakt som innan datat finns.
+  const alla = useMemo(
+    () =>
+      attendance.data && registrations.data ? byggRader(attendance.data, registrations.data) : [],
+    [attendance.data, registrations.data],
+  );
   const { sessioner, session, setSession, datumtext } = useSessionsval(event, alla);
   const lage = useDorrLageD();
   const skrivning = useSetAttendanceStatus(eventId);
@@ -732,19 +923,24 @@ function VariantD({
     };
   }, []);
 
-  // Anmälningarna är variant D:s källa (se `byggRaderD`). De ligger redan i
-  // cachen under samma nyckel som `useDorrData` använder — inget nytt anrop.
-  const registrations = useQuery({
-    queryKey: queryKeys.registrations.byEvent(eventId),
-    queryFn: () => dataSource.fetchRegistrations({ eventId }),
-  });
-  const attendance = useQuery({
-    queryKey: queryKeys.events.attendance(eventId),
-    queryFn: () => dataSource.fetchAttendance({ eventId }),
-  });
-
+  // Anmälningarna är variant D:s källa (se `byggRaderD`) — `registrations`/
+  // `attendance` deklareras högst upp i komponenten nu (samma queries som
+  // `isListPending`/`isListError` läser, inget nytt anrop, ingen ny cache-post).
+  //
+  // `session ?? AttendanceSession.DAG_1` (review-runda 2, FYND 2): en ren
+  // beräkningsfallback, ALDRIG visad — `session === null` innebär per
+  // definition att `event` saknas, vilket i sin tur gör `isListPending`
+  // eller `isListError` sant (bägge väver in eventets egna flaggor), så
+  // varken listkroppen eller `FramstegskortD` renderar `rader`/`antalKlara`
+  // förrän session är känd. Utan fallbacken hade `byggRaderD` behövt ett
+  // eget null-läge för ett resultat som ändå aldrig når skärmen.
   const { rader, avbokade, utanDeltagande } = useMemo(
-    () => byggRaderD(registrations.data ?? [], attendance.data ?? [], session),
+    () =>
+      byggRaderD(
+        registrations.data ?? [],
+        attendance.data ?? [],
+        session ?? AttendanceSession.DAG_1,
+      ),
     [registrations.data, attendance.data, session],
   );
 
@@ -953,16 +1149,42 @@ function VariantD({
           på samma rad (varv 2-beslutet står). */}
       <div className="mx-4 mt-4 flex flex-col gap-1">
         <h1 className="font-semibold text-3xl">Check-in</h1>
-        <p className="text-body">
-          <span className="font-medium">{event.eventNamn ?? event.eventlabel ?? 'Eventet'}</span>
-          {datumtext && <span className="text-text-muted">{` · ${datumtext}`}</span>}
-        </p>
+        {/* Review-runda 1, FYND 2: `event` kan vara `undefined` (eventet
+            självt ännu opending/felat, ovanligt men inte längre en egen
+            gren utan krom — se `VariantD`s docblock). Skeletonen/
+            platshållaren står i EXAKT samma slot/klass (`text-body`) som den
+            riktiga paragrafen skulle ha använt, så h1:ens position aldrig
+            flyttar sig.
+            `eventIsPending` GRENAT FRÅN `eventIsError` (review-runda 3,
+            FYND 1) — samma "isPending ≠ isError"-princip som
+            `FramstegskortD` redan bär (review-runda 2, FYND 3): en animerad
+            `Skeleton` hade skimrat OÄNDLIGT på ett GENUINT fel (en
+            TanStack-query i `'error'`-status blir aldrig `isPending` igen).
+            Fel-grenen är ÄKTA text (tankstreck), aldrig ett `Skeleton`-block
+            — ingen animation uppstår per definition. Ingen egen sr-only-
+            annonsering här: `isListError` (som väver in `eventIsError`)
+            visar redan `MessageBox intent="error"` (`role="alert"`) i
+            listkroppen — samma fel skulle annonserats två gånger. */}
+        {event ? (
+          <p className="text-body">
+            <span className="font-medium">{event.eventNamn ?? event.eventlabel ?? 'Eventet'}</span>
+            {datumtext && <span className="text-text-muted">{` · ${datumtext}`}</span>}
+          </p>
+        ) : eventIsPending ? (
+          <Skeleton variant="text" className="w-2/5 text-body" />
+        ) : (
+          <p aria-hidden="true" className="text-body text-text-muted">
+            —
+          </p>
+        )}
       </div>
 
       <FramstegskortD
         klara={antalKlara}
         totalt={rader.length}
         klass="mt-1"
+        isPending={isListPending}
+        isError={isListError}
         kvitto={
           senaste && (
             <>
@@ -996,21 +1218,41 @@ function VariantD({
       <SessionsRadD sessioner={sessioner} vald={session} onValj={setSession} />
 
       {/* Sökfältets form är personlistans (steg k08) — samma input-tokens,
-          samma clear-knapp, ingen autofokus. */}
+          samma clear-knapp, ingen autofokus.
+          `isDisabled` (review-runda 1, FYND 2) — ENDAST kopplad till
+          `event == null` (inte `isListPending` i stort): den BEFINTLIGA,
+          redan testade vägen (eventet klart, attendance/registrations
+          fortfarande laddar) ska förbli oförändrad — sökfältet är aktivt
+          där precis som förut. Disabled-läget täcker bara den ovanliga
+          vägen där vi inte ens har ett event att söka BLAND.
+          VISUELL disabled-markering (review-runda 2, FYND 1) — huset
+          `Button.tsx`s konvention (`data-[disabled]:cursor-not-allowed
+          data-[disabled]:opacity-50`) speglad hit via `group-data-[disabled]`
+          (`SearchField` bär redan `group`, samma mekanism som
+          `group-data-[empty]:hidden` på rensa-knappen två rader ned). Utan
+          detta hade `isDisabled` bara varit ett osynligt attribut — fältet
+          hade sett lika aktivt ut, disabled eller ej.
+          `prefers-contrast: more`: `--mm-input-border` (`--mm-border-field`,
+          neutral-400) är redan ≥3:1 mot vit yta OSETT av opacity — WCAG
+          1.4.11 undantar dessutom inaktiva kontroller helt från kravet.
+          Samma opacity-only-mönster (utan egen contrast-more-motregel) som
+          `Button.tsx`/`ToggleButtonGroup.tsx` redan bär för SINA disabled-
+          lägen; ingen ny risk introducerad. */}
       <SearchField
         aria-label="Sök bland de anmälda"
         value={fraga}
         onChange={setFraga}
+        isDisabled={event == null}
         className="group flex flex-col"
       >
         <div className="relative">
           <AriaInput
             placeholder="Sök på namn eller e-post"
-            className="text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) mm-fokusring-vid-fokus min-h-11 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
+            className="text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) mm-fokusring-vid-fokus min-h-11 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body group-data-[disabled]:cursor-not-allowed group-data-[disabled]:opacity-50 [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
           />
           <AriaButton
             aria-label="Rensa sökningen"
-            className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden"
+            className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden group-data-[disabled]:opacity-50"
           >
             <X aria-hidden="true" size={16} className="shrink-0" />
           </AriaButton>
@@ -1021,8 +1263,13 @@ function VariantD({
           återstår"-räknaren är RIVEN - den upprepade framstegskortets
           rubrik. Kvar är det raden ensam bär: sökutfallet och det explicita
           bortfallet (avbokade visas aldrig tyst borttagna). Ingen träff-
-          textrad utan sökning = ingen rad alls. */}
-      {(fraga || avbokade > 0) && (
+          textrad utan sökning = ingen rad alls.
+          `!isListError` (review-runda 2, FYND 2-följdfix): `avbokade` är
+          BYGGD ur `byggRaderD`s session-fallback (se ovan) och kan bli > 0
+          även medan `session` fortfarande är `null` — utan denna vakt hade
+          raden kunnat visa "N avbokade visas inte" baserat på en session vi
+          ännu inte vet är rätt, medan listkroppen själv är i fel-läge. */}
+      {!isListPending && !isListError && (fraga || avbokade > 0) && (
         <p role="status" aria-live="polite" className="px-4 text-small text-text-muted">
           {[
             fraga ? `Visar ${traffar.length} av ${rader.length} anmälda för "${fraga}".` : null,
@@ -1045,8 +1292,60 @@ function VariantD({
         </MessageBox>
       )}
 
-      {/* ARBETSLISTAN — bara det som återstår (se VECKET ovan). */}
-      {attGora.length === 0 ? (
+      {/* ARBETSLISTAN — bara det som återstår (se VECKET ovan).
+          TASK-416.1: DETTA är "listkroppen" som regeln pekar ut — ENDA
+          delen av ytan som växlar mellan skelett/fel/innehåll. Allt ovan
+          (SidRam, h1, eventnamn/datum, framstegskort, sökfält, meta-rad) är
+          redan monterat oavsett `isListPending`/`isListError`. */}
+      {isListPending ? (
+        // Skeletonraden har EXAKT den laddade radens geometri (ADR-113
+        // laddtrappan steg 1, DESIGN-SYSTEM-SPEC §15): samma `<ul>`-klasser,
+        // samma `min-h-16 py-2.5`-rad som `DorrRadD`, avatar-cirkeln (size-9)
+        // och kryssrutans träffyta (size-11) reserverade — bara siffrorna/
+        // namnen är utbytta mot skelettblock. Roselli-anatomin: EN
+        // status-region äger laddbeskedet (denna), sidkromets egna
+        // skelettbitar (framstegskortet) är rent dekorativa (samma idiom som
+        // `FilterRad`s `isPending`-gren).
+        <div role="status" aria-busy="true" className="flex flex-col gap-2">
+          <span className="sr-only">Laddar check-in…</span>
+          <div className="divide-y divide-border overflow-hidden rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
+            {DORR_SKELETON_RADER.map((nyckel) => (
+              <div
+                key={nyckel}
+                data-testid="dorrlista-skelettrad"
+                className="-mx-4 flex min-h-16 items-center gap-3 px-4 py-2.5"
+              >
+                <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                {/* INGET `gap` mellan raderna — `DorrRadD`s riktiga
+                    textkolumn (`flex min-w-0 flex-1 flex-col`) saknar det
+                    också. Ett tillagt `gap-1` (4 px) räckte för att skjuta
+                    denna rad till 67 px mot den laddade radens uppmätta
+                    64 px (`min-h-16`) — mätt, inte gissat, i det första
+                    varvet av just denna mätning (AC #3). */}
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="text-body">
+                    <Skeleton variant="text" className="w-2/5" />
+                  </div>
+                  <Skeleton variant="text" className="w-1/3 text-caption" />
+                </div>
+                {/* Kryssrutans träffyta reserveras (`min-h-11` på den
+                    riktiga kontrollen) utan att rita en affordans till en
+                    rad som ännu inte finns — samma idiom som personlistans
+                    chevron-reservation (`PersonsList.tsx` § Lugnt laddläge). */}
+                <span aria-hidden="true" className="size-11 shrink-0" />
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : isListError ? (
+        // Texten namnger ALLA TRE möjliga felkällor (review-runda 1, FYND 2:
+        // `isListError` väver nu in `eventIsError`, inte bara attendance/
+        // registrations) — samma ordval som filen bar innan TASK-416.1 delade
+        // upp `useDorrData`.
+        <MessageBox intent="error" title="Kunde inte hämta underlaget">
+          Eventet, närvaron eller anmälningarna kunde inte hämtas.
+        </MessageBox>
+      ) : attGora.length === 0 ? (
         <div
           role="status"
           aria-live="polite"
@@ -1127,8 +1426,12 @@ function VariantD({
       {/* DATA-FÖRBEHÅLLET står EFTER listan, inte före: det är ett faktum om
           basen som den skarpa skivan måste lösa, inte något Lotta handlar på
           vid dörren. Före listan kostade det topp-utrymme som första raden
-          behövde bättre (se sessionsnoten ovan). Tyst får det aldrig vara. */}
-      {utanDeltagande > 0 && (
+          behövde bättre (se sessionsnoten ovan). Tyst får det aldrig vara.
+          `session != null` (review-runda 2, FYND 2-följdfix): samma skäl som
+          meta-radens vakt — `utanDeltagande` är byggd på session-FALLBACKEN
+          och texten namnger sessionen rakt av; ingen anledning att visa ett
+          påstående om "Dag 1" innan vi faktiskt vet att det är rätt dag. */}
+      {session != null && utanDeltagande > 0 && (
         <p className="px-4 text-caption text-text-muted">
           {`${utanDeltagande} av ${rader.length} saknar deltaganderad för ${session} i basen. Dörren visar dem ändå: den skarpa skivan måste skapa raden vid incheckning, inte dölja personen.`}
         </p>
@@ -1147,8 +1450,24 @@ function VariantD({
  * finns inte i app-shapen) — heuristiken är därför: en session ⇒ den; annars
  * Dag 2 om dagens datum är eventets slutdatum, i övrigt Dag 1. Gissningen
  * visas ALLTID för Lotta och kan alltid styras om.
+ *
+ * `event: Event | undefined` — returnerar `session: … | null` (review-runda
+ * 2, FYND 2, SKÄRPT från runda 1:s första försök). Runda 1 lät härledningen
+ * falla tillbaka på `sessioner[0]` när `event` saknades — men `sessioner`
+ * (byggd ur ATTENDANCE/REGISTRATIONS, oberoende av `event`) kan bli > 1 INNAN
+ * eventet landat, om attendance/registrations råkar svara snabbare. Följden:
+ * togglen visade "Dag 1" (den ärvda fallbacken), och när eventet SEDAN landar
+ * och råkar vara sista dagen byter `harledd` TYST till "Dag 2" — exakt det
+ * osynkade hopp skivan finns för att förhindra, bara flyttat en nivå ned.
+ *
+ * Lösningen: härled INGET värde alls förrän `event` finns. `session` är
+ * `null` tills dess (och `SessionsRadD` visar då sin INERTA platshållar-gren,
+ * ingen pill vald) — ANNARS `vald ?? harledd`, precis som förut. Ett värde
+ * sätts alltså EN gång, i SAMMA render som eventet landar och listkroppen
+ * (som redan väver in `eventIsPending`/`eventIsError` i `isListPending`/
+ * `isListError`) går från skelett till innehåll.
  */
-function useSessionsval(event: Event, rader: Dorrad[]) {
+function useSessionsval(event: Event | undefined, rader: Dorrad[]) {
   const sessioner = useMemo(
     () => SESSION_ORDNING.filter((s) => rader.some((r) => r.session === s)),
     [rader],
@@ -1159,7 +1478,7 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
     if (sessioner.length === 1) return sessioner[0];
     const idag = new Date();
     idag.setHours(0, 0, 0, 0);
-    const slut = event.slutdatum ? new Date(event.slutdatum) : null;
+    const slut = event?.slutdatum ? new Date(event.slutdatum) : null;
     if (slut && !Number.isNaN(slut.getTime())) {
       slut.setHours(0, 0, 0, 0);
       if (idag.getTime() === slut.getTime() && sessioner.includes(AttendanceSession.DAG_2)) {
@@ -1167,19 +1486,24 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
       }
     }
     return sessioner[0];
-  }, [sessioner, event.slutdatum]);
+  }, [sessioner, event?.slutdatum]);
 
   const [vald, setVald] = useState<AttendanceSessionValue | null>(null);
-  const session = vald ?? harledd;
+  const session = vald ?? (event ? harledd : null);
 
-  /** Datumtexten för den valda sessionen — Dag 1 = start, Dag 2 = slut. */
+  /** Datumtexten för den valda sessionen — Dag 1 = start, Dag 2 = slut. Ingen
+   *  session (ännu) ⇒ ingen text — samma tomma-tills-känt-regel som resten
+   *  av kromets fält-för-fält-degradering. */
   const datumtext = useMemo(() => {
+    if (session === null) return null;
     const iso =
-      session === AttendanceSession.DAG_2 ? (event.slutdatum ?? null) : (event.startdatum ?? null);
+      session === AttendanceSession.DAG_2
+        ? (event?.slutdatum ?? null)
+        : (event?.startdatum ?? null);
     if (!iso) return null;
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : DATUM_LANG.format(d);
-  }, [session, event.startdatum, event.slutdatum]);
+  }, [session, event?.startdatum, event?.slutdatum]);
 
   return { sessioner, session, setSession: setVald, datumtext };
 }
@@ -1197,9 +1521,22 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
  * fynd som persondetalj-precedenten (`dc0eb4ec`) gjorde. D är den enda
  * formen som finns kvar; en prop vars enda möjliga värde är `'d'` bär ingen
  * information.
+ *
+ * MONTERAR ALLTID `VariantD` — INGEN SEPARAT FALLBACK-GREN (review-runda 1,
+ * FYND 2, retirerad efter den ursprungliga TASK-416.1-leveransen). Den
+ * tidigare varianten här returnerade en MINIMAL sidkrom (bara SidRam + h1)
+ * när eventet självt var pending/error/null, vilket bröt PRD TASK-416:s
+ * "sidkromet renderas i ALLA query-tillstånd, utan undantag" — framstegskort,
+ * sökfält och meta-rad saknades precis i den grenen. `VariantD` tar nu emot
+ * `event: Event | undefined` plus `eventIsPending`/`eventIsError` och
+ * degraderar VARJE kromdel för sig (namn/datum → skeleton, sökfält →
+ * disabled, listkroppen → samma skelett/fel-gren som attendance/
+ * registrations redan använde) i stället för att hoppa över hela sektionen.
+ * `eventId` är det ENDA `VariantD` någonsin kräver ovillkorat (routeparametern,
+ * alltid satt) — `event` självt är alltid `Event | undefined` numera.
  */
 export function EventCheckin({ eventId }: { eventId: string }) {
-  const { event, rader, isPending, isError } = useDorrData(eventId);
+  const event = useDorrEvent(eventId);
 
   // Rulla alltid till toppen vid montering så jämförelsen sker från samma
   // utgångsläge (prototyp-ergonomi, kvar som produktbeteende).
@@ -1207,25 +1544,12 @@ export function EventCheckin({ eventId }: { eventId: string }) {
     window.scrollTo({ top: 0 });
   }, []);
 
-  if (isPending) {
-    return (
-      <div role="status" aria-busy="true" className="flex flex-col gap-3 p-1">
-        <span className="sr-only">Laddar check-in…</span>
-        <Skeleton variant="text" className="w-1/2" />
-        <Skeleton variant="listRow" className="h-16 rounded-xl" />
-        <Skeleton variant="listRow" className="h-16 rounded-xl" />
-        <Skeleton variant="listRow" className="h-16 rounded-xl" />
-      </div>
-    );
-  }
-
-  if (isError || event == null) {
-    return (
-      <MessageBox intent="error" title="Kunde inte hämta underlaget">
-        Eventet, närvaron eller anmälningarna kunde inte hämtas.
-      </MessageBox>
-    );
-  }
-
-  return <VariantD eventId={eventId} event={event} rader={rader} />;
+  return (
+    <VariantD
+      eventId={eventId}
+      event={event.data}
+      eventIsPending={event.isPending}
+      eventIsError={event.isError}
+    />
+  );
 }

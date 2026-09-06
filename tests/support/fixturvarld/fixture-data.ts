@@ -468,6 +468,18 @@ export const EVENT_NOTES_RESPONSE = {
 export const EVENT_ATTACHMENTS_RESPONSE = { attachments: [] } as const;
 
 /**
+ * `get-attendance`-svaret (TASK-416.1 — check-in-sidans egen EF, aldrig
+ * varmad av ADR-112:s startvärmning). TOM som NORMALLÄGE, samma resonemang
+ * som `EVENT_ATTACHMENTS_RESPONSE` ovan: minimalt fotavtryck för alla
+ * BEFINTLIGA tester som råkar montera `EventCheckin` utan att äga
+ * närvarodatan (`event-checkin-dorrlistan.acceptance.test.ts` överskuggar
+ * redan denna handler lokalt med sin egen `deltagande()`-fixtur — den
+ * vinner alltid, per filhuvudets "Överskugga en delad handler"-regel). Ett
+ * test som behöver riktiga deltagande-rader äger sin egen `network.use()`.
+ */
+export const ATTENDANCE_RESPONSE = { attendance: [] } as const;
+
+/**
  * `get-places`-svaret (TASK-309.7, ADR-125 § 7) — den GLOBALA platslistan
  * bakom Mer → Platser OCH, sedan TASK-338.3, bakom räckviddsdialogens
  * Plats-axel. Samma läsväg, en fixtur (PRD TASK-338 berättelse 11: en ny

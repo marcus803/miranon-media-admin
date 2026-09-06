@@ -1,5 +1,6 @@
 import { HttpResponse, http, type JsonBodyType } from 'msw';
 import {
+  ATTENDANCE_RESPONSE,
   EVENT_ATTACHMENTS_RESPONSE,
   EVENT_DETAIL_RESPONSE,
   EVENT_FORMATS_RESPONSE,
@@ -95,6 +96,11 @@ export const handlers = [
   http.get(EF('get-event-notes'), () => json(EVENT_NOTES_RESPONSE)),
   http.get(EF('get-event-formats'), () => json(EVENT_FORMATS_RESPONSE)),
   http.get(EF('get-event-attachments'), () => json(EVENT_ATTACHMENTS_RESPONSE)),
+  // Check-inens (`EventCheckin.tsx`) egen EF — TOM som normalläge (TASK-416.1).
+  // Saknades helt fram till denna skiva: varje test som navigerade till
+  // check-in var tvunget att äga sin egen `get-attendance`-handler eller
+  // riskera `OmockadRequestError`. Se `fixture-data.ts` § ATTENDANCE_RESPONSE.
+  http.get(EF('get-attendance'), () => json(ATTENDANCE_RESPONSE)),
   // [TASK-338.3] Räckviddsdialogens Plats-axel läser SAMMA lista som
   // Mer → Platser (`usePlacesList`), så varje öppning av
   // uppladdningsdialogen träffar denna EF. Utan handler faller
