@@ -152,14 +152,25 @@ function HandlingsLank({
  * tills dess leder ingången till den befintliga närvaro-ytan, dagens närmaste
  * yta för dörr-arbetet. Chevron-semantiken (raden leder vidare) hålls därmed
  * sann. Målet pekas om när check-in-sidan föds.
+ *
+ * [TASK-416.16] `onIntent` — valfri, vidarebefordrad till `HandlingsLank`
+ * precis som `AtgarderKort` nedan gör för sina bilagor: `EventDetail.tsx`
+ * värmer `get-attendance` (Check-in-sidans egen query) på hover/fokus här,
+ * samma ADR-078 beslut 3-mönster. Ingen egen wrapper behövs — `HandlingsLank`
+ * kopplar redan `onIntent` direkt på den native länken.
  */
-export function CheckInKort({ eventId }: { eventId: string }) {
+export function CheckInKort({ eventId, onIntent }: { eventId: string; onIntent?: () => void }) {
   return (
     <div
       data-testid="checkin-kort"
       className="rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong"
     >
-      <HandlingsLank ikon={UserCheck} to="/event/$eventId/narvaro" eventId={eventId}>
+      <HandlingsLank
+        ikon={UserCheck}
+        to="/event/$eventId/narvaro"
+        eventId={eventId}
+        onIntent={onIntent}
+      >
         Gå till check-in
       </HandlingsLank>
     </div>

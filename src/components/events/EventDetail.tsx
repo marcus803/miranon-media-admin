@@ -309,26 +309,15 @@ export function EventDetail({ eventId }: { eventId: string }) {
           form oförändrad. */}
       {/* TASK-416.16, AC #1: hover/fokus på Check-in-ingången är den
           tidigaste ärliga avsiktssignalen (ADR-078 beslut 3) — samma mönster
-          som EventCard.tsx/TabBar.tsx. `CheckInKort`s eget DOM-skal
-          (Atgarder.tsx, 416.11s arbetsyta) rörs INTE: den länken sitter
-          nästlad i `HandlingsLank` och kan inte bära egna hover/fokus-props
-          härifrån. Wrappern lägger ingen stil och ingen extra höjd (auto-block
-          runt ett enda barn i `flex-col gap-6`-föräldern) — samma teknik som
-          EventCard.tsx:s `<li onMouseEnter/onFocusCapture>` (som av samma
-          skäl inte kan sätta lyssnaren direkt på länken, men slipper regeln
-          nedan eftersom `<li>` inte räknas som "statiskt"; en `<li>` utan
-          `<ul>`-förälder hade varit ogiltig HTML här). Provade `role="group"`/
-          `"presentation"` — båda triggade NYA biome-regler i sin tur
-          (`useSemanticElements` ville ha `<fieldset>`; `presentation`
-          betyder uttryckligen "aldrig interaktiv" och är självmotsägande med
-          en händelselyssnare). Ren `biome-ignore` är den ärligaste formen:
-          wrappern bär inget eget semantiskt innehåll — den observerar bara
-          avsikt hos barnet, som behåller sin egen länk-roll och sitt eget
-          accessibla namn helt oförändrat. */}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: ren avsiktslyssnare (hover/fokus, ADR-078 beslut 3) på en semantikfri wrapper — barnets länk behåller sin egen roll/sitt namn; se docblocket ovan för varför role="group"/"presentation" avvisades. */}
-      <div onMouseEnter={varmNarvaro} onFocusCapture={varmNarvaro}>
-        <CheckInKort eventId={eventId} />
-      </div>
+          som EventCard.tsx/TabBar.tsx OCH samma mönster som `AtgarderKort`
+          redan använder tio rader nedan (`onIntent`-propen, TASK-416.11).
+          `CheckInKort` (Atgarder.tsx) bär sedan denna runda samma valfria
+          `onIntent`-prop, vidarebefordrad till `HandlingsLank`, som redan
+          kopplar den direkt på den native länken (`onMouseEnter`/`onFocus`)
+          — review-runda 1 rättade det tidigare felaktiga antagandet att
+          länken "inte kunde bära egna hover/fokus-props härifrån" och den
+          onödiga wrapper-diven + biome-ignore den motiverade. */}
+      <CheckInKort eventId={eventId} onIntent={varmNarvaro} />
       <AtgarderKort eventId={eventId} />
       <SkrivUtKort />
 
