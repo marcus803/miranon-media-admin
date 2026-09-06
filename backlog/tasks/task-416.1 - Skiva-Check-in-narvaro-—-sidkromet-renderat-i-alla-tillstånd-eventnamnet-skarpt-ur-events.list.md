@@ -3,10 +3,10 @@ id: TASK-416.1
 title: >-
   Skiva: Check-in (narvaro) — sidkromet renderat i alla tillstånd, eventnamnet
   skarpt ur events.list
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:19'
-updated_date: '2026-09-06 16:32'
+updated_date: '2026-09-06 17:35'
 labels:
   - ready-for-agent
 dependencies: []

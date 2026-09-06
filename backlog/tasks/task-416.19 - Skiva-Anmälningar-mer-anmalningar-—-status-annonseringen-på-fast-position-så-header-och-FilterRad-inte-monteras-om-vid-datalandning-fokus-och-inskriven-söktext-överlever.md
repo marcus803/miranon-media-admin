@@ -4,10 +4,10 @@ title: >-
   Skiva: Anmälningar (mer/anmalningar) — status-annonseringen på fast position
   så header och FilterRad inte monteras om vid datalandning (fokus och inskriven
   söktext överlever)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 16:37'
-updated_date: '2026-09-06 18:12'
+updated_date: '2026-09-06 19:53'
 labels:
   - ready-for-agent
 dependencies: []
@@ -90,4 +90,6 @@ Kortets Description föreskrev "status-annonseringen som sr-only `<p role=status
 **Fynd 3 (info, auto-fix):** tre kodkommentarer som beskrev den rivna tre-`return`-strukturen rättade: "early-returnsen" (rad ~383), "alla tre return-grenar" (rad ~663), och "De FYRA barnen" (nu FEM — filen har fem fasta syskon-positioner, förlagan Intresserade.tsx har fyra).
 
 Ny head-SHA för PR #2423 efter runda 2: se PR:ens senaste commit (bygg-agentens slutrapport för denna runda).
+
+REVIEW-RUNDA 3 (PR #2423, Opus, 2026-09-06, på mandat): konvergerad, 2 info bokförda här utan kodändring: (1) kommentaren vid dataOkand säger FYRA platser men konsumenterna är FEM (filterAnnonsering rad ~896 tillkom i samma commit) — skriv utan siffra nästa gång filen rörs. (2) Live-regionen filterAnnonsering är nu permanent monterad och återannonserar vid error→laddat med siffran från senaste period-/filterbytet (effekterna uppdaterar aldrig texten vid refetch — pre-existerande); nettot är tvetydigt eftersom dataLaddadAnnonsering monteras dynamiskt (opålitlig annonsering). Vill man eliminera återannonseringen: nollställ periodAnnouncement när dataOkand blir sann — eget kort, inte reflexfix. Landad cc98bbe4.
 <!-- SECTION:NOTES:END -->

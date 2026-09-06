@@ -3,10 +3,10 @@ id: TASK-416.6
 title: >-
   Skiva: Registrera betalning — den nakna textraden Hämtar öppna betalningar
   ersätts med skeleton i slutgeometri (ADR-113 steg 4)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 18:35'
+updated_date: '2026-09-06 19:53'
 labels:
   - ready-for-agent
 dependencies: []
@@ -140,4 +140,6 @@ Grindar (exit-koder): typecheck 0, biome check . 0, check-langa-streck 0, build 
 Regression (staging, VariantC.tsx/importminne.ts/useBekraftelsesteg.ts orörda denna runda):
 promoverings-grinden 11/11, bekraftelsesteget.staging.test.ts 7/7, betalningar-import-
 bekraftelsesteget.staging.test.ts 10/10 (alla axe-svep gröna).
+
+REVIEW-RUNDA 3 (PR #2420, Opus, 2026-09-06, på mandat): konvergerad, 1 info bokförd här: promoverings-grindens första post-rebase-körning 20:42Z föll på en 15 s timeout i oppna() (data hann inte landa) medan staging bar CI-körning 34052164142; omkörning 20:44Z gav 11/11 grönt på samma träd, övriga sviter 16/16 20:45Z — klassad som staging-latens under delad last (A/B på samma träd), inte regression. ÖPPEN DESIGNFRÅGA MARCUS (bokförd kant, review r2): skelettets extra sm:hidden-rad speglar långa eventnamn (29 tecken bryter till två rader under sm), korta namn (fixturens 23/22 tecken) ger 24,75 px hopp åt andra hållet; lösningen är deterministisk radhöjd på GruppRubrik (whitespace-nowrap/truncate) i den facit-låsta VariantC.tsx = facit-omstämpling. Landad 331a505b.
 <!-- SECTION:NOTES:END -->
