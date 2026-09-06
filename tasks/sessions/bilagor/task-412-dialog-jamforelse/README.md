@@ -14,3 +14,7 @@ Supabase-data via `page.route`, ingen skarp data rörd), inte ögonmätta.
   får radbryta".
 - `task412-narrow-820.png` — steg 1 vid 820 px bredd (iPad-referens):
   dialogen (`size="lg"`, 576 px) håller sig långt innanför viewporten.
+- `task412-ikon-fore-strokewidth2.png` / `task412-ikon-efter-strokewidth4.png`
+  — ⋯-knappen mot tratten, 3× zoom (`deviceScaleFactor`), samma knapp,
+  före/efter `strokeWidth`-höjningen (varv 3, granskningsserverns fynd om
+  ikonstorleken).
