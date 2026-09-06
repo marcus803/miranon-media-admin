@@ -2262,8 +2262,10 @@ function BetalningsradKort({
    * `var(--mm-success-bg)` (se `components.css` § "Markerat betalningskort"
    * för båda besluten i följd) — SAMMA PLATTA som förlagorna nu, ingen egen
    * tint. Kollisionen 2026-09-01 varnade om är löst på ANNAT håll: notisrutan
-   * i `RegistreraForm.tsx` får en egen vit bakgrund i stället för att kortet
-   * späds ut (se den filens kommentar). RAMEN ÄR OFÖRÄNDRAD:
+   * i `RegistreraForm.tsx` får en egen vit bakgrund (SCOPAD till denna yta
+   * via `notisBakgrund="vit"` sedan RUNDA 2:s granskningsfynd — se anropet
+   * nedan och `RegistreraForm.tsx`s docblock) i stället för att kortet
+   * späds ut. RAMEN ÄR OFÖRÄNDRAD:
    * `--mm-betalningskort-markerad-border` ÄR fortfarande `var(--mm-success)`,
    * #606b57, nu 5,62:1 mot vit botten i notisrutan och 5,37:1 mot kortets
    * `--mm-success-bg` (WCAG 1.4.11 kräver 3:1) — se `components.css` för
@@ -2331,8 +2333,11 @@ function BetalningsradKort({
        `--mm-success-bg`, och det är vad Lotta ska se här också.
        `--mm-betalningskort-markerad-bg` pekar nu om till `var(--mm-success-
        bg)` (samma platta, ingen egen tint), och kollisionen med notisrutan
-       löses i stället hos KONSUMENTEN (`RegistreraForm.tsx` ger den vit
-       bakgrund) — mätvärdena och kontrasterna står vid tokenet i
+       löses i stället hos KONSUMENTEN — `RegistreraForm.tsx` ger den vit
+       bakgrund NÄR `notisBakgrund="vit"` (satt HÄR, av det öppna kortet
+       nedan; scopad sedan RUNDA 2:s granskningsfynd så de tre andra ytor
+       som delar formuläret via `RegistreraYta` behåller sin gröna
+       success-botten) — mätvärdena och kontrasterna står vid tokenet i
        components.css.
 
        `contrast-more` BOR I VARDERA GRENEN, aldrig i basklasserna: en
@@ -2405,6 +2410,13 @@ function BetalningsradKort({
           onKlar={onKlar}
           // Kortets gröna ram ÄR grupperingen — se docblocket vid kortet.
           visaAvdelare={false}
+          // [TASK-411, RUNDA 2 — Marcus: "Ja, begränsa till inkorgen."]
+          // BARA denna öppna, gröna kortyta sätter vit botten på
+          // success-notisen (se `notisBakgrund`s docblock i
+          // `RegistreraForm.tsx` § `PropsGemensamt` för hela resonemanget
+          // och kollisionen den löser). `RegistreraYta.tsx`s tre andra
+          // ytor lämnar propen utelämnad och behåller sin gröna botten.
+          notisBakgrund="vit"
         />
       )}
     </li>

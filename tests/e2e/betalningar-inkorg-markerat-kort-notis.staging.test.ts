@@ -10,6 +10,24 @@ import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
  * hos success-notisen: vit botten, grön kontur (oförändrad), grön ikon.
  *
  * ═══════════════════════════════════════════════════════════════════════════
+ * RUNDA 2 — GRANSKNINGSFYND, Marcus: "Ja, begränsa till inkorgen."
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Runda 1 satte notisens vita botten OVILLKORAT på `intent === 'success'` i
+ * `RegistreraForm.tsx` — ett formulär DELAT med `RegistreraYta.tsx`s tre
+ * andra ytor (`AnmalansBetalningar.tsx`, `PanelBetalningar.tsx`,
+ * `PersonBetalningar.tsx`), där notisen INTE ligger i ett grönt markerat
+ * kort. Den vita botten läckte dit och tystade deras gröna success-signal
+ * utan skäl. Fixen: en explicit `notisBakgrund` (default `'standard'`) som
+ * ENDAST `BetalningsInkorg.tsx`s öppna kort sätter till `'vit'`.
+ *
+ * DENNA SVIT PRÖVAR NU BÅDA SIDORNA: inkorgens kort (AC #2, oförändrat) OCH
+ * personkortet (nytt, `PersonBetalningar.tsx` räcker som representant för de
+ * tre andra ytorna — samma delade `RegistreraForm`, samma `notisBakgrund`-
+ * default) som ett NEGATIVT bevis: success-notisen där ska ha KVAR sin gröna
+ * `--mm-success-bg`, aldrig vit. Ikonen är grön i BÅDA fallen (universellt
+ * buggfel-fix, inte scopat).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
  * VARFÖR STAGING-E2E OCH INTE ACCEPTANCE-KLASSEN
  * ═══════════════════════════════════════════════════════════════════════════
  * Samma strukturella hinder som `betalningar-inkorg-utskicksflode.staging.
@@ -131,6 +149,129 @@ test.describe('TASK-411 — markerat kort och success-notisen bär rätt grönt'
 
     // Grön ikon, samma grönt som konturen (Marcus: "bocken sätter vi samma
     // gröna färg på som konturen").
+    const ikon = notis.locator('svg').first();
+    await expect(ikon).toHaveCSS('color', SUCCESS_GRON);
+  });
+});
+
+/** Person-ID:t behöver ingen egen betydelse — bara stabilt inom testfilen. */
+const PERSON_ID = 'rec411NotisPerson1';
+const GET_PERSON = /\/functions\/v1\/get-person\?/;
+const HAMTA_INBETALNINGAR = '**/functions/v1/hamta-inbetalningar*';
+
+/** Minimal, giltig persondetalj — samma fält-golv som
+    `persondetalj-betalningar-fellage.staging.test.ts` etablerade (bara det
+    `PersonBetalningar.tsx` faktiskt läser behöver meningsfullt innehåll).
+    `motiveringar[0].id` MÅSTE matcha den öppna betalningens
+    `anmalanRecordId` — `personOversikt` (`panel-harledningar.ts`) filtrerar
+    raderna på den unionen, annars renderas ingen rad och inget formulär. */
+function personDetail(): Json {
+  return {
+    id: PERSON_ID,
+    namn: 'Notis Personsson',
+    fornamn: 'Notis',
+    efternamn: 'Personsson',
+    email: 'notis.personsson@example.test',
+    telefon: null,
+    ort: [],
+    manuellFlagga: null,
+    aiFlagga: null,
+    anteckningar: null,
+    antalAnmalningar: 0,
+    antalDeltaganden: 0,
+    erfarenhetsniva: null,
+    erfarenhetsbadge: null,
+    senasteInteraktion: null,
+    senasteInteraktionDatum: null,
+    dagarSedanSenaste: null,
+    harAktivAnmalan: null,
+    ejGodkandMail: false,
+    radSkapad: null,
+    anmalningIds: [],
+    deltagandeIds: [],
+    aterkommande: null,
+    nastaEvent: null,
+    antalGenomfordaEvent: 0,
+    senasteDeltagandeDatum: null,
+    antalHamtningar: 0,
+    allaHamtningar: [],
+    motivering: [],
+    hamtningar: [],
+    motiveringar: [
+      {
+        id: ANMALAN_ID,
+        motivering: null,
+        event: 'Task411-kurs',
+        datum: null,
+        eventDatum: '2099-06-01',
+        ort: null,
+        eventId: EVENT_ID,
+      },
+    ],
+    flagga: null,
+    inbjudenCommunity: false,
+    skapatKontoCommunity: false,
+    historik: [],
+  };
+}
+
+test.describe('TASK-411 RUNDA 2 — personkortet behåller sin gröna success-botten', () => {
+  test('samma delade formulär, INGEN notisBakgrund-prop → notisen förblir grön, ikonen är grön ändå', async ({
+    page,
+  }) => {
+    await page.route(GET_PERSON, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ person: personDetail() }),
+      });
+    });
+    await page.route(HAMTA_OPPNA_BETALNINGAR, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ betalningar: [oppenBetalning()], forfallna: 0 }),
+      });
+    });
+    // Tom, lyckad — sektionens "Senaste inbetalningar" är inte vad detta
+    // test prövar, men anropet MÅSTE mockas (samma disciplin som
+    // `persondetalj-betalningar-fellage.staging.test.ts`): en obesvarad
+    // route hade antingen läckt mot verklig staging eller fastnat i ett
+    // laddningsläge som aldrig visar formuläret.
+    await page.route(HAMTA_INBETALNINGAR, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          inbetalningar: [],
+          kvitton: [],
+          jobbfel: [],
+          spegel: { summaPostgres: 0, summaBasen: 0, iFas: true },
+        }),
+      });
+    });
+
+    await page.goto(`/personer/${PERSON_ID}`);
+
+    // `etikett="Registrera inbetalning"` — `PersonBetalningar.tsx`s egen
+    // `RegistreraYta`-etikett, skild från inkorgens "Registrera betalning".
+    await page.getByRole('button', { name: 'Registrera inbetalning' }).click();
+    const formulär = page.getByRole('form', { name: /Registrera betalning för/ });
+    await expect(formulär).toBeVisible();
+
+    const notis = formulär.getByRole('status').filter({ has: page.locator('svg') });
+    await expect(notis).toBeVisible();
+    await expect(notis).toHaveText(/täcker|Inget kvar att betala/);
+
+    // NEGATIVT BEVIS (runda 2): INGEN `notisBakgrund`-prop skickas härifrån
+    // (`PersonBetalningar.tsx` → `RegistreraYta.tsx` → `RegistreraForm.tsx`
+    // utan den), så notisen behåller MessageBox-primitivens EGEN gröna
+    // success-botten — INTE vit, till skillnad från inkorgens kort ovan.
+    await expect(notis).toHaveCSS('background-color', SUCCESS_BG);
+
+    // Ikonen är grön ÄNDÄ — det var ett buggfel (ärvde annars kroppens
+    // neutrala textfärg), oberoende av `notisBakgrund`, se
+    // `RegistreraForm.tsx`s docblock för `Ikon`.
     const ikon = notis.locator('svg').first();
     await expect(ikon).toHaveCSS('color', SUCCESS_GRON);
   });
