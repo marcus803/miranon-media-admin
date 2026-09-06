@@ -4,7 +4,7 @@ title: 'Skiva: Intresserade — sökraden renderad i laddläget'
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 15:02'
+updated_date: '2026-09-06 15:29'
 labels:
   - ready-for-agent
 dependencies: []
@@ -54,4 +54,12 @@ Nya tester (2 st, tests/acceptance/mer-intresserade.acceptance.test.ts): "fokus 
 Bidirektionellt bevisat: båda nya testen extraherades mot den GAMLA (review-flaggade) komponentversionen via `git show 7f26d5d2...`/`1bd3f474...` (worktree-lokal fil-swap, aldrig committad) — föll korrekt med "Received: inactive" (fokus tappat). Mot den fixade versionen: gröna, 2/2.
 
 Grindar (runda 2): typecheck 0, biome 0, build grön, check-langa-streck 0, acceptance-svit 14/14 (12 tidigare + 2 nya), visual promoverings-grind 16/16 (ariaSnapshot oförändrad — data-testid/gap-ändringar syns aldrig i ariaSnapshot).
+
+RUNDA 3 (review-grinden, Marcus mandat): fynd = runda 2s isError-fix (rubrik = isError ? null : ...) tog bort h1 helt i fel-läge — en ny asymmetri (isPending fick riktig h1 i runda 2, isError ingen), bröt tillgänglighetsgolvet (11, inga undantag) och PRD-regeln (sidkrom i ALLA tillstånd). axe fångar det inte (page-has-heading-one ingår inte i WCAG-taggsviten testerna kör).
+
+Fix: h1 renderas nu ALLTID (alla tre tillstånd) — problemet flyttas i stället till fokus-useEffect:en, som nu villkoras `laddat && !isError` OCH en kontroll att användaren inte redan har fokus i sokRad (ny sokRadRef + document.activeElement.contains-koll). Den andra kontrollen skyddar även isPending→laddat om Lotta hunnit börja skriva innan datan landar. Antalsraden under h1: skeleton i isPending, null i isError (räknartext bara vid genuint laddat läge).
+
+Ny assertion i "fel (4xx)"-testet: getByRole('heading', {level:1, name:'Intresserade'}).toBeVisible(). Bidirektionellt bevisat: (a) effekten återställd till ovillkorad (temporär lokal ändring, aldrig committad) → de två runda 2-övergångstesterna föll korrekt (fokus tappat); (b) rubrik återställd till isError?null (temporär) → den nya h1-assertionen föll korrekt ("element(s) not found"). Båda återställda, alla 14 acceptance-tester gröna igen.
+
+Grindar (runda 3): typecheck 0, biome 0, build grön, check-langa-streck 0, acceptance-svit 14/14, visual promoverings-grind 16/16 (ariaSnapshot oförändrad — h1 fanns redan i fylld/tom-referenserna).
 <!-- SECTION:NOTES:END -->

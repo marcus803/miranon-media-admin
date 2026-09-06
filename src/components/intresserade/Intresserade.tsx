@@ -168,6 +168,9 @@ export function Intresserade() {
   const dataSource = useDataSource();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const announceRef = useRef(false);
+  /** [TASK-416.8, RUNDA 3] Ankaret fokus-effekten frågar INNAN den flyttar
+   * fokus till `<h1>` — se effekten nedan för varför. */
+  const sokRadRef = useRef<HTMLDivElement>(null);
   const [sok, setSok] = useState('');
   const [sortering, setSortering] = useState<Sortering>('interaktion');
 
@@ -204,13 +207,43 @@ export function Intresserade() {
     return traffar;
   }, [intresserade, sok, sortering]);
 
+  /** [TASK-416.8, RUNDA 3] Fokusflytten till `<h1>` sker BARA vid en
+   * GENUINT lyckad laddning (`laddat && !isError`), och BARA om användaren
+   * inte redan har fokus inuti `sokRad` (kollen mot `document.activeElement`
+   * nedan). Två skäl, båda review-fynd:
+   *
+   * 1. `isError` i villkoret: runda 2 löste h1-fokus-stölden i fel-läge
+   *    genom att INTE montera `<h1>` alls där (`rubrik = isError ? null :
+   *    …`). Runda 3s fynd: det bröt tillgänglighetsgolvet (11, inga
+   *    undantag) å ANNAT håll — sidan saknade sin ENDA rubrik i fel-läge,
+   *    en ny asymmetri mot syskonytorna (EventsList/PersonsList har h1
+   *    ovillkorligt) som `axe` aldrig fångar (best-practice-taggen
+   *    `page-has-heading-one` ingår inte i WCAG-taggsviten testerna kör).
+   *    `<h1>` är nu ALLTID monterad (se `rubrik` nedan) — problemet flyttas
+   *    hit, till EFFEKTEN som bestämmer NÄR den får ta fokus, i stället för
+   *    att lösas genom att gömma rubriken.
+   * 2. `sokRadRef.current?.contains(document.activeElement)`-kollen:
+   *    skyddar INTE bara isPending→isError (härledningen ovan) utan även
+   *    isPending→laddat — om Lotta hinner börja skriva i sökfältet INNAN
+   *    datan landar ska den FÖRSTA framgångsrika laddningen inte rycka
+   *    fokus från henne heller. `sokRadRef` sitter på `sokRad`s egen
+   *    container (se nedan); `.contains()` täcker både `<input>` och
+   *    `Select`-triggern.
+   *
+   * `announceRef` håller kvar sin gamla roll: hela blocket (fokus + titel)
+   * kör EXAKT en gång per genuint lyckad laddning — en isError→laddat-
+   * återhämtning räknas första gången `laddat && !isError` blir sant,
+   * oavsett att `laddat` redan varit sant under fel-fasen. */
   useEffect(() => {
-    if (laddat && !announceRef.current) {
+    if (laddat && !isError && !announceRef.current) {
       announceRef.current = true;
-      headingRef.current?.focus();
+      const harFokusISokRad = sokRadRef.current?.contains(document.activeElement) ?? false;
+      if (!harFokusISokRad) {
+        headingRef.current?.focus();
+      }
       document.title = 'Intresserade';
     }
-  }, [laddat]);
+  }, [laddat, isError]);
 
   const sidRam = <SidRam to="/mer" tillbakaEtikett="Tillbaka till Mer" />;
 
@@ -230,6 +263,7 @@ export function Intresserade() {
    * tillstånd grannarna representerar. */
   const sokRad = (
     <div
+      ref={sokRadRef}
       data-testid={SOKRAD_ANKARE}
       className="flex flex-col gap-3 px-4 sm:flex-row sm:items-end sm:justify-between"
     >
@@ -255,39 +289,38 @@ export function Intresserade() {
     </div>
   );
 
-  /** Rubriken — `null` i fel-läge, ANNARS `<header>` med den KONSTANTA
-   * `<h1>`-texten (beror aldrig på datan; renderas som riktig text redan i
-   * laddläget, aldrig som skeleton) och en TRÄFFANTALS-rad som växlar
-   * (skeleton i laddläge, äkta text i laddat läge).
+  /** Rubriken — `<header>` med `<h1>` ALLTID monterad, i ALLA tre
+   * query-tillstånd (PRD TASK-416s regel; tillgänglighetsgolvet är 11 utan
+   * undantag). Bara TRÄFFANTALS-raden under `<h1>` växlar: skeleton i
+   * laddläge, INGEN rad i fel-läge (ingen pålitlig siffra att visa när
+   * hämtningen misslyckats — samma "antal okänt"-princip som
+   * `AnmalningarSida.tsx`, TASK-416.4), äkta räknartext i laddat läge.
    *
-   * `isError ? null` är INTE en eftergift åt review-fixens princip — det är
-   * en LAGAD REGRESSION den introducerade. Första versionen av denna skiva
-   * höll `<header>` monterad i fel-läge också (bara träffantalsraden
-   * växlade), vilket råkade montera `<h1 ref={headingRef}>` i fel-läge för
-   * FÖRSTA gången någonsin. Den befintliga `useEffect`en nedan
-   * (`if (laddat && !announceRef.current) headingRef.current?.focus()`)
-   * skiljer INTE på lyckad hämtning och fel — `laddat` (`= !isPending`) blir
-   * sant för BÅDA. Diagnostik (TASK-416.8 runda 2, en markör-`evaluate` +
-   * `document.activeElement`-läsning) bevisade: DOM-noden för `sokRad`
-   * bevarades korrekt genom övergången (reconciliation-fixen fungerar) MEN
-   * fokus hoppade ändå till `<h1>` — inte för att `sokRad` tappade
-   * identitet, utan för att `<h1>` nyss blivit fokuserbar där den aldrig
-   * var det förut. `isError ? null` återställer den ENDA raden som
-   * faktiskt behöver ändras: `<header>` (och därmed `headingRef`s nod)
-   * unmountas i fel-läge precis som INNAN denna skiva, så `headingRef.
-   * current` är `null` när effekten kör (Reacts ref-cleanup sker i
-   * mutations-fasen, FÖRE passiva effekter) — `?.focus()` blir en säker
-   * no-op. Positionen (`rubrik`s syskon-plats i returträdet) är ändå FAST;
-   * det är bara VÄRDET på den positionen som får vara `null`, exakt som
-   * `datakropp` redan gör för andra tillstånd. */
-  const rubrik = isError ? null : (
+   * [RUNDA 3, review-fynd] Runda 2 löste h1-fokus-stölden i fel-läge genom
+   * att INTE montera `<header>`/`<h1>` där alls (`rubrik = isError ? null
+   * : …`). Det bytte ett fel mot ett annat: sidan saknade sin ENDA rubrik i
+   * fel-läge — en ny asymmetri mot isPending (som redan fick en riktig
+   * `<h1>` i runda 2) och mot syskonytorna EventsList/PersonsList (h1
+   * ovillkorligt på ruttnivå). `axe` fångade det aldrig — `page-has-
+   * heading-one`-best-practice-taggen ingår inte i WCAG-taggsviten
+   * testerna kör (`wcag2a/2aa/21a/21aa/22aa`), så en h1-lös sida är osynlig
+   * för den grinden.
+   *
+   * Lösningen flyttas hit-ELLER-DIT en gång till, nu till rätt plats:
+   * `<h1>` är ALLTID monterad (denna konst), och fokus-EFFEKTEN (ovan,
+   * `useEffect([laddat, isError])`) är den som numera vet NÄR den får ta
+   * fokus — `laddat && !isError`, plus en kontroll att användaren inte
+   * redan skriver i `sokRad`. Se den effektens egen kommentar för hela
+   * resonemanget; `rubrik` behöver inte känna till fokuslogiken alls
+   * längre, bara rendera formen. */
+  const rubrik = (
     <header className="flex flex-col gap-1 px-4">
       <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-3xl">
         Intresserade
       </h1>
       {!laddat ? (
         <Skeleton variant="text" className="w-32 text-small" />
-      ) : (
+      ) : isError ? null : (
         // TRÄFFANTALET SOM ARTIG LIVE-REGION (TASK-374.1 AC #3). Formen är
         // `DokumentYta.tsx`s "aria-live + aria-atomic UTAN role=status"
         // (§ SAMMANFATTNINGEN, rad ~3436): `role="status"` implicerar SAMMA

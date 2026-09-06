@@ -320,6 +320,14 @@ test.describe('Intresserade-vy (Fas 6e L1 L3 — LÄS-vy via get-leads, promover
     mockLeads(network, [], { status: 404 });
     await page.goto('/mer/intresserade');
     await expect(page.getByRole('alert')).toContainText('Kunde inte hämta intresserade');
+
+    // TASK-416.8 RUNDA 3 (review-fynd): sidan ska ALDRIG sakna sin enda
+    // rubrik — runda 2 monterade av misstag ingen <h1> alls i fel-läge
+    // (löste en fokus-bugg genom att gömma rubriken, en ny asymmetri mot
+    // isPending/laddat och mot syskonytorna EventsList/PersonsList). `axe`
+    // fångar INTE en saknad h1 (page-has-heading-one ingår inte i
+    // WCAG-taggsviten nedan) — den här assertionen är den enda som gör det.
+    await expect(page.getByRole('heading', { level: 1, name: 'Intresserade' })).toBeVisible();
   });
 
   test('loading-state är tillgängligt (aria-busy + status)', async ({ page, network }) => {
