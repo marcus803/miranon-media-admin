@@ -755,6 +755,12 @@ export function RegistreraForm(props: Props) {
       {utfall &&
         (() => {
           const { intent, Ikon } = UTFALL_FORM[utfall.ton];
+          // TASK-411 (Marcus prod-fynd 2026-09-06): bara SUCCESS-utfallet
+          // (det öppna kortets gröna platta) får den vita botten och den
+          // gröna ikonen nedan. warning/info-boxarna är ORÖRDA — Marcus bad
+          // uttryckligen bara om success-notisen, och `over`/`delvis`/`okant`
+          // sitter aldrig inuti ett grönmarkerat kort.
+          const arSuccess = intent === 'success';
           return (
             <MessageBox
               intent={intent}
@@ -779,15 +785,38 @@ export function RegistreraForm(props: Props) {
                  länge den är öppen bor avvikelsen på den ENDA yta han pekade
                  på.
 
-                 DEN GÖR DESSUTOM JOBBET I FÄRGKROCKEN (fynd 2): rutan ligger
-                 inuti ett grönt markerat kort, och när både kort och ruta är
-                 gröna är det kanten — inte fyllnaden — som säger var rutan
-                 börjar. Se `--mm-betalningskort-markerad-bg` i components.css
-                 för mätvärdena. */
-              className="border-y border-r"
+                 FÄRGKROCKEN (fynd 2) ÄR TILLBAKA, LÖST PÅ ANNAT HÅLL
+                 [TASK-411, Marcus prod-fynd 2026-09-06]: rutan ligger inuti
+                 ett grönt markerat kort, och sedan TASK-411 bär kortet ÅTER
+                 hela `--mm-success-bg` (se `components.css` § "Markerat
+                 betalningskort" BESLUT 2). Utan motåtgärd vore rutan
+                 återigen osynlig mot kortet — precis 2026-09-01-kollisionen.
+                 Marcus dom denna gång: *"Vi testar med att success-notisen
+                 får vit bakgrund då, men konturen behåller vi … och bocken
+                 sätter vi samma gröna färg på som konturen."* `bg-(--mm-
+                 surface)` nedan (bara för `success` — `arSuccess` ovan) ger
+                 rutan sin egen vita botten; KANTEN är oförändrad (fortfarande
+                 intent-färgens `border-color` från primitiven, kompletterad
+                 av `border-y border-r` här). Ingen ny token, ingen global
+                 ändring — MessageBox-primitiven och dess ~30 andra
+                 konsumenter är orörda (ADR-103 B2 fortsatt låst). */
+              className={arSuccess ? 'border-y border-r bg-(--mm-surface)' : 'border-y border-r'}
             >
               <span aria-hidden="true" className="flex items-start gap-2">
-                <Ikon size={18} className="mt-0.5 shrink-0" />
+                {/* Bocken får samma gröna som konturen (Marcus, samma dom):
+                    `--mm-messagebox-success-text` ÄR `var(--mm-success)`,
+                    identisk med kantens `--mm-messagebox-success-border`.
+                    Utan detta ärver ikonen boxens neutrala kroppstext-färg
+                    (`--mm-messagebox-body-text`) — mätt: den var INTE grön
+                    förut, trots att bakgrunden var det. */}
+                <Ikon
+                  size={18}
+                  className={
+                    arSuccess
+                      ? 'text-(color:--mm-messagebox-success-text) mt-0.5 shrink-0'
+                      : 'mt-0.5 shrink-0'
+                  }
+                />
                 <span>{utfall.text}</span>
               </span>
 
