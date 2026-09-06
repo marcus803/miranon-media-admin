@@ -1,15 +1,19 @@
 import { expect, test } from '@playwright/test';
 import {
   antalRegistreradeKvitton,
+  antalSattAlla,
   arRegistrerbar,
   avstamning,
   type BekraftelseRad,
   baraOmkorning,
+  berorsAvSattAlla,
   blockrader,
   byggRader,
   grupperaRader,
   omkorningsUrval,
   radbelopp,
+  saknarBelopp,
+  sattAllaBelopp,
   summera,
   vantandeKvitton,
 } from '../../src/components/betalningar/bekraftelsesteg-harledningar';
@@ -400,4 +404,111 @@ test('antalRegistreradeKvitton räknar registrerade rader med kvitto-kryss', () 
   // "Skicka N kvitton" det talet efter en körning hade den erbjudit ETT kvitto
   // där TVÅ väntar.
   expect(summera(rader).antalKvitton).toBe(1);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   § SÄTT ALLA BELOPP (TASK-402.8) — knapparnas regel, kant för kant
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Regeln har fyra kanter (`berorsAvSattAlla`), och tre av dem är sådana en
+   implementation lätt får fel åt SAMMA håll: den rör en rad som inte skulle
+   röras. Fallen nedan prövar därför alltid BÅDE att rätt rader ändrades och
+   att fel rader står kvar oförändrade. */
+
+test('sattAllaBelopp sätter varje markerad rads EGEN kandidat, inte ett delat belopp', () => {
+  const rader = morgonen();
+  // Anna/Björn har betalat avgiften (kandidat `allt` = resten, 1 500);
+  // Cecilia/David har inte betalat något (kandidat `allt` = hela priset).
+  const efter = sattAllaBelopp(rader, 'allt');
+  expect(efter.map(radbelopp)).toEqual([1500, 1500, 2500, 3500]);
+  // NEGATIV KONTROLL mot den troliga genvägen "alla får samma tal": David är
+  // på ett event med ett ANNAT pris, och hans belopp måste skilja sig från
+  // Cecilias trots att båda betalat noll.
+  expect(radbelopp(efter[2])).not.toBe(radbelopp(efter[3]));
+});
+
+test('sattAllaBelopp med avgift ger avgiftKvar, och lämnar raden UTAN avgiftskandidat orörd', () => {
+  const rader = morgonen();
+  const fore = rader.map(radbelopp);
+  const efter = sattAllaBelopp(rader, 'avgift');
+  // Cecilia/David har hela avgiften kvar ⇒ 1 000.
+  expect(radbelopp(efter[2])).toBe(1000);
+  expect(radbelopp(efter[3])).toBe(1000);
+  // KANTEN: Anna/Björn har redan betalat avgiften, alltså INGEN
+  // avgifts-kandidat (`harledBeloppsknappar` drar bort knappen). Deras
+  // belopp står kvar på appens förslag — de töms INTE, och de flyttas inte
+  // till "Behöver din hand".
+  expect(radbelopp(efter[0])).toBe(fore[0]);
+  expect(radbelopp(efter[1])).toBe(fore[1]);
+  expect(efter[0].ejGenomforbar).toBeNull();
+  expect(saknarBelopp(efter[0])).toBe(false);
+  // Och objektet är IDENTISKT, inte bara likt: en orörd rad ska inte ens ge
+  // en ny referens.
+  expect(efter[0]).toBe(rader[0]);
+});
+
+test('en rad utan kandidat alls (pris saknas i basen) rörs inte av något av valen', () => {
+  const rader = byggRader(
+    [
+      betalning({
+        anmalanRecordId: 'rec-utan-pris',
+        personNamn: 'Utan Pris',
+        gallandePris: null,
+        summaInbetalt: 0,
+      }),
+    ],
+    IDAG,
+    'Swish',
+  );
+  expect(berorsAvSattAlla(rader[0], 'avgift')).toBe(false);
+  expect(berorsAvSattAlla(rader[0], 'allt')).toBe(false);
+  expect(antalSattAlla(rader, 'allt')).toBe(0);
+  expect(sattAllaBelopp(rader, 'allt')[0]).toBe(rader[0]);
+});
+
+test('raderna i "Behöver din hand" rörs inte, ens när de HAR en kandidat', () => {
+  const rader = morgonen();
+  // Lotta har tömt Cecilias fält — raden ligger i hand-högen (`saknarBelopp`),
+  // men hennes kandidater finns kvar. AC #3: högen rörs inte.
+  rader[2] = { ...rader[2], belopp: '' };
+  expect(saknarBelopp(rader[2])).toBe(true);
+  expect(berorsAvSattAlla(rader[2], 'allt')).toBe(false);
+
+  const efter = sattAllaBelopp(rader, 'allt');
+  expect(efter[2].belopp).toBe('');
+  expect(antalSattAlla(rader, 'allt')).toBe(3);
+});
+
+test('avmarkerade och redan registrerade rader rörs inte; en FALLERAD rad gör det', () => {
+  const rader = morgonen();
+  rader[0] = { ...rader[0], markerad: false };
+  rader[1] = { ...rader[1], utfall: { klass: 'registrerad', text: 'Registrerad' } };
+  rader[2] = { ...rader[2], utfall: { klass: 'fel', text: 'nekad' } };
+
+  expect(berorsAvSattAlla(rader[0], 'allt')).toBe(false);
+  expect(berorsAvSattAlla(rader[1], 'allt')).toBe(false);
+  // Den fallerade raden ÄR med: "Försök igen" ska kunna köras med ett nytt
+  // belopp, samma resonemang som `arRegistrerbar` bär.
+  expect(berorsAvSattAlla(rader[2], 'allt')).toBe(true);
+
+  const efter = sattAllaBelopp(rader, 'allt');
+  expect(efter[0]).toBe(rader[0]);
+  expect(efter[1]).toBe(rader[1]);
+  expect(radbelopp(efter[2])).toBe(2500);
+  expect(antalSattAlla(rader, 'allt')).toBe(2);
+});
+
+test('avstämningen räknar om efter ett sätt-alla-tryck', () => {
+  // FÖRE: två slutbetalningar à 1 500 och två avgifter à 1 000.
+  expect(avstamning(morgonen())).toEqual([
+    { klass: 'avgift', antal: 2, summa: 2000 },
+    { klass: 'resten', antal: 2, summa: 3000 },
+  ]);
+  // EFTER "Hela beloppet": Anna/Björn behåller sin `resten`-klass (deras
+  // hela rest ÄR 1 500), Cecilia/David hoppar från `avgift` till `allt`.
+  expect(avstamning(sattAllaBelopp(morgonen(), 'allt'))).toEqual([
+    { klass: 'resten', antal: 2, summa: 3000 },
+    { klass: 'allt', antal: 2, summa: 6000 },
+  ]);
+  expect(summera(sattAllaBelopp(morgonen(), 'allt')).summa).toBe(9000);
 });

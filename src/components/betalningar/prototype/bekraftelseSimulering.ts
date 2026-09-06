@@ -8,6 +8,8 @@ import {
   genvagsbelopp,
   type Kvittoläge,
   type Radvarden,
+  type SattAllaVal,
+  sattAllaBelopp,
   summera,
 } from '../bekraftelsesteg-harledningar';
 import type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
@@ -149,6 +151,16 @@ export function useBekraftelsesteg(
           : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null };
       }),
     );
+  }, []);
+
+  /**
+   * [TASK-402.8] "Sätt alla belopp" — SAMMA rena regel som den skarpa hooken
+   * kallar (`sattAllaBelopp` i `../bekraftelsesteg-harledningar`). Prototypen
+   * är granskningsytan Marcus tittar på (`?data=fixtur`), så knapparna måste
+   * göra exakt samma sak här som i den skarpa vägen.
+   */
+  const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
+    setRader((tidigare) => sattAllaBelopp(tidigare, val));
   }, []);
 
   const sattBetalsattAlla = useCallback((betalsatt: Betalsatt) => {
@@ -352,6 +364,7 @@ export function useBekraftelsesteg(
     batchDatum,
     summering,
     sattGenvag,
+    sattAllaBelopp: sattAllaBeloppNu,
     sattBetalsattAlla,
     sattDatumAlla,
     sattRadBelopp,

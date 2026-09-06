@@ -22,6 +22,8 @@ import {
   type ObestamdImportrad,
   omkorningsUrval,
   type Radvarden,
+  type SattAllaVal,
+  sattAllaBelopp,
   summera,
   vantandeKvitton,
 } from './bekraftelsesteg-harledningar';
@@ -263,6 +265,16 @@ export function useBekraftelsesteg(
           : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null };
       }),
     );
+  }, []);
+
+  /**
+   * [TASK-402.8] "Sätt alla belopp" — regeln bor i härledningen, inte här.
+   * `setRader` med den rena funktionen är hela implementationen; kanterna
+   * (rad utan kandidat, hand-högen, redan registrerad, avmarkerad) prövas i
+   * `tests/api/bekraftelsesteg-harledningar.test.ts`.
+   */
+  const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
+    setRader((tidigare) => sattAllaBelopp(tidigare, val));
   }, []);
 
   const sattBetalsattAlla = useCallback((betalsatt: Betalsatt) => {
@@ -655,6 +667,7 @@ export function useBekraftelsesteg(
     batchDatum,
     summering,
     sattGenvag,
+    sattAllaBelopp: sattAllaBeloppNu,
     sattBetalsattAlla,
     sattDatumAlla,
     sattRadBelopp,

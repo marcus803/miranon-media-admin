@@ -10,6 +10,7 @@ import { Button } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
+  antalSattAlla,
   baraOmkorning as arBaraOmkorning,
   arRegistrerbar,
   avstamning,
@@ -19,6 +20,8 @@ import {
   grupperaRader,
   type ObestamdImportrad,
   radbelopp,
+  type SattAllaVal,
+  saknarBelopp,
   summera,
   vantandeKvitton,
 } from '../bekraftelsesteg-harledningar';
@@ -27,7 +30,6 @@ import { visaKronor } from '../belopp-inmatning';
 import type { InkorgsRad } from '../inkorg-harledningar';
 import { RegistreraForm } from '../RegistreraForm';
 import { RegistreratNuBlock } from '../RegistreratNuBlock';
-import { RadMarken } from './radfalt';
 
 /**
  * BEKRÄFTELSESTEGETS FORM — variant C, "Avvikelse-först" (S121, Marcus val
@@ -101,10 +103,24 @@ const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
   saknas: { ett: 'rad utan belopp', flera: 'rader utan belopp' },
 };
 
-/** Raden saknar ett belopp — bulkvalet gick inte ihop, eller fältet är tomt. */
-function saknarBelopp(rad: BekraftelseRad): boolean {
-  return rad.ejGenomforbar !== null || rad.belopp.trim() === '';
-}
+/**
+ * [TASK-402.8] SÄTT ALLA BELOPP — knapparnas ord, och beskedets.
+ *
+ * ETIKETTERNA BÄR INGA TAL, med avsikt. "1 000 kr" och "2 500 kr" hade varit
+ * en LÖGN på den här sidan: priset är per event OCH per person, så en rad
+ * vars deltagare redan betalat 2 000 av 2 500 får 500 av samma knapptryck som
+ * ger en annan rad 2 500. Knappen namnger alltså VAD beloppet är, aldrig hur
+ * mycket — talet står kvar per rad, där det är sant.
+ *
+ * TVÅ KNAPPAR OCH INTE EN TOGGEL: valet kan vara osatt (appens förslag står
+ * kvar tills hon trycker), och det kan tryckas om efter en per-rad-ändring.
+ * Samma skäl `BeloppsgenvagsKnappar` (`radfalt.tsx`) valde vanliga knappar
+ * framför en pill-toggel i varianterna A/B.
+ */
+const SATT_ALLA: { val: SattAllaVal; etikett: string; besked: string }[] = [
+  { val: 'avgift', etikett: 'Anmälningsavgift', besked: 'anmälningsavgiften' },
+  { val: 'allt', etikett: 'Hela beloppet', besked: 'hela beloppet' },
+];
 
 function plural(antal: number, ett: string, flera: string): string {
   return `${antal} ${antal === 1 ? ett : flera}`;
@@ -192,6 +208,18 @@ export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
 function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const handId = useId();
   const dubblettId = useId();
+  /* BESKEDET EFTER ETT SÄTT-ALLA-TRYCK. Ingen synlig pixel ändras av det —
+     raderna och avstämningen SÄGER redan vad som hände för den som ser dem.
+     Den som inte ser dem hör i stället "6 belopp satta till
+     anmälningsavgiften" ur regionen nedanför knapparna.
+
+     EGEN REGION OCH INTE HUVUDETS STATUSRAD, öppet bokfört som avvikelse mot
+     kortets AC #4-ordalydelse: huvudets rad bär räkningen "N av N
+     inbetalningar markerade", som ett tryck INTE ändrar. Skrev vi beskedet
+     dit hade markeringsräkningen försvunnit — och den är facit-låst form
+     (facit.json § FORMEN). Två regioner annonserar var sin sak; en hade
+     tystat den ena. */
+  const [sattAllaBesked, setSattAllaBesked] = useState('');
   const { rader } = modell;
   const registrerar = modell.fas === 'registrerar';
   const [tryckt, setTryckt] = useState<'registrera' | 'skicka' | null>(null);
@@ -246,6 +274,17 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const registrerbara = bas.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
   const avstamda = useMemo(() => avstamning(markerade), [markerade]);
+  /* Hur många rader varje knapp faktiskt rör. Noll ⇒ knappen är avstängd:
+     en knapp som inte gör något ska inte gå att trycka. */
+  const sattAllaTraffar = useMemo(
+    () => new Map(SATT_ALLA.map((v) => [v.val, antalSattAlla(kvar, v.val)])),
+    [kvar],
+  );
+  const sattAlla = (val: SattAllaVal, besked: string) => {
+    const antal = sattAllaTraffar.get(val) ?? 0;
+    modell.sattAllaBelopp(val);
+    setSattAllaBesked(`${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`);
+  };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
   // sjönk "10 inbetalningar 12 000 kr" rad för rad under körningen (mätt).
   const summering = useMemo(() => summera(bas), [bas]);
@@ -420,6 +459,54 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
       {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
       {kvar.length > 0 && (
         <div className="flex flex-col gap-3">
+          {/* ═══ SÄTT ALLA BELOPP — UNDER LISTAN (TASK-402.8) ═══════════════
+              Marcus 2026-09-06: *"jag vill ha dem under listan, inte över …
+              Listan ska vara i fokus direkt när hon kommer till
+              bulkregistreringen."* Knapparna står därför sist av det som rör
+              raderna, precis före avstämningen de påverkar — inte överst,
+              där varianterna A/B hade sina bulkval innan varv 12 rev dem.
+
+              ETIKETTEN BÄRS AV VARJE KNAPPS EGET NAMN, inte av ett
+              `role="group"`. Tre skäl, i den ordningen: en gruppetikett
+              annonseras inte tillförlitligt av alla skärmläsare, så
+              "Anmälningsavgift, knapp" hade kunnat läsas helt utan sitt
+              sammanhang; `aria-label` ger i stället varje knapp hela
+              meningen, med den synliga texten inuti sig (WCAG 2.5.3 Label in
+              Name); och ett `fieldset`/`legend`-par — som Biomes
+              `useSemanticElements` föreslår för `role="group"` — är fel både
+              semantiskt (gruppen bär två HANDLINGAR, inga formulärfält) och i
+              layout (en `legend` renderas som fieldsettens caption och blir
+              aldrig en flex-item, så etiketten hade hoppat upp på egen rad).
+              Förlagan `BeloppsgenvagsKnappar` (`radfalt.tsx`) kom undan med
+              ett fieldset just för att dess legend var `sr-only`.
+
+              Den synliga texten står alltså kvar för ögat och upprepas i
+              knapparnas namn för örat — samma mönster som `ForslagsKnappar`
+              nedan, där "Förslag" är en synlig span utan egen roll. */}
+          <div className="flex flex-col gap-2 px-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-body text-text-secondary">Sätt alla belopp:</span>
+              {SATT_ALLA.map((v) => (
+                <Button
+                  key={v.val}
+                  size="sm"
+                  intent="secondary"
+                  emphasis="outline"
+                  aria-label={`Sätt alla belopp till ${v.besked}`}
+                  isDisabled={registrerar || (sattAllaTraffar.get(v.val) ?? 0) === 0}
+                  onPress={() => sattAlla(v.val, v.besked)}
+                >
+                  {v.etikett}
+                </Button>
+              ))}
+            </div>
+            {/* Regionen finns FÖRE sitt innehåll och är tom tills något trycks
+                — en live-region som monteras samtidigt som texten annonseras
+                inte tillförlitligt (WAI-ARIA APG § Live Regions). */}
+            <p role="status" className="sr-only">
+              {sattAllaBesked}
+            </p>
+          </div>
           <dl className="flex flex-col gap-1 px-4">
             {avstamda.map((post) => (
               <div key={post.klass} className="flex items-baseline justify-between gap-3">
@@ -564,17 +651,45 @@ function EfterlagetsBlock({
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Kortets huvud — avatar · namn (· märke), inkorgens `BetalningsradKort` med
- * EN rad; märket inline efter namnet så alla kort förblir exakt lika höga.
+ * Kortets huvud — avatar · namn, inkorgens `BetalningsradKort` med EN rad.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * [TASK-402.8] PILLSEN ÄR BORTA (Marcus 2026-09-06: *"Pillsen bort, det blir
+ * bra."*)
+ * ═════════════════════════════════════════════════════════════════════════════
+ * "Förfallen" och "Obekräftad" satt här via `RadMarken` (`radfalt.tsx`), i
+ * både ihopfällt och öppet läge och i båda högarna. De hörde aldrig hemma på
+ * DEN HÄR sidan: obekräftad registreras som vanligt och bekräftelsen sköts på
+ * Åtgärds-sidan (grillningens beslut 5), och en passerad deadline ändrar
+ * ingenting i handlingen "registrera det som kommit in". Signalerna bor i
+ * INKORGEN, där Lotta prioriterar — dess markup är egen
+ * (`BetalningsInkorg.tsx` § RadInnehall) och orörd av denna skiva.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * [TASK-402.8] NAMNET KLIPPS — KORTET FÅR ALDRIG BYTA HÖJD
+ * ═════════════════════════════════════════════════════════════════════════════
+ * Marcus: *"Då måste namnet 'klippas' för INGET får hända med kortet."* Utan
+ * `truncate` radbryter ett långt namn, kortet växer, och listans rytm bryts
+ * mitt i en avstämning mot kontoutdraget.
+ *
+ * `truncate` VID ALLA BREDDER, till skillnad från inkorgens `sm:truncate`:
+ * regeln "kortet byter aldrig höjd" har ingen brytpunkt. `min-w-0` på både
+ * behållaren och namnet är det som gör klippet möjligt — utan den kan en
+ * flex-item inte krympa under sitt innehåll.
+ *
+ * HELA NAMNET FINNS KVAR. Texten är oavkortad i DOM:en, så skärmläsaren läser
+ * den i sin helhet (klippet är rent visuellt); `title` ger den seende samma
+ * text vid hovring. `flex-wrap` är borta med märkena — det fanns bara för att
+ * pillsen skulle kunna falla ned på en egen rad.
  */
 function KortHuvud({ rad, vald }: { rad: BekraftelseRad; vald: boolean }) {
-  const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
   return (
     <>
       <InitialAvatar namn={rad.inkorg.namn} />
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="font-medium text-body">{rad.inkorg.namn}</span>
-        {harMarken && <RadMarken rad={rad} />}
+      <span className="flex min-w-0 flex-1 items-center gap-x-2">
+        <span className="min-w-0 truncate font-medium text-body" title={rad.inkorg.namn}>
+          {rad.inkorg.namn}
+        </span>
         <span className="sr-only">{vald ? 'Markerad' : 'Inte markerad'}</span>
       </span>
     </>

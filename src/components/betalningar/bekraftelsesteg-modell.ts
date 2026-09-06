@@ -5,6 +5,7 @@ import type {
   Fas,
   ObestamdImportrad,
   Radvarden,
+  SattAllaVal,
   Summering,
 } from './bekraftelsesteg-harledningar';
 import type { Betalsatt } from './betalsatt-minne';
@@ -84,6 +85,18 @@ export type BekraftelsestegModell = {
   batchDatum: string;
   summering: Summering;
   sattGenvag: (genvag: Beloppsgenvag) => void;
+  /**
+   * [TASK-402.8] "Sätt alla belopp": varje MARKERAD rad utanför "Behöver din
+   * hand" får sin egen kandidat för valet, och en rad utan kandidat rörs inte.
+   * Regeln är ren och bor i `sattAllaBelopp` (`bekraftelsesteg-harledningar`);
+   * båda modell-implementationerna kallar den, så formen kan inte se skillnad.
+   *
+   * OBLIGATORISK OCH INTE VALFRI, till skillnad från importfälten nedan:
+   * `VariantC` renderar knapparna ovillkorligt, så en modell utan metoden vore
+   * en yta med två knappar som inte gör något. Prototypens simulering får
+   * därför samma tre rader kod tills `TASK-402.6` river den.
+   */
+  sattAllaBelopp: (val: SattAllaVal) => void;
   sattBetalsattAlla: (betalsatt: Betalsatt) => void;
   sattDatumAlla: (datum: string) => void;
   sattRadBelopp: (nyckel: string, belopp: string) => void;

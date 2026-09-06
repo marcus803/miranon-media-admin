@@ -218,6 +218,87 @@ export function arRegistrerbar(rad: BekraftelseRad): boolean {
   return radbelopp(rad) !== null;
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   SÄTT ALLA BELOPP (TASK-402.8) — TVÅ KNAPPAR, RADENS EGNA KANDIDATER
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Marcus 2026-09-06, prod-granskningen: *"i 8 av 10 fall … betalar dem 1000 kr
+   (anmälningsavgift) först och sedan resterande belopp (1500). Men ibland
+   betalar ju folk allt direkt … Appen ska fortfarande föreslå 'rätt' belopp
+   som den gör nu, men Lotta kan liksom skriva över beloppen med denna knapp."*
+
+   REGELN ÄR REN OCH BOR HÄR, INTE I EN HOOK. Två implementationer av modellen
+   (`useBekraftelsesteg` och prototypens simulering) ska ge exakt samma utfall,
+   och regeln har fyra kanter som är värda ett api-pure-test var — inte en
+   granskning per implementation.
+
+   VARFÖR DEN INTE ÄR `sattGenvag`. Genvägarna (`Beloppsgenvag`, varianterna
+   A/B) satte ALLA rader och gav en rad UTAN kandidat en tom siffra plus
+   `ejGenomforbar` — alltså flyttade den raden till "Behöver din hand". Det är
+   raka motsatsen till vad kortets AC #3 kräver: *"rader utan kandidat och
+   Behöver-din-hand-högen rörs inte"*. Formen som Marcus omprövat är SMALARE än
+   genvägarna, och att återanvända deras mekanik hade smugit in en flytt Lotta
+   aldrig bad om. Genvägarna lever kvar orörda tills `TASK-402.6` river A/B. */
+
+/** De två sätt-alla-valen. En äkta delmängd av `Beloppsgenvag`, med avsikt. */
+export type SattAllaVal = 'avgift' | 'allt';
+
+/**
+ * Raden saknar ett belopp — den bor i "Behöver din hand".
+ *
+ * Flyttad hit ur `VariantC.tsx` i `TASK-402.8`: hög-indelningen och
+ * sätt-alla-regeln måste läsa SAMMA predikat, annars kan en rad vara i högen
+ * enligt formen och utanför den enligt regeln.
+ */
+export function saknarBelopp(rad: BekraftelseRad): boolean {
+  return rad.ejGenomforbar !== null || rad.belopp.trim() === '';
+}
+
+/**
+ * Ändrar ett sätt-alla-tryck denna rad? Fyra villkor, alla ur kortets AC #3.
+ *
+ *   1. MARKERAD. En avmarkerad rad räknas ingenstans och registreras inte —
+ *      att ändra dess belopp hade varit en osynlig ändring.
+ *   2. INTE REDAN REGISTRERAD. Raden är bokförd; dess belopp är historik.
+ *      (En rad vars registrering FALLERADE är däremot med — den ska kunna
+ *      köras om med ett nytt belopp, samma regel som `arRegistrerbar`.)
+ *   3. INTE I "BEHÖVER DIN HAND". Högen väntar på Lottas hand, och ett
+ *      bulk-tryck som fyllde den hade tagit ifrån henne just det beslutet.
+ *   4. RADEN HAR KANDIDATEN. `genvagsbelopp` ger `null` när valet inte går
+ *      ihop (avgiften redan betald, pris utan fack, pris saknas i basen) —
+ *      då rörs raden inte alls. Den behåller appens förslag.
+ */
+export function berorsAvSattAlla(rad: BekraftelseRad, val: SattAllaVal): boolean {
+  if (!rad.markerad) return false;
+  if (rad.utfall?.klass === 'registrerad') return false;
+  if (saknarBelopp(rad)) return false;
+  return genvagsbelopp(rad, val) !== null;
+}
+
+/** Hur många rader ett sätt-alla-tryck faktiskt rör — knappens besked. */
+export function antalSattAlla(rader: readonly BekraftelseRad[], val: SattAllaVal): number {
+  return rader.filter((rad) => berorsAvSattAlla(rad, val)).length;
+}
+
+/**
+ * Raderna efter ett sätt-alla-tryck. Berörda rader får sin EGEN kandidat
+ * (`avgiftKvar` respektive `kvar`, ur inkorgens `harledBeloppsknappar`) — det
+ * finns inget delat belopp, eftersom priset är per event och per person.
+ *
+ * Orörda rader returneras som SAMMA objekt, inte en kopia: React ska kunna se
+ * på referensen att kortet inte ändrats.
+ */
+export function sattAllaBelopp(
+  rader: readonly BekraftelseRad[],
+  val: SattAllaVal,
+): BekraftelseRad[] {
+  return rader.map((rad) => {
+    if (!berorsAvSattAlla(rad, val)) return rad;
+    const belopp = genvagsbelopp(rad, val);
+    return belopp === null ? rad : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null };
+  });
+}
+
 /**
  * [TASK-402.3 AC #6] OMKÖRNINGS-URVALET: vilka rader "Försök igen" faktiskt
  * kör. Regeln är EN mening — de registrerbara rader som redan fallerat EN
