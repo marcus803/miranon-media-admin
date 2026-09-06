@@ -108,8 +108,18 @@ export const handlers = [
   // navigeras till hermetiskt i DENNA skiva (`playwright.config.ts` hårdkodar
   // `VITE_FEATURE_BETALNINGAR: 'av'` för acceptance/visual/webblasarbeteende-
   // dev-servern, se `fixture-data.ts` § OPPNA_BETALNINGAR_RESPONSE för hela
-  // motiveringen) — handlern registreras ändå så EF-kontraktet finns
-  // dokumenterat och kontraktsvakten (nightly) har något att jämföra mot.
+  // motiveringen) — handlern registreras ändå, som en tom normallägesrespons
+  // redo den dag flagg-/WS-frågan är löst (TASK-409).
+  //
+  // VAD DEN INTE GÖR (review-runda 1, FYND 2 — rättat påstående): den nattliga
+  // `kontraktsvakt`-sviten (`tests/kontraktsvakt/kontraktsvakt.staging.test.ts`)
+  // itererar ENDAST över `KONTRAKTSFALL`/`FELKONTRAKTSFALL`
+  // (`kontraktsfall.ts`) — den läser aldrig denna handler-lista. Ingen post
+  // för `hamta-oppna-betalningar` finns där, och den här skivan lägger ingen:
+  // ett kontraktsfall öppnar en nattlig live-jämförelse mot staging och är
+  // ett eget beslut, inte en bieffekt av att registrera en tom mock-handler.
+  // `kontraktsfall.ts`s egen § om paritet säger detta rakt ut redan: listan
+  // är en KONVENTION, inte en grind.
   http.get(EF('hamta-oppna-betalningar'), () => json(OPPNA_BETALNINGAR_RESPONSE)),
   // [TASK-338.3] Räckviddsdialogens Plats-axel läser SAMMA lista som
   // Mer → Platser (`usePlacesList`), så varje öppning av

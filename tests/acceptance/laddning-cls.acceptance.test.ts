@@ -1,4 +1,5 @@
-import { delay, http } from 'msw';
+import type { NetworkFixture } from '@msw/playwright';
+import { http } from 'msw';
 import type { z } from 'zod';
 import type {
   ActivityStatementSchema,
@@ -108,18 +109,33 @@ import { expect, type Page, test } from './acceptance-bas';
  * `anmalan-detalj.acceptance.test.ts`, `mat-cls.ts`s egna
  * webblasarbeteende-användare).
  *
- * ── VARFÖR `delay()` OCH INTE EN HÅLL-BAR MOCK ──────────────────────────
+ * ── HALLBARMOCK, INTE `delay()` (review-runda 1, FYND 4 — rättat) ───────
+ *
+ * En TIDIGARE version av denna fil använde `delay(700)` och lät den FÖRSTA
+ * assertionen i varje `vanta*Klar` (skelettet synligt) polla mot det
+ * övergående fönster skelettet existerar i. Det var FEL: `page.goto()`
+ * löser ut på webbläsarens `load`-event, som i en Vite-SPA kan inträffa
+ * långt före ELLER efter att React bootat och den fördröjda hämtningen
+ * ens startat — den kvarvarande delen av 700 ms-fönstret när assertionen
+ * BÖRJAR polla är alltså okänd och krymper under CI-last. Missas fönstret
+ * blir grinden röd UTAN regression — precis den falsk-röd-klass
+ * `CONTRIBUTING.md` § Rött-först finns för att förhindra. Ett tidigare
+ * docblock här hävdade "gör ALDRIG ett sådant antagande" — det stämde inte
+ * för just den assertionen.
  *
  * Husets etablerade "håll obesvarat tills testet släpper"-mönster
- * (`hallbarMock`, se t.ex. `event-checkin-laddlage.acceptance.test.ts`)
- * finns för att undvika `TASK-3`-klassens FASTA TIDSFÖNSTER-flak — där ett
- * test antog "svaret har INTE hunnit landa vid tidpunkt T" och racade mot
- * verklig belastning. Den här filen gör ALDRIG ett sådant antagande: varje
- * assertion väntar in sitt sluttillstånd (Playwrights egen retry-loop),
- * aldrig en fast tidpunkt. `delay(700)` (mitten av uppdragets 600–800 ms)
- * används bara för att GARANTERA att skelettet hinner måla minst en bildruta
- * innan svaret landar — exakt samma, redan etablerade `msw`-idiom som
- * `mer-aktivitetshistorik-laddlage.acceptance.test.ts`s andra test.
+ * (`hallbarMock`, se `event-checkin-laddlage.acceptance.test.ts` och
+ * `mer-aktivitetshistorik-laddlage.acceptance.test.ts:97,227`) tar bort
+ * TIDSANTAGANDET helt: svaret kan ALDRIG landa förrän testet explicit
+ * släpper det, så "skelettet är synligt"-assertionen har inget fönster att
+ * missa — den lyckas deterministiskt, oavsett hur seg CI-maskinen är.
+ * `matCLSOverNavigering`s `navigeraOchVantaKlar`-callback är exakt rätt
+ * plats att släppa mocken: mellan skelett-assertionen och
+ * innehålls-assertionen, INUTI samma callback som redan väntar in
+ * sluttillståndet. Varje `vanta*Klar` nedan gör därför: (1) assertera
+ * skelettet synligt, (2) släpp mocken, (3) assertera innehållet synligt.
+ * Samtliga assertioner väntar nu in sitt sluttillstånd via Playwrights egen
+ * retry-loop — steg (1) är inte längre ett undantag.
  *
  * ── MÄTTA TAL (körning 2026-09-06, samtliga sex testfall gröna) ─────────
  *
@@ -186,25 +202,56 @@ function att(overrides: Partial<AttRow> = {}): AttRow {
   };
 }
 
-function mockaCheckin(): ReturnType<typeof http.get>[] {
-  return [
+/** Håll-bar mock-state (`hallbarMock`-mönstret, `event-checkin-laddlage.
+ *  acceptance.test.ts`/`mer-aktivitetshistorik-laddlage.acceptance.test.ts`):
+ *  varje parkerad request väntar på sitt EGET löfte tills `slappAlla()`
+ *  anropas — deterministiskt, inget tidsfönster att missa. */
+type HallbarState = { slappAlla: () => void };
+
+function nyHallbarState(): HallbarState & { vantaOmHallen: () => Promise<void> } {
+  // `hall`-flaggan är INTE kosmetisk — utan den missar en handler som
+  // startar SENT (t.ex. attendance/registrations/event fyrar i olika
+  // React-renderingspass, inte garanterat i samma bildruta) fönstret:
+  // `slappAlla()` löser bara det som redan HUNNIT köa sig i `parkerade`, och
+  // en request som queuear EFTER det blir stående för evigt (mätt: en
+  // sällsynt men reproducerbar hängning, "Alma Almqvist" aldrig synlig,
+  // 16 s timeout). Samma form som `event-checkin-laddlage.acceptance.
+  // test.ts`s etablerade `hallbarMock`: `hall` kollas VARJE gång en ny
+  // request kommer in, inte bara vid uppstart.
+  let hall = true;
+  const parkerade: Array<() => void> = [];
+  return {
+    vantaOmHallen: () =>
+      hall ? new Promise<void>((slapp) => parkerade.push(slapp)) : Promise.resolve(),
+    slappAlla() {
+      hall = false;
+      for (const slapp of parkerade.splice(0)) slapp();
+    },
+  };
+}
+
+function hallbarCheckin(network: NetworkFixture): HallbarState {
+  const st = nyHallbarState();
+  network.use(
     http.get(EF('get-event'), async () => {
-      await delay(700);
+      await st.vantaOmHallen();
       return json(EVENT_DETAIL_RESPONSE);
     }),
     http.get(EF('get-attendance'), async () => {
-      await delay(700);
+      await st.vantaOmHallen();
       return json({ attendance: [att()] });
     }),
     http.get(EF('get-registrations'), async () => {
-      await delay(700);
+      await st.vantaOmHallen();
       return json({ registrations: [reg()] });
     }),
-  ];
+  );
+  return st;
 }
 
-async function vantaCheckinKlar(p: Page) {
+async function vantaCheckinKlar(p: Page, mocken: HallbarState) {
   await expect(p.getByTestId('dorrlista-skelettrad').first()).toBeVisible();
+  mocken.slappAlla();
   await expect(p.getByText('Alma Almqvist')).toBeVisible();
   await expect(p.getByTestId('dorrlista-skelettrad')).toHaveCount(0);
 }
@@ -246,10 +293,11 @@ function statement({
   } satisfies Statement;
 }
 
-function mockaAktivitetshistorik(): ReturnType<typeof http.get>[] {
-  return [
+function hallbarAktivitetshistorik(network: NetworkFixture): HallbarState {
+  const st = nyHallbarState();
+  network.use(
     http.get(EF('get-activity-log'), async () => {
-      await delay(700);
+      await st.vantaOmHallen();
       return json({
         statements: [
           statement({ objectName: 'CLS-mätningens post', timestamp: '2026-09-01T10:00:00.000Z' }),
@@ -258,21 +306,24 @@ function mockaAktivitetshistorik(): ReturnType<typeof http.get>[] {
         total: 1,
       });
     }),
-  ];
+  );
+  return st;
 }
 
-async function vantaAktivitetshistorikKlar(p: Page) {
+async function vantaAktivitetshistorikKlar(p: Page, mocken: HallbarState) {
   await expect(p.getByTestId('aktivitetshistorik-skeleton-rad').first()).toBeVisible();
+  mocken.slappAlla();
   await expect(p.getByText('CLS-mätningens post')).toBeVisible();
   await expect(p.getByTestId('aktivitetshistorik-skeleton-rad')).toHaveCount(0);
 }
 
 // ─── Anmälningar (416.4) ────────────────────────────────────────────────
 
-function mockaAnmalningar(): ReturnType<typeof http.get>[] {
-  return [
+function hallbarAnmalningar(network: NetworkFixture): HallbarState {
+  const st = nyHallbarState();
+  network.use(
     http.get(EF('get-registrations'), async () => {
-      await delay(700);
+      await st.vantaOmHallen();
       return json({
         registrations: [
           reg({
@@ -284,37 +335,57 @@ function mockaAnmalningar(): ReturnType<typeof http.get>[] {
         ],
       });
     }),
-  ];
+  );
+  return st;
 }
 
-async function vantaAnmalningarKlar(p: Page) {
-  await expect(p.getByText('Laddar anmälningarna', { exact: false })).toBeAttached();
+/**
+ * Anmälningar saknar en per-rad skelett-testid (till skillnad från Check-in/
+ * Aktivitetshistorik) — `AnmalningarSida.tsx`s laddläge bär i stället EN
+ * `role="status"`-region (`aria-live="polite" aria-busy="true"`) som
+ * omsluter BÅDE den sr-only annonserande texten OCH de synliga
+ * `Skeleton`-blocken. Review-runda 1, FYND 4: den ursprungliga versionen
+ * asserterade bara den sr-only-noden (`toBeAttached()`), vilket bevisar att
+ * NÅGON laddindikator finns i DOM men inget om att den är SYNLIG. Regionen
+ * SJÄLV är den synliga containern — `toBeVisible()` på den asserterar att de
+ * synliga skelettblocken den omsluter faktiskt renderas, utan att uppfinna
+ * en ny testid i källkoden.
+ *
+ * CSS-attributlokator (`div[role="status"]` + `hasText`), INTE
+ * `getByRole('status', { name })`: appen bär FLERA `role="status"`-regioner
+ * (`OfflineIndicator`/`Sidbytesindikator`/`Forberedelseskarm`/
+ * `AppUpdateBanner`), och `getByRole`s ARIA-namnberäkning matchade oväntat
+ * INGEN av dem mot den sr-only-texten som namn i denna körning (mätt,
+ * `element(s) not found` trots att `getByText` på samma sträng hittade
+ * noden) — en utredning av ARIA-namnberäkningens exakta regel ligger
+ * utanför denna fix-runda. `hasText` matchar mot textinnehåll (samma
+ * disambiguering som accessible-name hade gett, om den hade fungerat) och
+ * är mätt att fungera deterministiskt.
+ */
+async function vantaAnmalningarKlar(p: Page, mocken: HallbarState) {
+  const laddstatus = p.locator('div[role="status"]', { hasText: 'Laddar anmälningarna' });
+  await expect(laddstatus).toBeVisible();
+  mocken.slappAlla();
   await expect(p.getByText('Beata Berg')).toBeVisible();
-  await expect(p.getByText('Laddar anmälningarna', { exact: false })).not.toBeAttached();
+  await expect(laddstatus).toHaveCount(0);
 }
 
 // ─── Testerna (AC #1, AC #4) ────────────────────────────────────────────
 
-test.describe('CLS-grinden — laddning utan hopp (TASK-416.14)', () => {
+test.describe('CLS-grinden — sidkromets stabilitet över skeleton→innehåll (TASK-416.14)', () => {
   test.describe('Check-in (416.1)', () => {
     test('desktop 1280×720', async ({ page, network }) => {
-      network.use(...mockaCheckin());
-      const cls = await matCLSOverNavigering(
-        page,
-        DESKTOP,
-        `/event/${EVENT_ID}/narvaro`,
-        vantaCheckinKlar,
+      const mocken = hallbarCheckin(network);
+      const cls = await matCLSOverNavigering(page, DESKTOP, `/event/${EVENT_ID}/narvaro`, (p) =>
+        vantaCheckinKlar(p, mocken),
       );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
 
     test('mobil 390×844', async ({ page, network }) => {
-      network.use(...mockaCheckin());
-      const cls = await matCLSOverNavigering(
-        page,
-        MOBIL,
-        `/event/${EVENT_ID}/narvaro`,
-        vantaCheckinKlar,
+      const mocken = hallbarCheckin(network);
+      const cls = await matCLSOverNavigering(page, MOBIL, `/event/${EVENT_ID}/narvaro`, (p) =>
+        vantaCheckinKlar(p, mocken),
       );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
@@ -322,23 +393,17 @@ test.describe('CLS-grinden — laddning utan hopp (TASK-416.14)', () => {
 
   test.describe('Aktivitetshistorik (416.3)', () => {
     test('desktop 1280×720', async ({ page, network }) => {
-      network.use(...mockaAktivitetshistorik());
-      const cls = await matCLSOverNavigering(
-        page,
-        DESKTOP,
-        '/mer/aktivitetshistorik',
-        vantaAktivitetshistorikKlar,
+      const mocken = hallbarAktivitetshistorik(network);
+      const cls = await matCLSOverNavigering(page, DESKTOP, '/mer/aktivitetshistorik', (p) =>
+        vantaAktivitetshistorikKlar(p, mocken),
       );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
 
     test('mobil 390×844', async ({ page, network }) => {
-      network.use(...mockaAktivitetshistorik());
-      const cls = await matCLSOverNavigering(
-        page,
-        MOBIL,
-        '/mer/aktivitetshistorik',
-        vantaAktivitetshistorikKlar,
+      const mocken = hallbarAktivitetshistorik(network);
+      const cls = await matCLSOverNavigering(page, MOBIL, '/mer/aktivitetshistorik', (p) =>
+        vantaAktivitetshistorikKlar(p, mocken),
       );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
@@ -346,19 +411,18 @@ test.describe('CLS-grinden — laddning utan hopp (TASK-416.14)', () => {
 
   test.describe('Anmälningar (416.4)', () => {
     test('desktop 1280×720', async ({ page, network }) => {
-      network.use(...mockaAnmalningar());
-      const cls = await matCLSOverNavigering(
-        page,
-        DESKTOP,
-        '/mer/anmalningar',
-        vantaAnmalningarKlar,
+      const mocken = hallbarAnmalningar(network);
+      const cls = await matCLSOverNavigering(page, DESKTOP, '/mer/anmalningar', (p) =>
+        vantaAnmalningarKlar(p, mocken),
       );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
 
     test('mobil 390×844', async ({ page, network }) => {
-      network.use(...mockaAnmalningar());
-      const cls = await matCLSOverNavigering(page, MOBIL, '/mer/anmalningar', vantaAnmalningarKlar);
+      const mocken = hallbarAnmalningar(network);
+      const cls = await matCLSOverNavigering(page, MOBIL, '/mer/anmalningar', (p) =>
+        vantaAnmalningarKlar(p, mocken),
+      );
       expect(cls).toBeLessThan(CLS_TROSKEL);
     });
   });

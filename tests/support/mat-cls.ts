@@ -152,10 +152,13 @@ import type { Page } from '@playwright/test';
  * att mäta in) på bekostnad av att just denna mätning slutar pröva mot
  * verkliga Google Fonts-förhållanden. Bokfört i `TASK-307`s kort-notes.
  */
-/** Global tillfällig hemvist för den ackumulerade CLS-summan (`window.__mmClsSum`).
- *  Egen typad accessor i stället för `as unknown as` upprepat på varje
- *  anropsplats (TASK-416.14-extraktionen). */
-type ClsWindow = { __mmClsSum: number };
+/** Global tillfällig hemvist för den ackumulerade CLS-summan
+ *  (`window.__mmClsSum`) + en engångsspärr (`__mmClsInstalled`, review-runda
+ *  1 FYND 5). Båda fälten OPTIONELLA med avsikt: frånvaro av `__mmClsSum` är
+ *  den signal `lasAvClsSumma` fail-closed:ar på (se dess docblock), inte ett
+ *  typfel att tysta bort. Egen typad accessor i stället för `as unknown as`
+ *  upprepat på varje anropsplats (TASK-416.14-extraktionen). */
+type ClsWindow = { __mmClsSum?: number; __mmClsInstalled?: boolean };
 
 /**
  * Sidans EGEN observatörskod (körs i browser-kontext via `page.evaluate`
@@ -165,16 +168,31 @@ type ClsWindow = { __mmClsSum: number };
  * Extraherad ur `matCLS` (TASK-307) oförändrad; TASK-416.14 la till en andra
  * anropsplats som behöver installera den FÖRE i stället för EFTER
  * page-settle (se `matCLSOverNavigering` nedan).
+ *
+ * ENGÅNGSKONTRAKT (review-runda 1, FYND 5): `installeraLayoutShiftObservator`
+ * registrerar detta script via `page.addInitScript`, som kör vid VARJE
+ * efterföljande navigering/frame-attach i sidans HELA livstid — inte bara
+ * den första. Utan vakten hade en andra navigering på SAMMA `page` (två
+ * `matCLSOverNavigering`-anrop, eller en hård omnavigering mitt i en
+ * mätning) nollställt `__mmClsSum` och lagt till en ANDRA
+ * `PerformanceObserver`, så varje efterföljande shift räknats två gånger.
+ * `__mmClsInstalled`-flaggan gör funktionen idempotent: andra och senare
+ * körningar i samma dokument-liv är no-ops. Ingen anropsplats i DENNA fil
+ * träffar fällan i dag (ett anrop per test) — spärren är förebyggande för
+ * framtida återanvändning av denna EXPORTERADE bibliotekskod.
  */
 function installeraObservatorIBrowsern(): void {
-  (window as unknown as ClsWindow).__mmClsSum = 0;
+  const w = window as unknown as ClsWindow;
+  if (w.__mmClsInstalled) return;
+  w.__mmClsInstalled = true;
+  w.__mmClsSum = 0;
   const observer = new PerformanceObserver((list) => {
     for (const entry of list.getEntries() as unknown as Array<{
       value: number;
       hadRecentInput: boolean;
     }>) {
       if (!entry.hadRecentInput) {
-        (window as unknown as ClsWindow).__mmClsSum += entry.value;
+        w.__mmClsSum = (w.__mmClsSum ?? 0) + entry.value;
       }
     }
   });
@@ -192,11 +210,36 @@ export async function installeraLayoutShiftObservator(page: Page): Promise<void>
   await page.addInitScript(installeraObservatorIBrowsern);
 }
 
-/** Läser av den ackumulerade CLS-summan sedan observatören installerades.
- *  `?? 0`: en sida som (av något skäl) aldrig hann köra init-scriptet ska
- *  ge 0, inte ett `undefined`-kastat TypeError i en `expect(...).toBeLessThan`. */
-export function lasAvClsSumma(page: Page): Promise<number> {
-  return page.evaluate(() => (window as unknown as ClsWindow).__mmClsSum ?? 0);
+/**
+ * Läser av den ackumulerade CLS-summan sedan observatören installerades.
+ *
+ * FAIL-CLOSED (review-runda 1, FYND 3 — rättat): en tidigare version läste
+ * `__mmClsSum ?? 0`, vilket gjorde ett DÖTT instrument (init-scriptet aldrig
+ * kört — glömd `installeraLayoutShiftObservator`, dokumentet ersatt under
+ * mätningen, en framtida race) OMÖJLIGT att skilja från ett GENUINT
+ * CLS-resultat på 0: båda gav en grön `expect(cls).toBeLessThan(0.05)` utan
+ * att någon mätning faktiskt ägt rum. Samma disciplin som husets övriga
+ * grindar (`review:policy`/`review:backstopp` exit 64/3 vid ett strukturellt
+ * antagande som brustit) — en grind som tyst degraderar till "alltid grönt"
+ * vid instrumentbortfall är farligare än ingen grind alls. `typeof`-kollen
+ * körs I BROWSERN (inte efteråt i Node): TypeScript-typningen `?:` säger
+ * inget om RUNTIME-närvaro, och serialiseringen över `page.evaluate`s gräns
+ * kräver ett värde `page.evaluate` faktiskt kan skicka tillbaka (`null`, inte
+ * `undefined`-kastat innan gränsen ens passerats).
+ */
+export async function lasAvClsSumma(page: Page): Promise<number> {
+  const sum = await page.evaluate(() => {
+    const rått = (window as unknown as ClsWindow).__mmClsSum;
+    return typeof rått === 'number' ? rått : null;
+  });
+  if (sum === null) {
+    throw new Error(
+      'lasAvClsSumma: window.__mmClsSum saknas — observatören verkar aldrig ha ' +
+        'installerats (installeraLayoutShiftObservator/matCLS glömdes, eller ' +
+        'dokumentet byttes under mätningen). Fail-closed med avsikt: se docblocket.',
+    );
+  }
+  return sum;
 }
 
 export async function matCLS(
