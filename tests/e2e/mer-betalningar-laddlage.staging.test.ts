@@ -76,6 +76,60 @@ import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
  * just `y`/`height` (±1 px, den diagnostiserade och ENDA kända orsaken) men
  * FORTSATT STRIKTA (`toEqual`) på `x`/`width` — en regression i den
  * horisontella positionen eller bredden ska fortfarande fälla testet.
+ *
+ * ═══════════════════════════════════════════════════════════════════════
+ * RUNDA 2 (review-grinden, Marcus mandat 2026-09-06) — TVÅ FYND
+ * ═══════════════════════════════════════════════════════════════════════
+ * FYND 1 (warning, RÄTTAT i BetalningsInkorg.tsx): `boundingBox()`-
+ * mätningen ovan bevisar GEOMETRI, aldrig DOM-IDENTITET. Runda 1:s tre
+ * separata `return`-satser (isPending/isError/laddat) höll `headerBlock`/
+ * `filterRadBlock` på OLIKA array-positioner mellan grenarna (den laddade
+ * grenen sköt in en `<p role="status">` FÖRE `headerBlock`, ingen av de
+ * andra två gjorde det) — Reacts keyless reconciliation matchar barn
+ * POSITIONELLT, så vid isPending→laddat monterades `headerBlock`s och
+ * `filterRadBlock`s hela subträd OM. Konsekvensen: fokus i menytriggern
+ * eller — allvarligare — INSKRIVEN TEXT i FilterRads sökfält (som redan
+ * är monterat och skrivbart under isPending) gick förlorad exakt vid
+ * datalandningen. `BetalningsInkorg.tsx` har nu ETT enda returträd med SEX
+ * fasta syskon-positioner (`sidRam`/`statusAnnons`/`headerBlock`/
+ * `realtidsfelBlock`/`filterRadBlock`/`datakropp`) — samma mönster som
+ * `Intresserade.tsx` (TASK-416.8, #2395). Testerna "RUNDA 2, review-fynd
+ * 1 …" nedan är BEVISET — men INTE i sin första ELLER andra form (TVÅ
+ * falska positiva/negativa längs vägen, se testernas eget docblock
+ * omedelbart ovanför den första): den ENDA formen som faktiskt
+ * DISKRIMINERAR bugg från fix är en `data-*`-DOM-identitetsmarkör satt
+ * DIREKT på sökfältets nod, UTANFÖR Reacts renderflöde — monteras noden om
+ * ersätts hela elementet av en FÄRSK nod utan markören. Fokus och värde på
+ * sökfältet är BÅDA sanna påståenden om slutläget men INTE i sig
+ * diskriminerande (en egen "fokusera sökfältet vid första lyckade
+ * laddning"-effekt, filens § "SÖKFÄLTET FÅR FOKUS", ger samma observerbara
+ * resultat oavsett om noden bytts ut eller ej). Tvåsidigt röd/grön-
+ * bevisat i markör-formen: röd mot commit `b4d8f41a` (markören försvann —
+ * remount bevisat), grön efter runda 2-fixen (se PR-kroppen/kortets notes
+ * för samtliga körningar, inklusive de två förkastade formernas utfall).
+ *
+ * isError→laddat UTAN sidladdning kräver ett TRIGGER-KNEP: `useOppna
+ * Betalningar` har ingen manuell "Försök igen"-knapp, och den globala
+ * `refetchOnWindowFocus` (router.ts) är STALETIME-GRINDAD (`shouldFetchOn`
+ * i @tanstack/query-core, verifierad mot den installerade källkoden,
+ * 5.102.2) — en precis felad hämtning är inte "stale" på 5 minuter, så ett
+ * `visibilitychange`-event hinner aldrig trigga om testet. `router.ts`s
+ * `refetchOnReconnect: 'always'` är DÄREMOT VILLKORSLÖST (samma
+ * `shouldFetchOn`, `value === "always"`-grenen kringgår staleTime helt) —
+ * ett `offline`-event följt av ett `online`-event på `window`
+ * (`onlineManager`s enda lyssnare, samma källa) tvingar VARJE aktiv fråga
+ * att hämta om, omedelbart. Testet byter `page.route`-svaret till det
+ * lyckade INNAN reconnect-händelsen triggas.
+ *
+ * FYND 2 (warning, BOKFÖRT — EJ ÅTGÄRDAT, avsiktligt): `datakroppPending`
+ * (BetalningsInkorg.tsx) reserverar Markera-knappens rad OVILLKORLIGT,
+ * medan den RIKTIGA `MarkeringsAtgardsRad` bara renderas när
+ * `markerbaraIds.length > 0`. En GENUINT TOM inkorg (noll öppna
+ * betalningar) får därför ett litet layout-hopp vid landning — skelettet
+ * speglar det SANNOLIKA fallet (Lotta har öppna betalningar, PRD:ns hela
+ * premiss), inte tomläget. Samma avvägningsklass som Hem-kortens tomläge
+ * (PRD § Öppna frågor, Marcus designval) — rättas inte här, och denna fil
+ * bygger medvetet INGET testscenario för en tom inkorg i isPending.
  */
 
 const OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
@@ -184,7 +238,7 @@ test.describe('Betalningsinkorgen — sidkromet i alla query-tillstånd (TASK-41
     // TASK-412) öppnar menyn som bär "Importera kontoutdrag" — ÄVEN medan
     // frågan väntar. Detta ÄR importknappen (se BetalningsInkorg.tsx §
     // BESLUT 3 — ⋯-knappen är riven, rubriken är triggern).
-    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar' });
+    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar', exact: true });
     await expect(rubrikTrigger).toBeVisible();
     await rubrikTrigger.click();
     await expect(page.getByRole('menuitem', { name: 'Importera kontoutdrag' })).toBeVisible();
@@ -208,7 +262,7 @@ test.describe('Betalningsinkorgen — sidkromet i alla query-tillstånd (TASK-41
 
     await expect(page.getByText('Betalningarna kunde inte hämtas')).toBeVisible();
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Betalningar' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Betalningar', exact: true })).toBeVisible();
 
     const filterrad = page.getByTestId('betalningar-filterrad');
     await expect(filterrad).toBeVisible();
@@ -273,5 +327,104 @@ test.describe('Betalningsinkorgen — sidkromet i alla query-tillstånd (TASK-41
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();
     expect(results.violations).toEqual([]);
+  });
+
+  /** [RÖD-BEVIS-FYND, körd mot HEAD innan runda 2-fixen — TVÅ FÖRSÖK,
+   * BÅDA FALSKA POSITIVA FÖRE DEN TREDJE FORMEN NEDAN]
+   *
+   * FÖRSTA FÖRSÖKET asserterade bara `sokfalt`s `toBeFocused()`/
+   * `toHaveValue()` — GRÖNT även mot den BUGGIGA koden. Roten: `Betalnings
+   * Inkorg.tsx` har en EGEN effekt (`useEffect(() => { if (oppna &&
+   * !annonseratRef.current) { sokRef.current?.focus(); } }, [oppna])`,
+   * filens § "SÖKFÄLTET FÅR FOKUS") som ALLTID fokuserar sökfältet första
+   * gången datan landar, OAVSETT om fältets DOM-nod är densamma eller
+   * nymonterad. Och VÄRDET överlever alltid, remount eller ej, eftersom
+   * det är ETT KONTROLLERAT fält (`value={sokterm}`) bundet till state i
+   * den aldrig omonterade FÖRÄLDERN — bara BARNET (`<input>`) kan
+   * monteras om.
+   *
+   * ANDRA FÖRSÖKET bytte till en `data-*`-DOM-identitetsmarkör (satt
+   * UTANFÖR Reacts renderflöde — en ersatt nod saknar den per definition)
+   * PLUS ett fokus-prov på rubrik-triggern (headerBlock), i tron att INGEN
+   * effekt rör den. GRÖNT MOT DEN BUGGIGA KODEN, RÖTT MOT DEN FIXADE:
+   * omvänt av avsikten. Roten: SAMMA "sökfältet får fokus"-effekt yankar
+   * fokus BORT från triggern och TILL sökfältet varje gång datan landar
+   * FÖRSTA gången — ett MEDVETET designval (filens docblock: "SÖKFÄLTET
+   * FÅR FOKUS, INTE RUBRIKEN — ETT MEDVETET AVSTEG"), inte ett fel. Formen
+   * diskriminerade alltså ingenting: den föll på fixad kod av ett skäl som
+   * inte har med remount-buggen att göra alls.
+   *
+   * SLUTFORMEN (nedan): ENDAST DOM-identitetsmarkören på sökfältet bär
+   * beviskraften — en ersatt nod kan ALDRIG bära markören vidare, oavsett
+   * vilken fokus-effekt som körs efteråt. Fokus- och värde-assertionerna
+   * på sökfältet står KVAR som ett fullständigt, SANT påstående om
+   * slutläget (Lotta ser sin skrivna text OCH står med fokus i fältet) —
+   * men de är INTE i sig diskriminerande (se ovan), bara markören är.
+   * Röd/grön-bevisat i denna form: röd mot commit `b4d8f41a` (markören
+   * försvann — remount bevisat), grön efter runda 2-fixen — se PR-kroppen/
+   * kortets notes för samtliga tre körningar. */
+  test('RUNDA 2, review-fynd 1 — sökfältets DOM-identitet, fokus och inskrivna text överlever isPending→laddat', async ({
+    page,
+  }) => {
+    await mockaEvent(page);
+    const st = hallbarMock(page);
+    await page.goto('/mer/betalningar');
+    await expect(page.getByTestId('betalningar-skeleton-kort').first()).toBeVisible();
+
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök på namn, telefon eller belopp' });
+    await sokfalt.fill('Anna');
+    await sokfalt.evaluate((el) => {
+      el.dataset.domIdentitetsprov = 'runda2';
+    });
+
+    st.slappAlla();
+    await expect(page.getByText('Anna Andersson')).toBeVisible();
+
+    // DET DISKRIMINERANDE BEVISET: markören sitter kvar ⇒ SAMMA DOM-nod,
+    // ingen remount av FilterRad/sökfältet vid isPending→laddat.
+    await expect(sokfalt).toHaveAttribute('data-dom-identitetsprov', 'runda2');
+    // Fullständig bild av slutläget (sant, men se docblocket ovan för
+    // varför detta ENSAMT inte hade dugt som bevis).
+    await expect(sokfalt).toHaveValue('Anna');
+    await expect(sokfalt).toBeFocused();
+  });
+
+  test('RUNDA 2, review-fynd 1 — sökfältets DOM-identitet, fokus och inskrivna text överlever isError→laddat', async ({
+    page,
+  }) => {
+    await mockaEvent(page);
+    await mockaFel(page);
+    await page.goto('/mer/betalningar');
+    await expect(page.getByText('Betalningarna kunde inte hämtas')).toBeVisible();
+
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök på namn, telefon eller belopp' });
+    await sokfalt.fill('Anna');
+    await sokfalt.evaluate((el) => {
+      el.dataset.domIdentitetsprov = 'runda2';
+    });
+
+    // isError→laddat UTAN sidladdning: se filhuvudets docblock ("RUNDA 2 …
+    // FYND 1") för VARFÖR `offline`+`online`-knepet är det ENDA
+    // deterministiska sättet att tvinga fram en ny hämtning här
+    // (`refetchOnReconnect: 'always'` kringgår staleTime helt;
+    // `refetchOnWindowFocus` gör det INTE). Svaret byts till det lyckade
+    // INNAN reconnect-händelsen triggas.
+    await page.unroute(OPPNA_BETALNINGAR);
+    await page.route(OPPNA_BETALNINGAR, (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ betalningar: [EN_BETALNING], forfallna: 0 }),
+      }),
+    );
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+    });
+    await expect(page.getByText('Anna Andersson')).toBeVisible();
+
+    await expect(sokfalt).toHaveAttribute('data-dom-identitetsprov', 'runda2');
+    await expect(sokfalt).toHaveValue('Anna');
+    await expect(sokfalt).toBeFocused();
   });
 });

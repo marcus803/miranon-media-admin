@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:20'
-updated_date: '2026-09-06 16:18'
+updated_date: '2026-09-06 17:05'
 labels:
   - ready-for-agent
 dependencies: []
@@ -109,4 +109,73 @@ GRINDAR (exitkoder mätta):
   Ny fil tests/e2e/mer-betalningar-laddlage.staging.test.ts: 6/6 passed
     (AC#1 pending, AC#1 error, AC#2 mätning, axe pending 0 fel, axe error
     0 fel — plus samma svit körd en andra gång för att verifiera stabilitet).
+
+RUNDA 2 (review-grinden, orkestreraren på Marcus mandat 2026-09-06) — TVÅ FYND.
+
+FYND 1 (warning, RÄTTAT): runda 1:s tre separata `return`-satser
+(isPending/isError/laddat) höll `headerBlock`/`filterRadBlock` på OLIKA
+array-positioner mellan grenarna — den laddade grenen sköt in ett
+`<p role="status">{N} kvarvarande...</p>` FÖRE `headerBlock` (position 1),
+medan isPending/isError hade `headerBlock` direkt efter `sidRam` (position 0).
+Reacts keyless reconciliation matchar barn POSITIONELLT: vid isPending→laddat
+monterades headerBlock/filterRadBlock om, vilket kunde tappa fokus/inskriven
+text i FilterRads sökfält exakt vid landningen — osynligt för
+boundingBox-mätningen (den mäter geometri, inte DOM-identitet).
+
+FIX: BetalningsInkorg.tsx har nu ETT enda returträd med SEX fasta
+syskon-positioner (sidRam, statusAnnons, headerBlock, realtidsfelBlock,
+filterRadBlock, datakropp) — samma mönster som Intresserade.tsx (TASK-416.8,
+#2395). `datakropp` är en ternary (isPending/isError/laddat) som bär ALLT
+som tidigare stod i de tre separata returstatements.
+
+BEVISFORMEN KRÄVDE TVÅ OMTAG (bokfört öppet, inte dolt): ett första försök
+asserterade sökfältets `toBeFocused()`/`toHaveValue()` rakt av — grönt även
+mot den BUGGIGA koden (falskt positivt), eftersom BetalningsInkorg redan har
+en egen effekt som fokuserar sökfältet vid FÖRSTA lyckade laddning oavsett
+DOM-identitet, och värdet är kontrollerat state som överlever oavsett
+remount. Ett andra försök lade till ett fokus-prov på rubrik-triggern
+(headerBlock) — grönt mot BUGGIG kod, RÖTT mot FIXAD kod (omvänt av
+avsikten), eftersom samma "sökfältet får fokus"-effekt MEDVETET yankar fokus
+bort från triggern vid varje första lyckad laddning (filens egen docblock,
+"ETT MEDVETET AVSTEG"). Slutformen använder en `data-*`-DOM-identitetsmarkör
+satt direkt på sökfältets nod (utanför Reacts renderflöde) som det ENDA
+diskriminerande beviset; fokus/värde på sökfältet kvarstår som sanna men
+icke-diskriminerande påståenden om slutläget.
+
+RÖD/GRÖN-BEVISAT, TVÅSIDIGT, TVÅ GÅNGER (en gång per bevisform):
+- Slutformen kördes mot commit b4d8f41a (runda 1, INNAN fixen): BÅDA
+  RUNDA-2-testerna RÖDA — DOM-markören försvann ("unexpected value null"),
+  dvs sökfältet monterades faktiskt om.
+- Samma testfil kördes mot den fixade koden: BÅDA GRÖNA.
+- Reverten gjordes med `git checkout HEAD -- <fil>` (ALDRIG git stash, delas
+  mellan worktrees) + en scratchpad-kopia av den fixade filen, återställd
+  efteråt och verifierad byte-identisk (`diff` — inga skillnader).
+
+isError→laddat krävde ett separat triggerknep: useOppnaBetalningar har ingen
+manuell "Försök igen"-knapp, och den globala refetchOnWindowFocus
+(router.ts) är staleTime-grindad (verifierat mot installerad
+@tanstack/query-core 5.102.2 källkod, shouldFetchOn) — en nyss felad
+hämtning är inte "stale" på 5 minuter, så ett visibilitychange-event hinner
+aldrig trigga om testet. router.ts:s refetchOnReconnect: 'always' är
+DÄREMOT villkorslöst (samma shouldFetchOn, value==="always"-grenen kringgår
+staleTime helt) — ett offline-event följt av ett online-event på window
+tvingar EN NY hämtning omedelbart, oavsett staleTime.
+
+FYND 2 (warning, BOKFÖRT — EJ ÅTGÄRDAT, avsiktligt): datakroppPending
+reserverar Markera-knappens rad OVILLKORLIGT, men den riktiga
+MarkeringsAtgardsRad renderas bara när markerbaraIds.length > 0. En GENUINT
+TOM inkorg (noll öppna betalningar) får därför ett litet layout-hopp vid
+landning — skelettet speglar det SANNOLIKA fallet (Lotta har öppna
+betalningar, PRD:ns hela premiss), inte tomläget. Samma avvägningsklass som
+Hem-kortens tomläge (PRD § Öppna frågor, Marcus designval). Rättas inte här;
+bokfört explicit i testfilens docblock och här.
+
+GRINDAR EFTER RUNDA 2 (exitkoder mätta):
+  typecheck: 0 · biome check .: 0 (18 varningar/83 infos repo-brett
+    förbefintliga, orörda) · build: 0 · check-langa-streck.mjs: 0
+    (323 filer, 0 fynd).
+  Ny fil (8 tester totalt nu, inkl. de 2 nya): 8/8 passed mot
+    chromium-authenticated/staging.
+  Befintlig betalnings-e2e-svit (8 filer + den nya = 9): 68 passed,
+    8 skipped (avsiktligt), 0 failed.
 <!-- SECTION:NOTES:END -->

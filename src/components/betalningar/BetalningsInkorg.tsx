@@ -1627,89 +1627,147 @@ export function BetalningsInkorg() {
     </div>
   );
 
-  if (isPending) {
-    return (
-      <section className="flex flex-col gap-4">
-        {sidRam}
-        {headerBlock}
-        {filterRadBlock}
-        {/* [TASK-416.2, AC #1/#2] STATUSBESKEDET STÅR FÖR SIG SJÄLVT —
-            `sr-only` (Tailwinds `position: absolute`-form) tas ur flödet
-            helt, så det kan aldrig knuffa något annat. Det bär HELA
-            "laddar"-beskedet; blocken nedan är rent dekorativa
-            (`Skeleton` är alltid `aria-hidden` i sig själv, se
-            primitivens docblock) och behöver ingen egen `role`. */}
-        <p className="sr-only" role="status" aria-live="polite" aria-busy="true">
-          Laddar betalningar ...
-        </p>
-        {/* MARKERA-KNAPPENS RAD RESERVERAS ÄVEN HÄR (mätt, inte antaget):
-            en tidigare version av detta skelett saknade denna rad helt och
-            sköt FÖRSTA KORTET 73 px för högt jämfört med det laddade läget
-            (`MarkeringsAtgardsRad`s `mt-6 px-4`-rad, `Button size="sm"`
-            ~32 px hög — headless Playwright, 1280×720, se PR-kroppen för
-            båda mätningarna, före och efter). Samma `mt-6 px-4`-geometri
-            som den riktiga raden (rad ~1946 nedan), en enda knapp-formad
-            skeleton i stället för "Markera". EGEN, direkt `<section>`-barn
-            — INTE nästlad i statusstycket ovan — så sidans egen `gap-4`
-            (16 px) faller på plats identiskt med den laddade radens. */}
-        <div className="mt-6 px-4">
-          <Skeleton variant="text" className="h-8 w-24 rounded-full" />
-        </div>
-        {/* Grupprubrik + kortlista. Kortskelettet härmar den LADDADE
-            listans exakta boxmodell (grupprubrik + `-mx-4`-kort i
-            `bg-bg-muted`, `BetalningsradKort`s stängda form: avatar
-            `size-9`, namnrad `text-body`, metarad `text-caption`, en tom
-            badge-rad-spegel så `gap-1`-mellanrummet blir detsamma som en
-            rad UTAN förfallen-/obekräftad-/spegelSlapar-pillar, plus en
-            knapp-yta för "Registrera betalning") så att FÖRSTA kortets
-            boundingBox blir identisk pending/laddat (mätt, se
-            PR-kroppen). `<div>`, inte `<ul>/<li>` — samma val som
-            `EventsList.tsx`/`AnmalningarSida.tsx` gör i sina
-            skeleton-grenar: rent dekorativa block ska inte annonseras som
-            en (tom) lista. */}
-        <div className="flex flex-col gap-2 px-4">
-          <Skeleton variant="text" className="w-40 text-lg" />
-          <div className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
-            {['a', 'b', 'c'].map((k) => (
-              <div
-                key={k}
-                data-testid="betalningar-skeleton-kort"
-                className="rounded-2xl border border-transparent bg-surface p-3"
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-                  <div className="flex min-w-0 items-center gap-3 sm:flex-1">
-                    <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
-                    <div className="flex min-w-0 flex-1 flex-col gap-1">
-                      <Skeleton variant="text" className="w-2/5 text-body" />
-                      <Skeleton variant="text" className="w-3/5 text-caption" />
-                      <div className="flex flex-wrap items-center gap-2" />
-                    </div>
-                  </div>
-                  <Skeleton
-                    variant="text"
-                    className="h-8 w-36 self-start rounded-full sm:self-auto"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-    );
-  }
+  /* ═══════════════════════════════════════════════════════════════════════
+   * [TASK-416.2 RUNDA 2, review-fynd 1] SEX FASTA SYSKON-POSITIONER I ETT
+   * ENDA RETURTRÄD — INTE TRE SEPARATA `return`, SOM RUNDA 1 SKREV DET.
+   * ═══════════════════════════════════════════════════════════════════════
+   * Samma mönster som TASK-416.8:s fix i `Intresserade.tsx` (#2395,
+   * "annonsering"/"rubrik"/"sokRad"/"datakropp").
+   *
+   * RUNDA 1:S FEL, MÄTT (review-grinden, Marcus mandat): den laddade grenen
+   * sköt in `<p role="status">{N} kvarvarande...</p>` FÖRE `headerBlock`
+   * (position 1), medan isPending/isError hade `headerBlock` DIREKT efter
+   * `sidRam` (position 0). Reacts keyless reconciliation matchar barn
+   * POSITIONELLT (array-index utan explicit `key`): vid isPending→laddat
+   * jämförde React position 1 — gammalt `<header>` mot nytt `<p>` — och
+   * TYPERNA skiljer sig, så HELA subträdet från den positionen och framåt
+   * monterades OM. Fokus i menytriggern (`headerBlock`) eller inskriven
+   * text i FilterRads sökfält (redan renderad i isPending) gick förlorad
+   * exakt vid landningen — en `boundingBox()`-mätning ser aldrig detta,
+   * eftersom den mäter GEOMETRI, inte DOM-identitet.
+   *
+   * LÖSNINGEN: exakt SEX fasta syskon-positioner i `<section>` (se det
+   * enda returträdet längst ner i funktionen) — `sidRam`, `statusAnnons`,
+   * `headerBlock`, `realtidsfelBlock`, `filterRadBlock`, `datakropp` — i
+   * EXAKT den ordningen i ALLA tre query-lägen. Varje position är ETT
+   * JSX-uttryck som ALLTID finns med (även när det evaluerar till
+   * `null`/`false`/tom sträng), så barnens ARRAY-INDEX aldrig ändras
+   * mellan lägena — bara VÄRDET på en given position varierar.
+   * `headerBlock`/`filterRadBlock` jämförs därför alltid mot SIG SJÄLVA,
+   * oavsett vad `datakropp` för tillfället representerar.
+   *
+   * `statusAnnons` ÄR SAMMA `<p>`-ELEMENT I ALLA TRE LÄGEN — bara texten
+   * och `aria-busy` varierar (review-fyndets egen föreslagna form:
+   * "rendera `<p role='status' aria-live='polite' className='sr-only'>`
+   * ALLTID, med tomt/pending-innehåll tills datan landat"). isError ger
+   * medvetet TOM text: `MessageBox`s egen felannonsering (i `datakropp`)
+   * bär redan beskedet, och en andra, tom live-region-uppdatering är
+   * ofarlig brus, inte en dubbelannonsering. */
+  const statusAnnons = (
+    <p className="sr-only" role="status" aria-live="polite" aria-busy={isPending || undefined}>
+      {isPending
+        ? 'Laddar betalningar ...'
+        : isError
+          ? ''
+          : `${rader.length} kvarvarande betalningar laddade.`}
+    </p>
+  );
 
-  if (isError) {
-    return (
-      <section className="flex flex-col gap-4">
-        {sidRam}
-        {headerBlock}
-        {filterRadBlock}
-        <MessageBox intent="error" title="Betalningarna kunde inte hämtas">
-          {error instanceof Error ? error.message : 'Okänt fel.'}
-        </MessageBox>
-      </section>
-    );
-  }
+  /* Realtidsfelet (TASK-346.4:s namngivna TODO, betald här). Byggd på
+     nedstängningsvaktens PREDIKAT, aldrig på råa status-värden - annars
+     hade rutan blinkat vid varje navigering.
+
+     [TASK-416.2 RUNDA 2] FLYTTAD TILL EN EGEN, FAST SYSKON-POSITION (satt
+     tidigare bara i det laddade returträdet, mellan headerBlock och
+     filterRadBlock) — av SAMMA skäl som `statusAnnons` ovan: en slot som
+     bara fanns i EN av de tre grenarna var en positionell krock i väntan
+     på att hända (se docblocket ovan). `realtidsfel` är dessutom en helt
+     OBEROENDE källa (`useRealtidsfel()`, en extern websocket-status), så
+     banderollen kan nu även synas UNDER pågående laddning eller ett
+     fel-läge om realtiden råkar vara nere samtidigt — en STRIKT
+     förbättring mot tidigare (banderollen kunde tidigare aldrig synas
+     förrän datat landat), inte en beteendeförsämring. */
+  const realtidsfelBlock = realtidsfel !== null && (
+    <MessageBox intent="warning" title="Realtidsuppdateringen är nere">
+      Kvittonas status uppdateras inte av sig själv just nu. Läget läses om varje gång du öppnar
+      sidan, så inget går förlorat.
+    </MessageBox>
+  );
+
+  /* `datakropp` I ISPENDING — SKELETON BARA I KORTLISTAN (AC #1/#2). Se
+     docblocket ovan för VARFÖR den här skeleton-grenen numera är ett
+     `datakropp`-värde i stället för ett eget returträd, aldrig VAD den
+     ritar (den delen är oförändrad sedan förra granskningsvarvet).
+     Kortskelettet härmar den LADDADE listans exakta boxmodell
+     (grupprubrik + `-mx-4`-kort i `bg-bg-muted`, `BetalningsradKort`s
+     stängda form: avatar `size-9`, namnrad `text-body`, metarad
+     `text-caption`, en tom badge-rad-spegel så `gap-1`-mellanrummet blir
+     detsamma som en rad UTAN förfallen-/obekräftad-/spegelSlapar-pillar,
+     plus en knapp-yta för "Registrera betalning") så att FÖRSTA kortets
+     boundingBox blir identisk pending/laddat (mätt, se PR-kroppen).
+     `<div>`, inte `<ul>/<li>` — samma val som `EventsList.tsx`/
+     `AnmalningarSida.tsx` gör i sina skeleton-grenar: rent dekorativa
+     block ska inte annonseras som en (tom) lista.
+
+     MARKERA-KNAPPENS RAD RESERVERAS ÄVEN HÄR (mätt, inte antaget): en
+     tidigare version av detta skelett saknade denna rad helt och sköt
+     FÖRSTA KORTET 73 px för högt jämfört med det laddade läget
+     (`MarkeringsAtgardsRad`s `mt-6 px-4`-rad, `Button size="sm"` ~32 px
+     hög — headless Playwright, 1280×720, se PR-kroppen för båda
+     mätningarna, före och efter). Samma `mt-6 px-4`-geometri som den
+     riktiga raden (rad ~1946 nedan), en enda knapp-formad skeleton i
+     stället för "Markera".
+
+     [TASK-416.2 RUNDA 2, review-fynd 2 — BOKFÖRT, EJ ÅTGÄRDAT] Raden
+     reserveras OVILLKORLIGT, men den RIKTIGA `MarkeringsAtgardsRad`
+     renderas bara när `markerbaraIds.length > 0` (se `datakropp`s laddade
+     gren längre ner). En GENUINT TOM inkorg (noll öppna betalningar) får
+     därför ett litet layout-hopp vid landning — skeletonet speglar det
+     SANNOLIKA fallet (Lotta har öppna betalningar att registrera, PRD:ns
+     hela premiss), inte det tomma. Detta är SAMMA KLASS avvägning som
+     Hem-kortens tomläge (PRD § Öppna frågor, Marcus designval) och rättas
+     INTE här — se `tests/e2e/mer-betalningar-laddlage.staging.test.ts`s
+     docblock för samma bokföring i testet. */
+  const datakroppPending = (
+    <>
+      <div className="mt-6 px-4">
+        <Skeleton variant="text" className="h-8 w-24 rounded-full" />
+      </div>
+      <div className="flex flex-col gap-2 px-4">
+        <Skeleton variant="text" className="w-40 text-lg" />
+        <div className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
+          {['a', 'b', 'c'].map((k) => (
+            <div
+              key={k}
+              data-testid="betalningar-skeleton-kort"
+              className="rounded-2xl border border-transparent bg-surface p-3"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+                  <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <Skeleton variant="text" className="w-2/5 text-body" />
+                    <Skeleton variant="text" className="w-3/5 text-caption" />
+                    <div className="flex flex-wrap items-center gap-2" />
+                  </div>
+                </div>
+                <Skeleton
+                  variant="text"
+                  className="h-8 w-36 self-start rounded-full sm:self-auto"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  const datakroppFel = (
+    <MessageBox intent="error" title="Betalningarna kunde inte hämtas">
+      {error instanceof Error ? error.message : 'Okänt fel.'}
+    </MessageBox>
+  );
 
   /* Båda hinkarna, alltid — periodfiltret har redan gjort urvalet FÖRE
      grupperingen, så med `upcoming` är `tidigare` tom och tvärtom. Under
@@ -1799,27 +1857,14 @@ export function BetalningsInkorg() {
     ? (registrerade.find((post) => post.inbetalningId === vantande[0].inbetalningId) ?? null)
     : null;
 
-  return (
-    <section className="flex flex-col gap-4">
-      {sidRam}
-      <p className="sr-only" role="status" aria-live="polite">
-        {`${rader.length} kvarvarande betalningar laddade.`}
-      </p>
-
-      {headerBlock}
-
-      {/* Realtidsfelet (TASK-346.4:s namngivna TODO, betald här). Byggd på
-          nedstängningsvaktens PREDIKAT, aldrig på råa status-värden - annars
-          hade rutan blinkat vid varje navigering. */}
-      {realtidsfel !== null && (
-        <MessageBox intent="warning" title="Realtidsuppdateringen är nere">
-          Kvittonas status uppdateras inte av sig själv just nu. Läget läses om varje gång du öppnar
-          sidan, så inget går förlorat.
-        </MessageBox>
-      )}
-
-      {filterRadBlock}
-
+  /* `datakropp` I LADDAT LÄGE — allt som tidigare stod direkt i det enda
+     (numera rivna) loaded-returträdet, oförändrat i sak. Fragmentet blir
+     VÄRDET på `datakropp`s tredje gren (se konstruktionen och det enda
+     returträdet i slutet av funktionen) — `sidRam`/`statusAnnons`/
+     `headerBlock`/`realtidsfelBlock`/`filterRadBlock` ligger INTE här
+     längre, de är egna fasta syskon-positioner (se docblocket ovan). */
+  const datakroppLoaded = (
+    <>
       {/* [TASK-346.10] Importen ligger FÖRE "Skicka N kvitton", i den ordning
           Lottas lördag faktiskt går: läs banken, bekräfta raderna, skicka
           kvittona.
@@ -2267,6 +2312,19 @@ export function BetalningsInkorg() {
           ))}
         </div>
       )}
+    </>
+  );
+
+  const datakropp = isPending ? datakroppPending : isError ? datakroppFel : datakroppLoaded;
+
+  return (
+    <section className="flex flex-col gap-4">
+      {sidRam}
+      {statusAnnons}
+      {headerBlock}
+      {realtidsfelBlock}
+      {filterRadBlock}
+      {datakropp}
     </section>
   );
 }
