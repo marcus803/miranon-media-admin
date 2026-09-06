@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:22'
+updated_date: '2026-09-06 14:26'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,10 +23,10 @@ Källa: rapport D §5 (S123). Deterministiska geometri-avvikelser: src/component
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 NastaEvent-skeleton har fem rader med samma typografi och gap som laddat läge
-- [ ] #2 SenasteAktivitetKompakt-skeleton rad 2 är text-body
-- [ ] #3 MailLog och Waitlist: rubrik och rader som syskon med gap-6 i laddläget
-- [ ] #4 Hem-acceptance (tests/acceptance/hem-laddlage.acceptance.test.ts) grön, axe-svep grönt
+- [x] #1 NastaEvent-skeleton har fem rader med samma typografi och gap som laddat läge
+- [x] #2 SenasteAktivitetKompakt-skeleton rad 2 är text-body
+- [x] #3 MailLog och Waitlist: rubrik och rader som syskon med gap-6 i laddläget
+- [x] #4 Hem-acceptance (tests/acceptance/hem-laddlage.acceptance.test.ts) grön, axe-svep grönt
 <!-- AC:END -->
 
 ## Definition of Done

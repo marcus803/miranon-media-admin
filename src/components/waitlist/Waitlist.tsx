@@ -139,20 +139,25 @@ export function Waitlist() {
     // Lugnt laddläge (Laddtrappan steg 1, DESIGN-SYSTEM-SPEC §15): skeleton i
     // listans SLUTGEOMETRI (rubrik + tre radplatshållare, Roselli-anatomin) i
     // stället för en naken "Laddar…"-textrad — layout-skift ≈ 0 mot laddat läge.
+    // Rubrik- och radplatshållarna är SYSKON direkt under sektionens egen
+    // gap-6 (samma idiom som live-regionen i laddat läge nedan) — INTE
+    // buntade i ett eget gap-4-block, som gav 16 px mellanrum där laddat läge
+    // har 24 (TASK-416.9). px-4 flyttas ned till varje block för att bevara
+    // samma horisontella indrag som den tidigare gemensamma wrappern gav.
     return (
       <section data-testid="vantelista-yta" className="flex flex-col gap-6">
         {sidRam}
-        <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-4 px-4">
-          <span className="sr-only">Laddar väntelistan…</span>
-          <div className="flex flex-col gap-1">
-            <Skeleton variant="text" className="w-32 text-2xl" />
-            <Skeleton variant="text" className="w-40 text-small" />
-          </div>
-          <div className="flex flex-col gap-3">
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
-          </div>
+        <p className="sr-only" role="status" aria-live="polite" aria-busy="true">
+          Laddar väntelistan…
+        </p>
+        <div className="flex flex-col gap-1 px-4">
+          <Skeleton variant="text" className="w-32 text-2xl" />
+          <Skeleton variant="text" className="w-40 text-small" />
+        </div>
+        <div className="flex flex-col gap-3 px-4">
+          <Skeleton variant="listRow" />
+          <Skeleton variant="listRow" />
+          <Skeleton variant="listRow" />
         </div>
       </section>
     );

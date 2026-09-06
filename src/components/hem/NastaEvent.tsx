@@ -41,11 +41,17 @@ export function NastaEvent({
         Nästa event
       </h2>
       {eventsQuery.isPending ? (
-        <div role="status" aria-busy="true" className="flex flex-col gap-3">
+        <div role="status" aria-busy="true" className="flex flex-col gap-4">
           <span className="sr-only">Laddar nästa event…</span>
-          <Skeleton variant="text" className="w-3/4 text-3xl" />
-          <Skeleton variant="text" className="w-1/2" />
-          <Skeleton variant="text" className="h-1.5 w-full rounded-full" />
+          <div className="flex flex-col gap-1">
+            <Skeleton variant="text" className="w-3/4 text-3xl" />
+            <Skeleton variant="text" className="w-1/2 text-body" />
+          </div>
+          <Skeleton variant="text" className="w-2/3 text-body" />
+          <div className="flex flex-col gap-1.5">
+            <Skeleton variant="text" className="w-1/3 text-caption" />
+            <Skeleton variant="text" className="h-1.5 w-full rounded-full" />
+          </div>
         </div>
       ) : eventsQuery.isError ? (
         <MessageBox intent="error" title="Kunde inte hämta event">

@@ -49,7 +49,7 @@ export function SenasteAktivitetKompakt() {
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className={radKlass(i)}>
               <Skeleton variant="text" className="w-20 text-caption" />
-              <Skeleton variant="text" className="text-caption" />
+              <Skeleton variant="text" className="text-body" />
             </div>
           ))}
         </div>
