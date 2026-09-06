@@ -129,21 +129,24 @@ export function MailLog() {
     // listans SLUTGEOMETRI (rubrik + tre radplatshållare, Roselli-anatomin) i
     // stället för en naken "Laddar…"-textrad — layout-skift ≈ 0 mot laddat läge.
     // Rubrik-skelettets `px-4` matchar det riktiga `<header>`s indrag (nedan)
-    // så övergången till laddat läge inte skiftar layouten sidledes.
+    // så övergången till laddat läge inte skiftar layouten sidledes. Rubrik-
+    // och radplatshållarna är SYSKON direkt under sektionens egen gap-6 (samma
+    // idiom som live-regionen i laddat läge nedan) — INTE buntade i ett eget
+    // gap-4-block, som gav 16 px mellanrum där laddat läge har 24 (TASK-416.9).
     return (
       <section className="flex flex-col gap-6">
         {kromKnapp}
-        <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-4">
-          <span className="sr-only">Laddar maillogg…</span>
-          <div className="flex flex-col gap-1 px-4">
-            <Skeleton variant="text" className="w-28 text-2xl" />
-            <Skeleton variant="text" className="w-20 text-small" />
-          </div>
-          <div className="flex flex-col gap-3">
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
-          </div>
+        <p className="sr-only" role="status" aria-live="polite" aria-busy="true">
+          Laddar maillogg…
+        </p>
+        <div className="flex flex-col gap-1 px-4">
+          <Skeleton variant="text" className="w-28 text-2xl" />
+          <Skeleton variant="text" className="w-20 text-small" />
+        </div>
+        <div className="flex flex-col gap-3">
+          <Skeleton variant="listRow" />
+          <Skeleton variant="listRow" />
+          <Skeleton variant="listRow" />
         </div>
       </section>
     );
