@@ -12,6 +12,74 @@ import {
 import type { useDashboardRegistrations } from './useDashboardData';
 
 /**
+ * Skeletonradens anatomi speglar `ForfallenRadInnehall`s bas-form (delad av
+ * "Att påminna"/"Väntar", UTAN `paminnelsedatum`-badgen — se nedan) — INTE
+ * en anatomi gemensam för alla tre grupper (rättat i review-runda 2, PR
+ * #2419: en tidigare version av detta stycke hävdade "GEMENSAM bas-anatomi
+ * för alla tre grupper" i samma andetag som den undantog "Dags att ringa" —
+ * en självmotsägelse). TASK-416.18, samma felklass som TASK-416.17 löste för
+ * Maillogg/Väntelista: `Skeleton variant="listRow"` (`h-[3lh]`) matchade
+ * varken anatomin (avatar-cirkel + namn/avgiftstyp-kolumn) eller den riktiga
+ * radens boundingBox (TASK-416.13:s mätning: {width:568,height:72} skelett
+ * mot {width:545,height:66} riktig rad, samma defekt som Nya anmälningar).
+ * Badgen utelämnas MEDVETET, för BÅDA de grupper platshållaren speglar —
+ * inte bara "Att påminna" (rättat, review-fynd runda 2, PR #2419: en
+ * tidigare version motiverade utelämnandet enbart med "Att påminna"-
+ * gruppens `paminnelseSkickadIso == null`-definition, men "Väntar" har per
+ * `forfallenGrupp()` ALLTID `paminnelseSkickadIso` SATT och visar alltså
+ * badgen ALLTID — motiveringen täckte bara hälften av vad stycket påstod).
+ * Skälet badgen ändå kan utelämnas för båda är GEOMETRISKT, inte att den
+ * aldrig visas: badgen är en enkelrad (`text-caption` 0,75rem × line-height
+ * 1,5 = 18 px, plus `py-0.5` = 4 px ⇒ ≈22 px) i en `items-center`-rad vars
+ * höjd bestäms av den 42 px höga namnkolumnen — 66 px oavsett om badgen
+ * finns eller ej, se höjdräkningen nedan. `InitialAvatar`-platshållaren
+ * (`size-9 shrink-0 rounded-full`) + två staplade `Skeleton`-textrader
+ * (`text-body`/`text-caption`, ingen gap) följer exakt samma mönster och
+ * höjdräkning (66 px = `py-3` 24 px + kolumnens 42 px) som
+ * `NyaAnmalanSkeletonRad` i `NyaAnmalningar.tsx` — samma docblock där för
+ * hela räkningen.
+ *
+ * KÄND, BOKFÖRD KANT — "Dags att ringa"-först-scenariot (review-fynd,
+ * ask-user, PR #2419 runda 1): renderas den FÖRSTA gruppen efter
+ * datalandning som "Dags att ringa" (alla obetalda redan påminda och
+ * `RINGTROSKEL_DAGAR` passerat, medan "Att påminna"/"Väntar" råkar vara
+ * tomma) blir den riktiga FÖRSTA raden en `RingRadInnehall` — `items-start`,
+ * 3–4 textrader (`gap-0.5`, plus en villkorad notering-rad), strukturellt
+ * högre och annorlunda justerad än platshållaren ovan. Skeletonens
+ * boundingBox matchar då INTE den laddade radens, och layout-hoppet
+ * TASK-416.18 finns för att undvika återkommer i just det scenariot. Detta
+ * ÅTGÄRDAS INTE här: platshållaren fortsätter medvetet spegla "Att
+ * påminna"/"Väntar"-anatomin (den vanliga vägen, tvåsidigt bevisad i
+ * `hem-laddlage.acceptance.test.ts`) — en count-agnostisk, gruppokänd
+ * skeleton kan strukturellt inte veta i förväg VILKEN grupp som kommer
+ * landa först, på samma sätt som den redan bokförda "Bekräfta alla"/
+ * "Att påminna"-rubrik-förskjutningen (`utanY()`-kommentaren i
+ * `hem-laddlage.acceptance.test.ts`, INTE nedan i denna fil — rättad
+ * hänvisning, review-fynd runda 2). Klassad som samma sorts kant
+ * som Hem-kortens tomläge (PRD TASK-416 § Öppna frågor, Marcus designval)
+ * — ett KÄNT, avsiktligt icke-täckt scenario, inte ett fel denna skiva
+ * åtgärdar. Se `backlog/tasks/task-416.18-*.md` § Implementation Notes för
+ * samma bokföring på kortet.
+ *
+ * BREDDEN (568→545): samma orsak och samma fix som `NyaAnmalningar.tsx` —
+ * den laddande containern saknade `<ul>`s `pr-3` + `scrollbar-inline`
+ * (`scrollbar-gutter: stable`), se den filens docblock för hela
+ * härledningen. Mätt (boundingBox, `toEqual`/`utanY`, ±0 px):
+ * `hem-laddlage.acceptance.test.ts`.
+ */
+function ForfallenSkeletonRad() {
+  return (
+    <div data-testid="forfallna-skeleton-rad" className="flex items-center gap-3 py-3">
+      <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <Skeleton variant="text" className="w-2/5 text-body" />
+        <Skeleton variant="text" className="w-1/3 text-caption" />
+      </span>
+    </div>
+  );
+}
+
+/**
  * "Förfallna betalningar" — Morgonkollens fjärde block (TASK-243.1,
  * promoverad ur `dev/hem-prototyp/VariantRo.tsx`, facit "hem-vyn V1 Lugna
  * morgonen"): en-påminnelse-modellens TRE tillståndsgrupper (S102 Del 10
@@ -88,10 +156,14 @@ export function ForfallnaBetalningar({
             : 'Inget felmeddelande angavs.'}
         </MessageBox>
       ) : anmalDataPending ? (
-        <div role="status" aria-busy="true" className="flex flex-col gap-3">
+        <div
+          role="status"
+          aria-busy="true"
+          className="scrollbar-inline flex max-h-96 flex-col gap-1 overflow-y-auto pr-3"
+        >
           <span className="sr-only">Laddar förfallna betalningar…</span>
-          <Skeleton variant="listRow" />
-          <Skeleton variant="listRow" />
+          <ForfallenSkeletonRad />
+          <ForfallenSkeletonRad />
         </div>
       ) : forfallna.rows.length === 0 ? (
         <p className="flex items-center gap-2 text-body text-text-secondary">

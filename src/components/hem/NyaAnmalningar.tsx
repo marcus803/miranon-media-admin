@@ -8,6 +8,73 @@ import { relativTid } from './relativ-tid';
 import type { useDashboardRegistrations } from './useDashboardData';
 
 /**
+ * Skeletonradens anatomi är IDENTISK med den riktiga radens icke-länk-form
+ * (`<div className="flex items-center gap-3 py-3">` nedan — TASK-416.18,
+ * samma felklass som TASK-416.17 löste för Maillogg/Väntelista): `Skeleton
+ * variant="listRow"` (`h-[3lh]`) matchade varken anatomin (avatar-cirkel +
+ * namn/identitet-kolumn + valfri relativ-tid-pill) eller den riktiga radens
+ * boundingBox (TASK-416.13:s mätning: {width:568,height:72} skelett mot
+ * {width:545,height:66} riktig rad). `InitialAvatar`-cirkelns platshållare
+ * (`size-9 shrink-0 rounded-full`, samma mönster som `WaitlistSkeletonRow`)
+ * har FAST höjd och dominerar radens `items-center`-höjd precis som den
+ * riktiga cirkeln; namn/identitet är TVÅ staplade `Skeleton`-textrader med
+ * EXPLICITA `text-body`/`text-caption`-storleksklasser (samma två storlekar
+ * som `{rad.namn}`/`{rad.identitet}` bär) i en `flex-col`-kolumn UTAN gap —
+ * identisk stapling mot `<span className="flex min-w-0 flex-1 flex-col">`.
+ * Höjden 66 px = 12+12 px (`py-3`) + 24+18 px (`text-body`/`text-caption`
+ * line-height 1.5 vid 1rem/0.75rem) — matchar exakt, avatarens 36 px är
+ * kortare än kolumnens 42 px och avgör alltså inte radens höjd. Den
+ * högerställda platshållaren mot `{relTid}`-spannet är med av samma skäl som
+ * `MailLogSkeletonRow`s fyra fält: `inskickad` sätts av varje anmälan
+ * (`reg()`-fixturen), så relativ-tid är i praktiken TYPRADEN framåt.
+ *
+ * OMSLAGET runt sista platshållaren (review-fynd runda 1+2, PR #2419):
+ * `Skeleton` renderar ett TOMT, självstängande element — bakgrunden
+ * (`bg-(--mm-skeleton-block)`) målas direkt på ELEMENTET SJÄLVT, och
+ * `box-sizing: border-box` (`base.css`) gör att en breddklass som `w-16`
+ * blir TOTALbredden. Ett `pl-2` satt direkt PÅ Skeleton-blocket (runda 1:s
+ * första försök) äter alltså 8 px av en innehållsbox som ändå är tom — den
+ * målade rektangeln fyller fortsatt hela 64 px från samma vänsterkant, till
+ * skillnad från den riktiga `{relTid}`-spannet (rad ~168/179), som saknar
+ * egen breddklass och därför FAKTISKT skjuts inåt av sitt `pl-2`. Den
+ * riktiga fixen är ett separat OMSLAG (`<span className="shrink-0 pl-2">`)
+ * runt en `Skeleton` UTAN egen `pl-2`, med bredden nedskalad
+ * (`w-14` = 56 px) så att omslagets `pl-2` (8 px) + den målade rektangelns
+ * 56 px tillsammans ger SAMMA yttre 64 px som förut — men nu sitter rektangeln
+ * FÖRSKJUTEN 8 px från omslagets vänsterkant, där den riktiga relTid-texten
+ * faktiskt hamnar, i stället för att fylla hela boxen. Radens EGEN yttre
+ * boundingBox (AC #1) är opåverkad i båda formerna, eftersom `flex-1`-
+ * namnkolumnen absorberar mellanskillnaden — mätt oförändrat i alla fyra
+ * viewports efter denna rättning.
+ *
+ * BREDDEN (568→545, 23 px för bred) satt INTE på raden själv: raden är ett
+ * block-element utan egen breddklass och stretchar till sin FLEX-förälders
+ * innehållsbredd (samma stretch-mekanik som en `<li>` i en `flex-col`-`<ul>`
+ * ger sitt barn). Skillnaden satt i den LADDANDE containerns klasser —
+ * `flex flex-col gap-3` saknade den riktiga `<ul>`s `pr-3` (12 px) OCH
+ * `scrollbar-inline`s `scrollbar-gutter: stable` (reserverar bredd för en
+ * scrollmarkör som aldrig visas vid två rader, men ÄNDÅ tar plats i den
+ * riktiga listan). Containern nedan bär nu SAMMA breddpåverkande klasser som
+ * `<ul>` (minus `tabIndex`/`focus-ring-inset`/`aria-label` — containern är
+ * inte fokuserbar, den är en dekorativ platshållare). Mätt (boundingBox,
+ * `toEqual`, ±0 px): `hem-laddlage.acceptance.test.ts`.
+ */
+function NyaAnmalanSkeletonRad() {
+  return (
+    <div data-testid="nya-anmalningar-skeleton-rad" className="flex items-center gap-3 py-3">
+      <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <Skeleton variant="text" className="w-2/5 text-body" />
+        <Skeleton variant="text" className="w-1/3 text-caption" />
+      </span>
+      <span className="shrink-0 pl-2">
+        <Skeleton variant="text" className="w-14 text-caption" />
+      </span>
+    </div>
+  );
+}
+
+/**
  * "Nya anmälningar" — Morgonkollens tredje block (TASK-243.1, promoverad ur
  * `dev/hem-prototyp/VariantRo.tsx`, facit "hem-vyn V1 Lugna morgonen"):
  * räknar-rubrik + initial-lista (namn / eventidentitet / relativ tid) +
@@ -72,10 +139,14 @@ export function NyaAnmalningar({
             : 'Inget felmeddelande angavs.'}
         </MessageBox>
       ) : anmalDataPending ? (
-        <div role="status" aria-busy="true" className="flex flex-col gap-3">
+        <div
+          role="status"
+          aria-busy="true"
+          className="scrollbar-inline flex max-h-96 flex-col gap-1 overflow-y-auto pr-3"
+        >
           <span className="sr-only">Laddar nya anmälningar…</span>
-          <Skeleton variant="listRow" />
-          <Skeleton variant="listRow" />
+          <NyaAnmalanSkeletonRad />
+          <NyaAnmalanSkeletonRad />
         </div>
       ) : !visarNagot ? (
         <p className="flex items-center gap-2 text-body text-text-secondary">
