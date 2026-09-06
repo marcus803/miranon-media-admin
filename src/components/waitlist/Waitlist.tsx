@@ -70,6 +70,43 @@ function WaitlistRow({ entry }: { entry: WaitlistEntry }) {
 }
 
 /**
+ * Skeletonradens anatomi är IDENTISK med `WaitlistRow` (TASK-416.17 —
+ * review-fynd på PR #2397, S123): `InitialAvatar`-cirkeln som ett
+ * `size-9 rounded-full`-block (FAST höjd — dominerar radens
+ * `items-center`-höjd oavsett ambient textmetrik, precis som den riktiga
+ * cirkeln gör), namnet som textblock bredvid (ingen text-storleks-klass —
+ * ärver samma ambienta storlek som `<span className="font-medium">`), och
+ * EXAKT fyra `pl-12`-indragna platshållarrader för fältlistan (`Field`-
+ * radernas antal i `WaitlistRow` — samtliga fyra visas alltid, ingen är
+ * nullable). Fältraderna ärver `text-small` från samma wrapper-klass som
+ * den riktiga `<dl>` bär.
+ *
+ * Innan denna skiva var raden ETT generiskt `listRow`-block (`h-[3lh]`) —
+ * 225 px för lågt vid tre rader jämfört med den riktiga anatomin (avatar +
+ * namn + fyra fältrader). Mätt (boundingBox, `toEqual`, ±0 px):
+ * `mer-vantelista-laddlage.acceptance.test.ts`.
+ */
+function WaitlistSkeletonRow() {
+  return (
+    <div
+      data-testid="vantelista-skeleton-rad"
+      className="flex break-inside-avoid flex-col gap-2 border-text-muted/20 border-b pb-3 contrast-more:border-border-strong"
+    >
+      <div className="flex items-center gap-3">
+        <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+        <Skeleton variant="text" className="w-2/5" />
+      </div>
+      <div className="flex flex-col gap-0.5 pl-12 text-small">
+        <Skeleton variant="text" className="w-1/3" />
+        <Skeleton variant="text" className="w-1/2" />
+        <Skeleton variant="text" className="w-1/3" />
+        <Skeleton variant="text" className="w-2/5" />
+      </div>
+    </div>
+  );
+}
+
+/**
  * Väntelista-vy (Fas 6c Leverabel 3) — GLOBAL LÄS-vy över den aktiva väntelistan.
  * Data via `fetchWaitlist()` → get-waitlist-EF (router-context-DI, ADR-055), som
  * serverside-filtrerar NOT({Flyttad till anmälan}) och sorterar createdTime desc
@@ -137,27 +174,37 @@ export function Waitlist() {
 
   if (isPending) {
     // Lugnt laddläge (Laddtrappan steg 1, DESIGN-SYSTEM-SPEC §15): skeleton i
-    // listans SLUTGEOMETRI (rubrik + tre radplatshållare, Roselli-anatomin) i
-    // stället för en naken "Laddar…"-textrad — layout-skift ≈ 0 mot laddat läge.
-    // Rubrik- och radplatshållarna är SYSKON direkt under sektionens egen
-    // gap-6 (samma idiom som live-regionen i laddat läge nedan) — INTE
-    // buntade i ett eget gap-4-block, som gav 16 px mellanrum där laddat läge
-    // har 24 (TASK-416.9). px-4 flyttas ned till varje block för att bevara
-    // samma horisontella indrag som den tidigare gemensamma wrappern gav.
+    // listans SLUTGEOMETRI (rubrik + tre radplatshållare) i stället för en
+    // naken "Laddar…"-textrad — layout-skift ≈ 0 mot laddat läge. Rubrik- och
+    // radplatshållarna är SYSKON direkt under sektionens egen gap-6 (samma
+    // idiom som live-regionen i laddat läge nedan) — INTE buntade i ett eget
+    // gap-4-block, som gav 16 px mellanrum där laddat läge har 24 (TASK-416.9).
+    // px-4 flyttas ned till varje block för att bevara samma horisontella
+    // indrag som den tidigare gemensamma wrappern gav. Radplatshållarna bär
+    // WaitlistRow:s EGEN anatomi (`WaitlistSkeletonRow`, TASK-416.17) — inte
+    // längre Skeleton-primitivens generiska `listRow`-block, som mätte 225 px
+    // för lågt vid samma radantal (review-fynd PR #2397). Rubrik-skelettet bär
+    // INGEN egen breddklass (Skeleton-primitivens default `w-full`): en
+    // explicit bredd hade gett en SMALARE box än det riktiga `<h1>`, som
+    // (block-element utan breddklass i en `flex-col`-förälder) sträcker sig
+    // till hela tvärled-bredden — samma `align-items: stretch`-mekanik som
+    // Skeleton-primitivens `w-full` redan ger. `toEqual`-mätningen kräver
+    // bredd-identitet, inte bara höjd/position
+    // (`mer-vantelista-laddlage.acceptance.test.ts`).
     return (
       <section data-testid="vantelista-yta" className="flex flex-col gap-6">
         {sidRam}
         <p className="sr-only" role="status" aria-live="polite" aria-busy="true">
           Laddar väntelistan…
         </p>
-        <div className="flex flex-col gap-1 px-4">
-          <Skeleton variant="text" className="w-32 text-2xl" />
+        <div data-testid="vantelista-skeleton-titelblock" className="flex flex-col gap-1 px-4">
+          <Skeleton variant="text" className="text-2xl" />
           <Skeleton variant="text" className="w-40 text-small" />
         </div>
         <div className="flex flex-col gap-3 px-4">
-          <Skeleton variant="listRow" />
-          <Skeleton variant="listRow" />
-          <Skeleton variant="listRow" />
+          <WaitlistSkeletonRow />
+          <WaitlistSkeletonRow />
+          <WaitlistSkeletonRow />
         </div>
       </section>
     );

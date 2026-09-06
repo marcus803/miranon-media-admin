@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 14:45'
+updated_date: '2026-09-06 15:27'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,9 +23,9 @@ Källa: review-agentens utlåtande på PR #2397 (TASK-416.9, S123, 2026-09-06), 
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Skeletonradens höjd och inre struktur i Maillogg och Väntelista är identisk med den laddade radens (DOM-mätt, ±0 px)
-- [ ] #2 Mätning bifogad: boundingBox på rubrik och första listraden identiska före och efter datalandning i båda vyerna
-- [ ] #3 Befintliga acceptance-tester för Maillogg och Väntelista gröna, axe-svep grönt
+- [x] #1 Skeletonradens höjd och inre struktur i Maillogg och Väntelista är identisk med den laddade radens (DOM-mätt, ±0 px)
+- [x] #2 Mätning bifogad: boundingBox på rubrik och första listraden identiska före och efter datalandning i båda vyerna
+- [x] #3 Befintliga acceptance-tester för Maillogg och Väntelista gröna, axe-svep grönt
 <!-- AC:END -->
 
 ## Definition of Done
@@ -33,3 +34,23 @@ Källa: review-agentens utlåtande på PR #2397 (TASK-416.9, S123, 2026-09-06), 
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+MÄTNING (Playwright, acceptance-projektet, viewport 1280×720):
+
+Ny anatomi (MailLogSkeletonRow/WaitlistSkeletonRow), håll-bar mock, boundingBox toEqual:
+- Maillogg: rubrik OCH första listraden identiska (x/y/bredd/höjd, ±0 px) före/efter datalandning — 2/2 passed.
+- Väntelista: samma, 2/2 passed.
+
+Falsifiering (tvåsidigt bevis — gammal generisk `Skeleton variant="listRow"` (h-[3lh]) i samma testrigg):
+- Maillogg: skeleton-rad 72 px mot riktig rad 131 px (diff 59 px/rad) → testet FALLER (toEqual).
+- Väntelista: skeleton-rad 72 px mot riktig rad 147 px (diff 75 px/rad) → testet FALLER (toEqual).
+
+Kortets ursprungstal (108 px / 225 px, review-fynd PR #2397) avsåg troligen ackumulerat Y-skift över hela listan (3 rader + gap), inte per-rad-höjdskillnaden ovan — inte omprövat mot review-agentens råmätning, bokfört som avvikelse.
+
+Rubrik-fix: skeleton-titelns bredd-override (w-28/w-32) togs bort — Skeleton-primitivens default `w-full` matchar det riktiga `<h1>`s stretch-till-fullbredd i flex-col-föräldern (align-items: stretch). Utan denna ändring hade `toEqual` fällt på bredd trots identisk höjd/position.
+
+Testfiler: tests/acceptance/mer-maillogg-laddlage.acceptance.test.ts, tests/acceptance/mer-vantelista-laddlage.acceptance.test.ts.
+<!-- SECTION:NOTES:END -->
