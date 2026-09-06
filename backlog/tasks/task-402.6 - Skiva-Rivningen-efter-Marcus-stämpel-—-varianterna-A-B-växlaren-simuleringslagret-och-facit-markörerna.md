@@ -6,10 +6,12 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-05 19:03'
+updated_date: '2026-09-06 09:24'
 labels:
   - ready-for-human
 dependencies:
   - TASK-402.3
+  - TASK-402.8
 parent_task_id: TASK-402
 ordinal: 702000
 ---
