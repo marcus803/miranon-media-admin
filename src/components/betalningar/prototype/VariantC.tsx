@@ -158,14 +158,31 @@ const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
    det inte. Det är också husets regel (CLAUDE.md § Design-system: inga
    hårdkodade färger, allt via custom properties).
 
-   DET VALDA SEGMENTETS KANT ÄR `--mm-text`, INTE `--mm-border-strong` —
-   AVSTEG FRÅN UPPDRAGET, mätt och motiverat. WCAG 1.4.11 kräver 3:1 för det
-   som skiljer ett tillstånd från ett annat. Uppmätt på husets faktiska
-   tokens: vald fyllning mot panelen 1,07:1 · `border-strong` mot panelen
-   1,60:1 · `border-strong` mot ovald kant 1,35:1 — alla långt under golvet.
-   `--mm-text` mot panelen ger 14,22:1 och mot den valda fyllningen 13,31:1.
-   En mörk FYLLNING hade nått samma tal men är reserverad för Registrera-
-   knapparna ("en primär, syskonet outline"), så kanten bär tillståndet.
+   DET VALDA SEGMENTETS KONTUR ÄR `--mm-text-muted`, och valet av just den
+   tokenen är RÄKNAT, inte smakat. WCAG 1.4.11 kräver 3:1 för det som skiljer
+   ett tillstånd från ett annat, mot ALLA angränsande färger — här både
+   panelen (`--mm-bg-muted`) och segmentets egen fyllning
+   (`--mm-bg-emphasized`). Uppmätt på husets faktiska tokens:
+
+     `--mm-border-strong`   1,60:1 / 1,50:1   UNDER golvet
+     `--mm-text-muted`      4,88:1 / 4,57:1   ← vald: ljusast som klarar båda
+     `--mm-text-secondary`  7,25:1 / 6,78:1
+     `--mm-text`           14,22:1 / 13,31:1
+
+   VARFÖR INTE `--mm-text` (varv 5–6:s val): Marcus, varv 7 — *"jag tycker det
+   är lite för mörk grå färg på konturen i aktivt läge kan vi dämpa den lite,
+   nu har den ju samma färg som registrera knappen."* Och det är rätt
+   iakttagelse: `--mm-text` ÄR primärknappens svärta, och det valda segmentet
+   är fortfarande en SEKUNDÄR knapp. Konturen ska säga "vald", inte "primär".
+
+   VARFÖR INGEN NY TOKEN: `--mm-text-muted` är ljusast av de semantiska
+   stegen som klarar golvet, så grå-skalans primitiver behövde aldrig
+   plockas in. `--p-neutral-400` är visserligen ljusare men landar på
+   3,20:1 / 3,00:1 — exakt på gränsen, utan marginal, och är dessutom en
+   primitiv utan semantisk mening här.
+
+   En mörk FYLLNING hade också nått golvet men är reserverad för Registrera-
+   knapparna ("en primär, syskonet outline"), så konturen bär tillståndet.
    Texten klarar sig med marginal i alla lägen (12,52–13,38:1).
 
    INGENTING I BOXMODELLEN ÄNDRAS MELLAN VALT OCH OVALT (varv 6). Marcus:
@@ -201,9 +218,9 @@ const SEGMENT_KLASS = [
   'contrast-more:border-border-strong',
   // Valt: intryckt sekundär — tonad platta, mörk kant, dubblerad via en INSET
   // ring. Ingen viktändring, ingen kantbredd-ändring, ingen padding-ändring.
-  'data-[selected]:border-text data-[selected]:bg-bg-emphasized',
+  'data-[selected]:border-(--mm-text-muted) data-[selected]:bg-bg-emphasized',
   'data-[selected]:font-medium data-[selected]:text-text',
-  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text)]',
+  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text-muted)]',
 ].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
