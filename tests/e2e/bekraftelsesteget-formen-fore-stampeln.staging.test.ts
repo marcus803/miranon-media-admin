@@ -36,6 +36,9 @@ import { expect, type Page, type Route, test } from '../support/test-bas';
  *      raden utan avgifts-kandidat töms INTE, hand-högen står still,
  *      avstämningen och summaraden räknar om.
  *   D. TANGENTBORD, BESKED OCH AXE (AC #4).
+ *   E. KAPSELNS FORM STÅR STILL (varv 5–6): de tre segmenten är exakt
+ *      likbreda, och deras `x/y/width/height` är oförändrade genom alla tre
+ *      valen — på båda bredderna.
  *
  * MEDVETET UTANFÖR: att appens förslag är rätt PER RAD — det är
  * `forslagsbelopp`, prövat i `tests/api/bekraftelsesteg-harledningar.test.ts`.
@@ -572,6 +575,69 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     // och vad nya markeringar får — inte att varje rad följer det just nu.
     await expect(pill(steget, ALLTPILL)).toBeChecked();
   });
+
+  /**
+   * [VARV 6] SEGMENTEN RÖR SIG INTE NÄR VALET FLYTTAR — Marcus: *"när man
+   * klickar runt på knapparna så ser de ut att röra sig, eller det gör dem,
+   * inte okej."*
+   *
+   * DE GJORDE DET, OCH ORSAKEN VAR MÄTBAR: varv 5 gav det valda segmentet
+   * `font-semibold`, alltså bredare text, och kolumnbredden i
+   * `auto-cols-fr` + `w-fit` sätts av det bredaste segmentets max-content —
+   * så hela radens mått följde med valet. Regeln som ersatte den är att valet
+   * ENDAST får ändra färg: samma `font-medium`, samma `border`-BREDD (bara
+   * `border-color` byter), samma padding, och den dubblerade kanten som en
+   * INSET `box-shadow` — den ritas innanför kanten och ingår inte i
+   * boxmodellen, till skillnad från `border-2`.
+   *
+   * VARFÖR ALLA FYRA TALEN OCH INTE BARA BREDDEN: en `border-2` hade vuxit
+   * boxen i alla riktningar, och en padding-ändring hade flyttat GRANNARNAS
+   * x utan att röra det valda segmentets egen bredd. Testet ovan
+   * ("exakt lika breda") mäter formen i ETT läge; detta mäter att formen
+   * överlever bytet mellan lägena, vilket är en annan sak.
+   */
+  for (const [namn, viewport] of [
+    ['desktop', DESKTOP],
+    ['ipad', IPAD],
+  ] as const) {
+    test(`${namn} — segmentens kanter står exakt still genom alla tre valen`, async ({ page }) => {
+      const steget = await oppna(page, viewport);
+      const etiketter = [FORSLAGSPILL, AVGIFTSPILL, ALLTPILL] as const;
+
+      /**
+       * MÄTS ALLTID FRÅN SAMMA RULLNINGSLÄGE. `boundingBox` är
+       * VIEWPORT-relativ, och Playwrights klick rullar elementet in i bild
+       * först — utan nollställningen hade ett `y` som bara flyttat sig med
+       * SIDAN lästs som att segmentet rörde sig. Talen rundas till två
+       * decimaler: subpixel-brus i rullningens återställning är inte en
+       * layoutförändring, och 0,01 px är långt under vad Marcus öga fällde.
+       */
+      const matAllaTre = async () => {
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForFunction(() => window.scrollY === 0);
+        const rutor: string[] = [];
+        for (const etikett of etiketter) {
+          const box = await pill(steget, etikett).boundingBox();
+          expect(box, `${etikett} saknar boundingBox`).not.toBeNull();
+          const { x = 0, y = 0, width = 0, height = 0 } = box ?? {};
+          rutor.push([x, y, width, height].map((tal) => Number(tal.toFixed(2))).join('/'));
+        }
+        return rutor;
+      };
+
+      const facit = await matAllaTre();
+      // Rutorna är verkliga, inte tre nollor som råkar vara lika.
+      for (const ruta of facit) expect(ruta).not.toBe('0/0/0/0');
+
+      for (const etikett of etiketter) {
+        await pill(steget, etikett).click();
+        // Valet FLYTTADE sig — annars mäter loopen samma läge tre gånger och
+        // beviset är värdelöst.
+        await expect(pill(steget, etikett)).toBeChecked();
+        expect(await matAllaTre(), `kanterna flyttade sig i läget ${etikett}`).toEqual(facit);
+      }
+    });
+  }
 
   /**
    * [VARV 5] LIKBREDA SEGMENT — Marcus: *"anmälningsavgift och Hela beloppet

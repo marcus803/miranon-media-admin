@@ -432,29 +432,28 @@ async function oppna(
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * TILLFÄLLIGT: ÅTTA AV TIO LÄGEN ÄR `fixme` MEDAN FORMEN ITERERAS (TASK-402.8)
+ * ALLA TIO LÄGEN ÄR LEVANDE IGEN (TASK-402.8 slutvarvet, 2026-09-06)
  * ═══════════════════════════════════════════════════════════════════════════
- * Marcus 2026-09-06, mitt i facit-iterationen av sätt-alla-blocket: *"Angående
- * min iteration på 'Sätt alla belopp' så måste vi ju inte ta nya bilder och
- * krångla, det gör vi när iterationerna är klara."*
+ * HISTORIKEN, eftersom den förklarar varför referenserna hoppade nio varv:
+ * åtta av de tio lägena stod `test.fixme` från varv 2 till varv 10. Marcus,
+ * mitt i facit-iterationen av sätt-alla-blocket: *"Angående min iteration på
+ * 'Sätt alla belopp' så måste vi ju inte ta nya bilder och krångla, det gör vi
+ * när iterationerna är klara."* Varje formvarv skrev om samma åtta
+ * referenser, så en omtagning per varv hade kostat en full körning i taget och
+ * producerat en bokföring som var obsolet innan den lästes. De två
+ * Ångra-dialogerna stängdes aldrig av — dialogen renderas i en portal utanför
+ * formens scope och rördes därför inte av blocket — och var levande grind
+ * genom hela iterationen.
  *
- * Varje formvarv ändrar de här referenserna. Att ta om tio referenser per varv
- * kostar en full körning i taget och producerar en bokföring som är obsolet
- * innan den lästs, så referenserna tas om EN gång när Marcus säger att formen
- * är klar. Fram till dess är de åtta lägen som faktiskt fäller markerade
- * `fixme` — MÄTT, inte antaget: en körning 2026-09-06 mot varv 2:s form gav
- * exakt dessa åtta röda och de två Ångra-dialogerna gröna (dialogen renderas i
- * en portal utanför formens scope och rörs därför inte av blocket).
+ * ETT `fixme` OCH INTE ETT RÖTT CI var valet där: `CONTRIBUTING.md`
+ * § Rött-först säger att rött ska betyda EN sak, oväntad regression.
  *
- * ETT `fixme` OCH INTE ETT RÖTT CI: `CONTRIBUTING.md` § Rött-först säger att
- * rött ska betyda EN sak, oväntad regression. Åtta väntade röda hade gjort
- * signalen värdelös just i det fönster där formen ändras oftast.
- *
- * ATT ÅTERSTÄLLA (slutvarvet, tillsammans med bilderna och AMENDERING-filen):
- * ta bort de fyra `test.fixme()`-raderna nedan, kör
- * `--update-snapshots=all` och uppdatera `facit.json`s `referenser[].sha256`.
- * De två Ångra-dialogerna har aldrig stängts av och är kvar som levande grind
- * under hela iterationen.
+ * Marcus kvittens 2026-09-06 avslutade iterationen (*"Nu är vi klara med
+ * bulkregistrerings-sidan också, vi kör på detta."*), och slutvarvet tog om
+ * de åtta med `--update-snapshots=all` — `=all` krävs, eftersom en
+ * aria-snapshot matchar som DELMÄNGD och ett läge som bara FÅTT noder annars
+ * passerar oförändrat och tyst underbeskriver DOM:en. `facit.json`s
+ * `referenser[].sha256` är uppdaterade i samma landning.
  */
 test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => {
   for (const [namn, viewport] of [
@@ -462,7 +461,6 @@ test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => 
     ['ipad', IPAD],
   ] as const) {
     test(`${namn} — utgångsläget`, async ({ page }) => {
-      test.fixme(true, 'TASK-402.8: referenserna tas om i slutvarvet, se filhuvudet');
       const form = await oppna(page, viewport);
       await expect(form).toMatchAriaSnapshot({
         name: `bekraftelsesteget-utgangslage-${namn}.aria.yml`,
@@ -470,7 +468,6 @@ test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => 
     });
 
     test(`${namn} — körningen pågår`, async ({ page }) => {
-      test.fixme(true, 'TASK-402.8: referenserna tas om i slutvarvet, se filhuvudet');
       // KÖRNINGEN FRYSES VID k=0 — INTE fångas i ett fönster.
       //
       // MÄTT, INTE ANTAGET: `toMatchAriaSnapshot` bär en RETRY-LOOP (5 s), och
@@ -491,7 +488,6 @@ test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => 
     });
 
     test(`${namn} — efter Registrera`, async ({ page }) => {
-      test.fixme(true, 'TASK-402.8: referenserna tas om i slutvarvet, se filhuvudet');
       const form = await oppna(page, viewport);
       await form.getByRole('button', { name: 'Registrera 10 inbetalningar' }).click();
       await expect(
@@ -518,7 +514,6 @@ test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => 
     });
 
     test(`${namn} — efter Registrera och skicka`, async ({ page }) => {
-      test.fixme(true, 'TASK-402.8: referenserna tas om i slutvarvet, se filhuvudet');
       const form = await oppna(page, viewport);
       await form.getByRole('button', { name: 'Registrera och skicka 10 kvitton' }).click();
       await expect(form.getByText('9 kvitton skickade')).toBeVisible({ timeout: 30_000 });

@@ -47,9 +47,12 @@
       - checkbox "Johan Lund Markerad" [checked] [disabled]
       - text: Johan Lund Markerad
       - button "Ändra belopp för Johan Lund" [disabled]: /1 \d+ kr/
-- text: "Sätt alla belopp:"
-- button "Sätt alla belopp till anmälningsavgiften" [disabled]
-- button "Sätt alla belopp till hela beloppet" [disabled]
+- paragraph: Sätt alla belopp
+- paragraph: Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand rörs inte.
+- radiogroup "Belopp för markerade rader":
+  - radio "Förslag" [checked] [disabled]
+  - radio "Anmälningsavgift" [disabled]
+  - radio "Hela beloppet" [disabled]
 - status
 - term: 6 anmälningsavgifter
 - definition: /6 \d+ kr/

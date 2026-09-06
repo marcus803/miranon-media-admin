@@ -599,15 +599,21 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               `-mx-4`-omslag — samma vänster- och högerkant, samma radie,
               samma botten.
 
-              LUFTEN ÄR MÄTT, INTE ÖGONMÄTT (och prövas i
+              LUFTEN ÄR MÄTT, INTE ÖGONMÄTT (och prövas exakt i
               `bekraftelsesteget-formen-fore-stampeln.staging.test.ts`
-              § blockets luft): 16 px ovanför, alltså gruppernas inbördes
-              rytm (listsektionens `gap-4`), och 12 px ned till avstämningen,
-              alltså samma avstånd avstämningen själv har till summaraden
-              (`mt-1` + `pt-2`). `-mt-2` är det som gör det första talet:
-              rot-sektionens `gap-6` ger 24 px mellan toppnivå-barnen, och
-              blocket ska ligga TÄTARE än så — det hör ihop med listan ovanför
-              och inte med sidans nästa avdelning.
+              § "blocket ligger under listan …", som fäller på annat än
+              `{ over: 16, under: 24 }`): 16 px OVANFÖR, alltså gruppernas
+              inbördes rytm (listsektionens `gap-4`) — `-mt-2` är det som gör
+              det talet, eftersom rot-sektionens `gap-6` annars ger 24 px och
+              blocket ska ligga TÄTARE än så; det hör ihop med listan ovanför.
+              Och 24 px NEDÅT till avstämningen (behållarens `gap-3` plus
+              blockets `mb-3`), varv 3 — Marcus: *"Skapa påtagligt mer luft
+              mellan sätt alla belopp-rutan och summeringsraderna nedanför."*
+              Varv 2:s 12 px var avstämningens INTERNA rytm och band ihop
+              blocket med summeringen; 24 px säger att de är två skilda saker.
+              (Denna rad påstod fram till slutvarvet fortfarande "12 px ned"
+              — varv 2:s tal, som testet ovan motbevisade i varv 3 utan att
+              kommentaren följde med.)
 
               RUBRIKEN ÄR INGEN `<h2>`, med avsikt. Sidans h2:er är
               INNEHÅLLS-avdelningar ("Behöver din hand", eventgrupperna) i

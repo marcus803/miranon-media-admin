@@ -22,9 +22,12 @@
       - text: Gunnar Falk Markerad
       - button "Ändra belopp för Gunnar Falk": /1 \d+ kr/
       - alert: "/Edge Function \"registrera-inbetalning\" \\d+: Beloppet kunde inte sparas\\. Försök igen\\./"
-- text: "Sätt alla belopp:"
-- button "Sätt alla belopp till anmälningsavgiften"
-- button "Sätt alla belopp till hela beloppet"
+- paragraph: Sätt alla belopp
+- paragraph: Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand rörs inte.
+- radiogroup "Belopp för markerade rader":
+  - radio "Förslag" [checked]
+  - radio "Anmälningsavgift"
+  - radio "Hela beloppet"
 - status
 - term: 1 anmälningsavgift
 - definition: /1 \d+ kr/
