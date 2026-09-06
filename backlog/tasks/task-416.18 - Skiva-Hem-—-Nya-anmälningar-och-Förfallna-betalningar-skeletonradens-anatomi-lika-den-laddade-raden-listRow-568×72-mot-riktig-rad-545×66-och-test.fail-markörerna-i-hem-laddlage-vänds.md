@@ -7,6 +7,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 15:44'
+updated_date: '2026-09-06 16:45'
 labels:
   - ready-for-agent
 dependencies: []
@@ -23,9 +24,9 @@ Källa: TASK-416.13:s mätning (PR #2412, S123, 2026-09-06): Nya anmälningars o
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Skeletonradens boundingBox i Nya anmälningar och Förfallna betalningar är identisk med den laddade radens (toEqual, ±0 px)
-- [ ] #2 De två test.fail()-testen i hem-laddlage är vanliga assertions och gröna; tvåsidigt bevis bifogat
-- [ ] #3 Hem-acceptance grön, axe-svep grönt
+- [x] #1 Skeletonradens boundingBox i Nya anmälningar och Förfallna betalningar är identisk med den laddade radens (toEqual, ±0 px)
+- [x] #2 De två test.fail()-testen i hem-laddlage är vanliga assertions och gröna; tvåsidigt bevis bifogat
+- [x] #3 Hem-acceptance grön, axe-svep grönt
 <!-- AC:END -->
 
 ## Definition of Done

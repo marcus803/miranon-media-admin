@@ -48,28 +48,34 @@ import { expect, type Page, test } from './acceptance-bas';
  *   `mer-aktivitetshistorik-laddlage.acceptance.test.ts` (TASK-416.3) redan
  *   bevisat sina motsvarande ytor med. Den mäter, GRÖNT, h2-rubriken PLUS
  *   kortkroppen/första raden på Nästa event och Senaste aktivitet, samt
- *   ENBART h2-rubriken (plus, `utanY`-avgränsat, Förfallna betalningars
- *   h2) på Nya anmälningar/Förfallna betalningar.
+ *   h2-rubriken PLUS FÖRSTA RADEN på Nya anmälningar/Förfallna betalningar
+ *   (Nya anmälningars rad `toEqual`, Förfallna betalningars h2 OCH rad
+ *   `utanY`-avgränsade — se resp. assertion nedan för varför).
  *
- *   FÖRSTA RADEN på just DESSA två kort (Nya anmälningar/Förfallna
- *   betalningar) mäts MEDVETET INTE här ännu: TASK-416.13:s ursprungliga
- *   varv mätte den och fann att `Skeleton variant="listRow"` INTE matchar
- *   den riktiga avatar-radens boundingBox ({width:568,height:72} skelett
- *   mot {width:545,height:66} riktig rad, samma defekt i båda
- *   komponenterna) — en defekt `TASK-416.9` aldrig rörde (dess diff
- *   `cfcd3628` gällde uteslutande `NastaEvent.tsx`/
- *   `SenasteAktivitetKompakt.tsx`). Ett första försök bokförde fyndet som
- *   två `test.fail()`-test, men den formen visade sig FEL i detta repo:
- *   hermetik-självtestet (`npm run test:acceptance:sjalvtest`,
- *   `hermetik-vakt.ts`) kör HELA acceptance-sviten UTAN fixturens svar och
- *   kräver att VARJE test då faller med `OmockadRequestError` — ett
- *   `test.fail()`-test som "lyckas fallera" av ETT ANNAT skäl (den kända
- *   geometri-defekten, inte ett omockat nätverksanrop) rapporteras av
- *   självtestet som "överlevde utan fixturens svar", vilket är EXAKT den
- *   tysta fällan hermetik-vakten finns för att fånga. Mätningen av
- *   dessa två kort-rader flyttas därför till TASK-416.18, TILLSAMMANS med
- *   fixen för listradsskelettet — samma skiva löser och bevisar, i stället
- *   för att bevisa en defekt en annan mekanism i repot inte kan hantera.
+ *   FÖRSTA RADEN på just DESSA två kort mättes MEDVETET INTE i
+ *   TASK-416.13 (den skiva som byggde detta test): det ursprungliga varvet
+ *   fann att `Skeleton variant="listRow"` INTE matchade den riktiga
+ *   avatar-radens boundingBox ({width:568,height:72} skelett mot
+ *   {width:545,height:66} riktig rad, samma defekt i båda komponenterna) —
+ *   en defekt `TASK-416.9` aldrig rörde (dess diff `cfcd3628` gällde
+ *   uteslutande `NastaEvent.tsx`/`SenasteAktivitetKompakt.tsx`). Ett första
+ *   försök bokförde fyndet som två `test.fail()`-test, men den formen
+ *   visade sig FEL i detta repo: hermetik-självtestet (`npm run
+ *   test:acceptance:sjalvtest`, `hermetik-vakt.ts`) kör HELA
+ *   acceptance-sviten UTAN fixturens svar och kräver att VARJE test då
+ *   faller med `OmockadRequestError` — ett `test.fail()`-test som "lyckas
+ *   fallera" av ETT ANNAT skäl (den kända geometri-defekten, inte ett
+ *   omockat nätverksanrop) rapporteras av självtestet som "överlevde utan
+ *   fixturens svar", vilket är EXAKT den tysta fällan hermetik-vakten finns
+ *   för att fånga. `test.fail()` bokförde alltså defekten som ett
+ *   TVÅSIDIGT-fall som skulle konverteras samtidigt som fixen — TASK-416.18
+ *   gjorde det: `NyaAnmalningar.tsx`/`ForfallnaBetalningar.tsx` fick en
+ *   egen radspecifik skeleton-komponent (samma mönster som
+ *   `MailLogSkeletonRow`/`WaitlistSkeletonRow`, TASK-416.17) och den
+ *   laddande containerns breddklasser fick den riktiga listans
+ *   `pr-3`/`scrollbar-inline` — se resp. komponents docblock för hela
+ *   härledningen. Mätningen nedan är sedan dess en VANLIG assertion, ingen
+ *   `test.fail()` kvar i denna fil.
  * - Framträdande-formen är mätlåst per task-8.1 (kommentaren på task-8.4):
  *   skeleton från första bildrutan, INGEN CSS-driven fördröjning — bevisas
  *   computed (L272) medan nätverket är parkerat.
@@ -558,6 +564,16 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
       .locator('section[aria-labelledby="hem-senaste-aktivitet"] [role="status"] > div')
       .first();
 
+    // Nya anmälningar/Förfallna betalningar — FÖRSTA RADEN (TASK-416.18):
+    // pending: FÖRSTA skeleton-raden (`data-testid`, `NyaAnmalanSkeletonRad`/
+    // `ForfallenSkeletonRad` — se resp. komponents docblock för anatomin);
+    // laddat: FÖRSTA `<li>` i respektive sektions lista (`getByRole('listitem')`,
+    // samma mönster som `senasteRadLaddad` nedan och som
+    // `mer-maillogg-laddlage.acceptance.test.ts`/`mer-vantelista-laddlage.
+    // acceptance.test.ts` redan etablerat för samma skeleton-familj).
+    const nyaAnmRadLaddar = page.getByTestId('nya-anmalningar-skeleton-rad').first();
+    const forfallnaRadLaddar = page.getByTestId('forfallna-skeleton-rad').first();
+
     const under = kravBoxar(
       {
         nastaEventH2: await nastaEventH2.boundingBox(),
@@ -566,6 +582,8 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
         forfallnaH2: await forfallnaH2.boundingBox(),
         senasteH2: await senasteH2.boundingBox(),
         senasteRad: await senasteRadLaddar.boundingBox(),
+        nyaAnmRad: await nyaAnmRadLaddar.boundingBox(),
+        forfallnaRad: await forfallnaRadLaddar.boundingBox(),
       },
       'UNDER laddning',
     );
@@ -587,6 +605,14 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
       .locator('section[aria-labelledby="hem-senaste-aktivitet"]')
       .getByRole('listitem')
       .first();
+    const nyaAnmRadLaddad = page
+      .locator('section[aria-labelledby="hem-nya-anmalningar"]')
+      .getByRole('listitem')
+      .first();
+    const forfallnaRadLaddad = page
+      .locator('section[aria-labelledby="hem-forfallna"]')
+      .getByRole('listitem')
+      .first();
 
     const efter = kravBoxar(
       {
@@ -596,18 +622,24 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
         forfallnaH2: await forfallnaH2.boundingBox(),
         senasteH2: await senasteH2.boundingBox(),
         senasteRad: await senasteRadLaddad.boundingBox(),
+        nyaAnmRad: await nyaAnmRadLaddad.boundingBox(),
+        forfallnaRad: await forfallnaRadLaddad.boundingBox(),
       },
       'EFTER datalandning',
     );
 
     // MÄTNINGEN — exakt likhet (`toEqual`), ingen tolerans-marginal, för de
-    // TVÅ block ingenting ANNAT på sidan förskjuter: Nästa event (första
-    // sektionen, inget ovanför) och Nya anmälningars EGEN rubrik (dess
+    // TRE block ingenting ANNAT på sidan förskjuter: Nästa event (första
+    // sektionen, inget ovanför), Nya anmälningars EGEN rubrik (dess
     // innehåll växlar Skeleton→text, men h2-BOXEN är blockbredd × radhöjd i
-    // BÅDA fallen, opåverkad av vad grannsektioner gör).
+    // BÅDA fallen, opåverkad av vad grannsektioner gör) och Nya anmälningars
+    // EGEN första rad — den sitter DIREKT under h2:n (inget mellanliggande
+    // element i vare sig pending- eller laddat läge, TASK-416.18) och
+    // förskjuts därför inte av "Bekräfta alla"-knappen nedanför den.
     expect(efter.nastaEventH2).toEqual(under.nastaEventH2);
     expect(efter.nastaEventKropp).toEqual(under.nastaEventKropp);
     expect(efter.nyaAnmH2).toEqual(under.nyaAnmH2);
+    expect(efter.nyaAnmRad).toEqual(under.nyaAnmRad);
 
     // Förfallna betalningars och Senaste aktivitets Y-koordinat förskjuts
     // MÄTT (+41px resp. +112px i denna fixtur) av "Bekräfta alla"-knappen
@@ -622,10 +654,22 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
     // plats för en knapp/rubrik vars EXISTENS beror på en siffra skeletonen
     // per definition inte känner. `utanY()` isolerar den geometri som
     // FAKTISKT hör till "har DENNA sektions egen skeleton-storlek matchat
-    // dess laddade storlek" — och det har den, för båda dessa rubriker och
-    // för Senaste aktivitets rad (se nedan).
+    // dess laddade storlek" — och det har den, för dessa rubriker och för
+    // Senaste aktivitets rad.
     expect(utanY(efter.forfallnaH2)).toEqual(utanY(under.forfallnaH2));
     expect(utanY(efter.senasteH2)).toEqual(utanY(under.senasteH2));
     expect(utanY(efter.senasteRad)).toEqual(utanY(under.senasteRad));
+
+    // Förfallna betalningars FÖRSTA RAD (TASK-416.18) ärver SAMMA
+    // page-nivå-förskjutning som sin egen h2 (ovan) — PLUS en till: den
+    // riktiga raden sitter under "Att påminna"-underrubriken (`<h3
+    // id="hem-forfallna-paminna">`), ett element som INTE existerar i
+    // pending-läget (den flata skeleton-containern har ingen gruppindelning
+    // — antalet grupper är per definition okänt innan datat landat, samma
+    // resonemang som knapparna ovan). Mätt (denna fixtur): 782→877 px, en
+    // TREDJE, egen förskjutning utöver h2:ns +41. `utanY()` isolerar även
+    // här bredd/höjd/vänsterkant — den geometri skeleton-fixen FAKTISKT
+    // bevisar.
+    expect(utanY(efter.forfallnaRad)).toEqual(utanY(under.forfallnaRad));
   });
 });

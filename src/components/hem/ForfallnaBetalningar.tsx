@@ -12,6 +12,44 @@ import {
 import type { useDashboardRegistrations } from './useDashboardData';
 
 /**
+ * Skeletonradens anatomi är IDENTISK med `ForfallenRadInnehall`s bas-form
+ * (utan `paminnelsedatum`-badgen — se nedan) — TASK-416.18, samma felklass
+ * som TASK-416.17 löste för Maillogg/Väntelista: `Skeleton variant="listRow"`
+ * (`h-[3lh]`) matchade varken anatomin (avatar-cirkel + namn/avgiftstyp-
+ * kolumn) eller den riktiga radens boundingBox (TASK-416.13:s mätning:
+ * {width:568,height:72} skelett mot {width:545,height:66} riktig rad, samma
+ * defekt som Nya anmälningar). Badgen utelämnas MEDVETET: den visas bara när
+ * `paminnelsedatum` är satt, vilket per `forfallenGrupp()` ALDRIG händer för
+ * "Att påminna"-gruppen (dess definition ÄR `paminnelseSkickadIso == null`)
+ * — den fasta tvårads-platshållaren nedan är alltså den GEMENSAMMA
+ * bas-anatomin för alla tre grupper (`ForfallenRadInnehall` delas av "Att
+ * påminna"/"Väntar"; "Dags att ringa" har en egen tredje rad och rörs inte
+ * av denna skiva, se `RingRadInnehall`), inte bara "Att påminna"-specifik.
+ * `InitialAvatar`-platshållaren (`size-9 shrink-0 rounded-full`) + två
+ * staplade `Skeleton`-textrader (`text-body`/`text-caption`, ingen gap)
+ * följer exakt samma mönster och höjdräkning (66 px = `py-3` 24 px +
+ * kolumnens 42 px) som `NyaAnmalanSkeletonRad` i `NyaAnmalningar.tsx` —
+ * samma docblock där för hela räkningen.
+ *
+ * BREDDEN (568→545): samma orsak och samma fix som `NyaAnmalningar.tsx` —
+ * den laddande containern saknade `<ul>`s `pr-3` + `scrollbar-inline`
+ * (`scrollbar-gutter: stable`), se den filens docblock för hela
+ * härledningen. Mätt (boundingBox, `toEqual`/`utanY`, ±0 px):
+ * `hem-laddlage.acceptance.test.ts`.
+ */
+function ForfallenSkeletonRad() {
+  return (
+    <div data-testid="forfallna-skeleton-rad" className="flex items-center gap-3 py-3">
+      <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <Skeleton variant="text" className="w-2/5 text-body" />
+        <Skeleton variant="text" className="w-1/3 text-caption" />
+      </span>
+    </div>
+  );
+}
+
+/**
  * "Förfallna betalningar" — Morgonkollens fjärde block (TASK-243.1,
  * promoverad ur `dev/hem-prototyp/VariantRo.tsx`, facit "hem-vyn V1 Lugna
  * morgonen"): en-påminnelse-modellens TRE tillståndsgrupper (S102 Del 10
@@ -88,10 +126,14 @@ export function ForfallnaBetalningar({
             : 'Inget felmeddelande angavs.'}
         </MessageBox>
       ) : anmalDataPending ? (
-        <div role="status" aria-busy="true" className="flex flex-col gap-3">
+        <div
+          role="status"
+          aria-busy="true"
+          className="scrollbar-inline flex max-h-96 flex-col gap-1 overflow-y-auto pr-3"
+        >
           <span className="sr-only">Laddar förfallna betalningar…</span>
-          <Skeleton variant="listRow" />
-          <Skeleton variant="listRow" />
+          <ForfallenSkeletonRad />
+          <ForfallenSkeletonRad />
         </div>
       ) : forfallna.rows.length === 0 ? (
         <p className="flex items-center gap-2 text-body text-text-secondary">
