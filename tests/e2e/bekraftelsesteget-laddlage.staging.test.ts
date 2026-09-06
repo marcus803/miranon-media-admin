@@ -34,6 +34,21 @@ import { expect, type Page, type Route, test } from '../support/test-bas';
  * se `Bekraftelsesteget.tsx`s docblock för `BekraftelsestegetSkelett` för
  * hela resonemanget om varför rubriken måste SPEGLAS i stället för delas).
  * Den här filen mäter alltså en yta ingen annan fil rör.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [FIX-RUNDA 2] TVÅ VIEWPORTS OCH IMPORTFLÖDETS HEADER-RAD
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Review-runda 1 fångade två gap: (1) mätningen körde bara 1280×720 —
+ * `MarkerbartKort`s wrapper (`flex flex-col gap-3 sm:flex-row …`) staplar
+ * korten under Tailwinds `sm`-brytpunkt (640px), en ANNAN DOM-geometri ingen
+ * fil i familjen mätte (syskonfilernas IPAD-viewport, 820px, ligger ÖVER
+ * brytpunkten). `MOBIL` nedan (390×844, CLAUDE.md:s mobilgolv) täcker den.
+ * (2) skelettets header saknade importflödets villkorade `Kallrad`-rad — se
+ * `Bekraftelsesteget.tsx`s docblock för `BekraftelsestegetSkelett` för hela
+ * resonemanget (fixat genom att rendera SAMMA `Kallrad`-komponent, inte en
+ * kopia). Testet nedan (`kalla=import`) bevisar att headerns TOTALA
+ * boundingBox — rubrik + statusrad + Kallrad-raderna tillsammans — inte
+ * hoppar när datan landar.
  */
 
 const HAMTA_OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
@@ -46,6 +61,14 @@ const HAMTA_OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
  * behöver inte dela viewport.
  */
 const DESKTOP = { width: 1280, height: 720 };
+
+/**
+ * 390×844 — CLAUDE.md:s golv för mobil-QA, UNDER Tailwinds `sm`-brytpunkt
+ * (640px). Se filhuvudets § [FIX-RUNDA 2] för varför detta INTE var mätt
+ * innan: syskonfilernas IPAD-viewport (820px) ligger över brytpunkten och
+ * övar därför aldrig den staplade layouten.
+ */
+const MOBIL = { width: 390, height: 844 };
 
 const IDS = bekraftelseFixtur()
   .map((b) => b.anmalanRecordId)
@@ -78,55 +101,137 @@ async function mockaHallbar(page: Page): Promise<() => void> {
 }
 
 test.describe('TASK-416.6 — laddläget (ADR-113 steg 4)', () => {
-  test('rubriken och första kortets boundingBox är identiska ladd- och laddat läge', async ({
+  for (const [namn, viewport] of [
+    ['desktop', DESKTOP],
+    ['mobil', MOBIL],
+  ] as const) {
+    test(`${namn} — rubriken och första kortets boundingBox är identiska ladd- och laddat läge`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      const slapp = await mockaHallbar(page);
+      await page.goto(STEG_URL);
+
+      // ANKARET FÖR LADD-LÄGET: `role="status"`-containerns dolda besked —
+      // bevisar att SKELETTET (inte en tom sida) faktiskt är monterat innan
+      // någon mätning görs.
+      await expect(page.getByText('Hämtar öppna betalningar …')).toBeAttached();
+
+      const rubrik = page.getByRole('heading', { name: 'Bulkregistrering', level: 1 });
+      // `getByRole('listitem').first()` träffar FÖRSTA `<li>` på sidan i BÅDA
+      // lägena: skelettets tre platshållarrader i ladd-läget, den riktiga
+      // `MarkerbartKort`-raden (Anna Lindqvist) i laddat läge — ingen egen
+      // testid behövs, samma lokator bär paret. Detta håller ÄVEN i `mobil`:
+      // wrapper-klasserna är identiska (speglade), så kortet staplar likadant
+      // i båda lägena oavsett viewport.
+      const forstaKortet = page.getByRole('listitem').first();
+
+      await expect(rubrik).toBeVisible();
+      await expect(forstaKortet).toBeVisible();
+      const rubrikLadd = await rubrik.boundingBox();
+      const kortLadd = await forstaKortet.boundingBox();
+      expect(rubrikLadd).not.toBeNull();
+      expect(kortLadd).not.toBeNull();
+
+      // AXE PÅ LADD-LÄGET — ny yta, ingen tidigare svit har rört den. Körs i
+      // BÅDA viewports (repots golv är 11/11 tillgänglighet, inga undantag).
+      // `.include('main')` — samma scope som `bekraftelsesteget-formen-
+      // fore-stampeln.staging.test.ts` (AppShell.tsx: `<main id="main">`).
+      const laddResultat = await new AxeBuilder({ page }).include('main').analyze();
+      expect(laddResultat.violations).toEqual([]);
+
+      slapp();
+      // ANKARET FÖR DET LADDADE LÄGET: alla tio raderna har landat och
+      // modellen byggts — samma ankare som promoverings-grindens `oppna()`.
+      await expect(page.getByText('10 av 10 inbetalningar markerade')).toBeVisible({
+        timeout: 15_000,
+      });
+
+      const rubrikLaddad = await rubrik.boundingBox();
+      const kortLaddat = await forstaKortet.boundingBox();
+      expect(rubrikLaddad).not.toBeNull();
+      expect(kortLaddat).not.toBeNull();
+
+      // MÄTNINGEN — samma tal, mätt vid rätt tillfälle, är LEVERANSEN
+      // (uppdragets ord): rubrikens och första kortets boundingBox är
+      // BYTE-IDENTISKA genom hela övergången, trots att det är två olika
+      // DOM-noder som råkar rendera på samma plats.
+      expect(rubrikLadd).toEqual(rubrikLaddad);
+      expect(kortLadd).toEqual(kortLaddat);
+    });
+  }
+
+  /**
+   * [FIX-RUNDA 2, FYND 1] IMPORTFLÖDET — HEADERNS `Kallrad`-RAD FÅR INTE
+   * KNUFFA TILL LAYOUTEN NÄR DATAN LANDAR.
+   *
+   * `kalla`/`minne` är BÅDA kända SYNKRONT (route-prop + `lasImport()` i en
+   * `useState`-initierare, `Bekraftelsesteget.tsx`), oberoende av
+   * `hamta-oppna-betalningar` — så importminnet seedas direkt i
+   * `sessionStorage` via `addInitScript` (körs FÖRE appens egna skript,
+   * Playwrights garanti) i stället för att drivas genom den fulla
+   * uppladdnings-UI:n (`betalningar-import-bekraftelsesteget.staging.test.ts`s
+   * `importera()`) — den filen övar redan hela vägen från filväljaren; denna
+   * fil övar bara att `Bekraftelsesteget.tsx`s laddläges-skelett läser SAMMA
+   * minne och ritar SAMMA `Kallrad`-rad som `BulkC` gör efteråt.
+   *
+   * `page.locator('header')` — det finns EXAKT en `<header>` på sidan i
+   * VARDERA läget (skelettets egen, sedan `BulkC`s), och ingen annanstans i
+   * `AppShell` (verifierat: `grep -rn "<header" src/components/AppShell/`
+   * gav noll träffar) — samma lokator bär alltså paret, precis som
+   * `getByRole('listitem').first()` gör för kortet ovan.
+   *
+   * `rader: []` I MINNET, MED AVSIKT: detta test mäter HEADERN, inte
+   * importradernas "Behöver din hand"-sektion (den täcks av
+   * `betalningar-import-bekraftelsesteget.staging.test.ts`). Ett tomt
+   * `rader`-fält är giltigt mot `ImportminneSchema` och håller mockens
+   * `hamta-oppna-betalningar`-svar (hela fixturen) opåverkat av
+   * matchnings-logiken.
+   */
+  test('import: headerns boundingBox (rubrik + Kallrad) är identisk ladd- och laddat läge', async ({
     page,
   }) => {
     await page.setViewportSize(DESKTOP);
+    const minne = {
+      skapad: new Date().toISOString(),
+      filnamn: 'kontoutdrag-laddlage-matning.csv',
+      bank: 'Handelsbanken',
+      lasta: 5,
+      bortfiltrerade: 2,
+      fel: [{ radnummer: 7, skal: 'Kunde inte tolkas' }],
+      rader: [],
+    };
+    await page.addInitScript((serialiserat) => {
+      window.sessionStorage.setItem('mm.betalningar.import', serialiserat);
+    }, JSON.stringify(minne));
+
     const slapp = await mockaHallbar(page);
-    await page.goto(STEG_URL);
+    await page.goto('/mer/betalningar/registrera?kalla=import');
 
-    // ANKARET FÖR LADD-LÄGET: `role="status"`-containerns dolda besked —
-    // bevisar att SKELETTET (inte en tom sida) faktiskt är monterat innan
-    // någon mätning görs.
+    // ANKARET FÖR LADD-LÄGET, och BEVIS på att importminnet faktiskt lästes:
+    // `Kallrad`s egen text ("<filnamn> · N rader") ska synas REDAN under
+    // laddning — det är precis vad fyndet krävde.
     await expect(page.getByText('Hämtar öppna betalningar …')).toBeAttached();
+    const header = page.locator('header');
+    await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
+    await expect(header.getByText('2 rader i filen var inte inbetalningar')).toBeVisible();
+    await expect(header.getByText('Rad 7: Kunde inte tolkas')).toBeVisible();
 
-    const rubrik = page.getByRole('heading', { name: 'Bulkregistrering', level: 1 });
-    // `getByRole('listitem').first()` träffar FÖRSTA `<li>` på sidan i BÅDA
-    // lägena: skelettets tre platshållarrader i ladd-läget, den riktiga
-    // `MarkerbartKort`-raden (Anna Lindqvist) i laddat läge — ingen egen
-    // testid behövs, samma lokator bär paret.
-    const forstaKortet = page.getByRole('listitem').first();
-
-    await expect(rubrik).toBeVisible();
-    await expect(forstaKortet).toBeVisible();
-    const rubrikLadd = await rubrik.boundingBox();
-    const kortLadd = await forstaKortet.boundingBox();
-    expect(rubrikLadd).not.toBeNull();
-    expect(kortLadd).not.toBeNull();
-
-    // AXE PÅ LADD-LÄGET — ny yta, ingen tidigare svit har rört den.
-    // `.include('main')` — samma scope som `bekraftelsesteget-formen-
-    // fore-stampeln.staging.test.ts` (AppShell.tsx: `<main id="main">`).
-    const laddResultat = await new AxeBuilder({ page }).include('main').analyze();
-    expect(laddResultat.violations).toEqual([]);
+    const headerLadd = await header.boundingBox();
+    expect(headerLadd).not.toBeNull();
 
     slapp();
-    // ANKARET FÖR DET LADDADE LÄGET: alla tio raderna har landat och
-    // modellen byggts — samma ankare som promoverings-grindens `oppna()`.
-    await expect(page.getByText('10 av 10 inbetalningar markerade')).toBeVisible({
-      timeout: 15_000,
-    });
+    // ANKARET FÖR DET LADDADE LÄGET: `BulkC` monterad (samma testid oavsett
+    // manuell/import-väg).
+    await expect(page.getByTestId('bekraftelsesteget')).toBeVisible({ timeout: 15_000 });
+    // Samma `Kallrad`-rader ska stå kvar, oförändrade, i den RIKTIGA headern.
+    await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
 
-    const rubrikLaddad = await rubrik.boundingBox();
-    const kortLaddat = await forstaKortet.boundingBox();
-    expect(rubrikLaddad).not.toBeNull();
-    expect(kortLaddat).not.toBeNull();
+    const headerLaddad = await header.boundingBox();
+    expect(headerLaddad).not.toBeNull();
 
-    // MÄTNINGEN — samma tal, mätt vid rätt tillfälle, är LEVERANSEN
-    // (uppdragets ord): rubrikens och första kortets boundingBox är
-    // BYTE-IDENTISKA genom hela övergången, trots att det är två olika
-    // DOM-noder som råkar rendera på samma plats.
-    expect(rubrikLadd).toEqual(rubrikLaddad);
-    expect(kortLadd).toEqual(kortLaddat);
+    // MÄTNINGEN: headerns TOTALA boundingBox (rubrik + statusrad + de tre
+    // Kallrad-raderna) är BYTE-IDENTISK genom övergången.
+    expect(headerLadd).toEqual(headerLaddad);
   });
 });

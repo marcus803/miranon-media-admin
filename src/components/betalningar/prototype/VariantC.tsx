@@ -1089,8 +1089,19 @@ function MarkerbartKort({
    bankens belopp, precis som AC #2 beskriver det. Ett "Säker"-märke hade
    brutit identiteten mot facit för att säga något kortet redan säger. */
 
-/** Vilken fil raderna kom ur, plus parserns två räknade högar. */
-function Kallrad({ kalla }: { kalla: NonNullable<BekraftelsestegModell['importkalla']> }) {
+/**
+ * Vilken fil raderna kom ur, plus parserns två räknade högar.
+ *
+ * `export` LAGD TILL I `TASK-416.6` FIX-RUNDA 2 (fynd 1), enda ändringen i
+ * denna facit-låsta fil: `Bekraftelsesteget.tsx`s laddläges-skelett behöver
+ * rendera EXAKT denna komponent (inte en kopia) i importflödets header, så
+ * DOM:en är byte-identisk ladd-/laddat läge när `kalla`/`minne` redan är
+ * kända synkront (`importoversiktFranMinne`, `importminne.ts`). Renderingen
+ * här — vad `Kallrad` ritar och när `BulkC` monterar den — är OFÖRÄNDRAD;
+ * promoverings-grindens ariaSnapshot mäter det rederade trädet, inte
+ * modulens exportyta, så facit-låset berörs inte.
+ */
+export function Kallrad({ kalla }: { kalla: NonNullable<BekraftelsestegModell['importkalla']> }) {
   const kalltext = kalla.bank === '' ? kalla.filnamn : `${kalla.filnamn}, läst som ${kalla.bank}`;
   return (
     <div className="flex flex-col gap-0.5 text-caption text-text-muted">

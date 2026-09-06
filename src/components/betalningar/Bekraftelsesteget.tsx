@@ -9,9 +9,12 @@ import { Skeleton } from '@/components/primitives/Skeleton';
 import { useOppnaBetalningar } from '@/data/betalningar/useBetalningar';
 import type { OppenBetalning } from '@/domain/schemas';
 import { idagIso } from './idag';
-import { type Importminne, lasImport } from './importminne';
+import { type Importminne, importoversiktFranMinne, lasImport } from './importminne';
 import { rensaMarkering } from './markerings-minne';
-import { VariantC } from './prototype/VariantC';
+// `Kallrad` — se dess docblock i VariantC.tsx (export tillagd TASK-416.6
+// fix-runda 2, fynd 1): laddläges-skelettet renderar SAMMA komponent, inte
+// en kopia, för importflödets header-rad.
+import { Kallrad, VariantC } from './prototype/VariantC';
 import { useBekraftelsesteg } from './useBekraftelsesteg';
 
 /**
@@ -154,18 +157,68 @@ const SKELETT_RADER = ['a', 'b', 'c'] as const;
  * Roselli-kontraktet (`Skeleton.tsx` filhuvud): blocken är `aria-hidden`
  * (dekorativa), och DENNA container äger `aria-busy` + det dolda
  * textbeskedet.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [TASK-416.6 FIX-RUNDA 2, FYND 1] IMPORTFLÖDETS `Kallrad`-RAD ÄR KÄND
+ * SYNKRONT — DEN RENDERAS ALLTSÅ RIKTIG, INTE SOM GISSNING ELLER RESERVATION
+ * ═══════════════════════════════════════════════════════════════════════════
+ * `BulkC`s header bär en TREDJE, villkorad rad utöver rubrik och statusrad:
+ * `{importkalla !== null && <Kallrad kalla={importkalla} />}`. Review-runda 1
+ * fångade att denna fils skelett saknade den — men `importkalla` är INTE
+ * hämtad data. `kalla` är en route-prop och `minne` läses via `lasImport()` i
+ * en `useState`-initierare (`Bekraftelsesteget` nedan) — BÅDA kända på FÖRSTA
+ * bildrutan, oberoende av `hamta-oppna-betalningar`. Skelettet kan alltså
+ * beräkna EXAKT samma `Importoversikt` som modellen kommer att bygga
+ * (`importoversiktFranMinne`, delad ren funktion i `importminne.ts` — se dess
+ * docblock för varför härledningen INTE får dupliceras) och rendera SAMMA
+ * `Kallrad`-komponent (nu exporterad ur `VariantC.tsx`, se den exportens egen
+ * kommentar) — inte en kopia, inte ett skelett-block. DOM:en för denna rad
+ * blir därför byte-identisk ladd-/laddat läge när importen gick att läsa.
+ *
+ * NÄR `minne === null` (importen kunde INTE läsas — trasig `sessionStorage`,
+ * ny flik, delad länk) renderar varken skelettet eller `BulkC` någon
+ * `Kallrad`-rad, och `Bekraftelsesteget`s egen ternär visar då "Importen
+ * kunde inte läsas …" UTAN sidkrom alls när hämtningen avslutas — en
+ * FÖREFINTLIG, egen gren (`TASK-402.4`) som varken denna skiva eller
+ * fix-rundan rör. Den enda kanten det lämnar: hinner `hamta-oppna-
+ * betalningar` fortfarande laddas MEDAN `minne` redan är känt `null`, visar
+ * skelettet ändå rubriken (sidkromet) i väntan, som sedan försvinner
+ * tillsammans med hela headern när "kunde inte läsas"-meddelandet tar över.
+ * Bokfört här som en observerad, oadresserad kant — inte tyst, men utanför
+ * denna fix-rundans scope (ADR-053: värdefullt, blockerar inte).
  */
-function BekraftelsestegetSkelett() {
+function BekraftelsestegetSkelett({ minne }: { minne: Importminne | null }) {
+  const importkalla = importoversiktFranMinne(minne);
   return (
     <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-6">
       <span className="sr-only">Hämtar öppna betalningar …</span>
       <header className="flex flex-col gap-1 px-4">
         <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
         <Skeleton variant="text" className="w-48 text-small" />
+        {importkalla !== null && <Kallrad kalla={importkalla} />}
       </header>
       <div className="flex flex-col gap-4 px-4">
         <div className="flex flex-col gap-2">
-          <Skeleton variant="text" className="w-40 text-lg" />
+          {/* [FIX-RUNDA 2, FYND 2] GRUPPRUBRIKENS SKELETT REDOVISAR TVÅ
+              RADER UNDER `sm` — MÄTT, INTE GISSAT.
+              `GruppRubrik` (`VariantC.tsx`) bär VARKEN `truncate` eller
+              `whitespace-nowrap` — till skillnad från `KortHuvud`s namnrad —
+              och radbryter alltså när eventnamn + datum inte får plats.
+              `<main>`s `max-w-[600px]` gör att bredden ÖVER `sm` (640 px)
+              alltid är kapad till samma 536 px oavsett hur bred viewporten
+              är, gott om plats för ETT ord-par som "Resor i medvetandet 1,
+              Skövde · 2026-09-20" (mätt: 1280 px → EN rad, 61 px header).
+              UNDER 640 px krymper bredden med SJÄLVA viewporten (326 px vid
+              390) och samma rubrik radbryter till TVÅ (mätt: 49,5 px — en
+              första skelett-rad ensam gav 24,75 px för lite och fällde
+              boundingBox-paritetstestet i mobilläget). `sm:hidden` på den
+              andra raden är samma brytpunkt som redan styr kortets EGEN
+              `sm:flex-row`-omslag två steg ned — inte en ny, godtycklig
+              gräns. */}
+          <div className="flex flex-col">
+            <Skeleton variant="text" className="w-40 text-lg" />
+            <Skeleton variant="text" className="w-24 text-lg sm:hidden" />
+          </div>
           <ul className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
             {SKELETT_RADER.map((k) => (
               <li
@@ -245,7 +298,7 @@ export function Bekraftelsesteget({ ids, kalla }: { ids?: string; kalla?: 'impor
     <section className="flex flex-col gap-4">
       <SidRamKnapp tillbakaEtikett="Tillbaka" onTillbaka={tillbaka} />
       {fraga.isLoading ? (
-        <BekraftelsestegetSkelett />
+        <BekraftelsestegetSkelett minne={minne} />
       ) : fraga.isError ? (
         <div className="px-4">
           <MessageBox intent="warning" title="Betalningarna kunde inte hämtas">
