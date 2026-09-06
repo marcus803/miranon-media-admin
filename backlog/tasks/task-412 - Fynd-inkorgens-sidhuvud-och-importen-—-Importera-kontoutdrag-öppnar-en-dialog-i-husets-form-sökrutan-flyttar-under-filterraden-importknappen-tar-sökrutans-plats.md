@@ -7,6 +7,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 09:59'
+updated_date: '2026-09-06 10:12'
 labels:
   - ready-for-agent
 dependencies:
@@ -24,8 +25,8 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 <!-- AC:BEGIN -->
 - [ ] #1 Ett tryck på Importera kontoutdrag öppnar en dialog i husets form (Modal + Dialog) med filväljaren; kolumnmappning och matchning sker som steg inuti samma dialog; ingen dialog-i-dialog; sidan under filterraden ändrar inte höjd
 - [ ] #2 Överlämningen till bekräftelsesteget fungerar som förut (importminnet skrivs, sedan navigering) och dialogen är stängd när steget visas; Esc/Avbryt stänger utan att röra bankminnet
-- [ ] #3 Importera kontoutdrag sitter i filterradens övre rad på sökrutans tidigare plats; sökrutan är en egen rad under den utfällda filterpanelen; sidhuvudet bär bara rubriken; kommentarblocket om 2026-09-01-domen amenderat, spegel-spåret rivet eller motiverat
-- [ ] #4 Fokus flyttas in i dialogen vid öppning och tillbaka till knappen vid stängning; dialogen bär rubrik som namn; axe-svep utan fel; befintliga import-tester (bankimport-parser, staging-e2e för importen om berörd) gröna och ett test täcker dialogens öppning/stängning
+- [ ] #3 Fokus flyttas in i dialogen vid öppning och tillbaka till knappen vid stängning; dialogen bär rubrik som namn; axe-svep utan fel; befintliga import-tester (bankimport-parser, staging-e2e för importen om berörd) gröna och ett test täcker dialogens öppning/stängning
+- [ ] #4 Importera-knappen är borta ur sidhuvudet och sökrutan står KVAR i filterradens övre rad; till höger om tratten sitter en rund ikon-knapp med tre prickar (samma mått och klasser som tratten, tydligt tillgängligt namn) som öppnar husets Meny med posten Importera kontoutdrag, vilken öppnar dialogen; sidhuvudet bär bara rubriken; kommentarblocket om 2026-09-01-domen amenderat och spegel-spåret rivet; övriga FilterRad-konsumenter oförändrade
 <!-- AC:END -->
 
 ## Definition of Done
@@ -34,3 +35,9 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+OMPRÖVNING 2026-09-06 (Marcus, efter kortets mintning, ersätter beskrivningens del (2) om sökrutans flytt): 'Jag vet inte om de där med att flytta sökrutan blir bra när jag tänker efter. Jag tror vi kan behålla det som det är MEN vi tar bort knappen Importera kontoutdrag och skapar istället en rund ikon med tre prickar bredvid filtreringsikonen (till höger) som öppnar vår dropdown där det står Importera kontoutdrag. … jag vill liksom ha det lite renare upptill.' Alltså: sökrutan FLYTTAS INTE. Importera-knappen bort ur sidhuvudet. En rund ikon-knapp (lucide Ellipsis, samma mått/klasser som tratten — FilterRad.tsx:254–258, p-2.5 + 18 px ikon) till HÖGER om tratten öppnar husets Meny (src/components/primitives/Meny.tsx, MenuTrigger/Menu/MenuItem; förlagor: src/components/betalningar/InbetalningsLista.tsx rad ~646 och src/components/dokument/DokumentYta.tsx) med posten 'Importera kontoutdrag' som öppnar dialogen i del (1). FilterRad-primitiven behöver troligen en slot för en extra ändknapp efter tratten — lägg den som prop utan att ändra andra konsumenters utseende. Del (1), dialogen, står oförändrad. AC #3 (den gamla flytten) är borttaget; det nya kriteriet ligger sist i listan.
+<!-- SECTION:NOTES:END -->
