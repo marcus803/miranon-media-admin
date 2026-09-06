@@ -1619,7 +1619,41 @@ export function BetalningsInkorg() {
                   aria-label="Fler val för filtreringen"
                   className="relative inline-flex shrink-0 items-center justify-center rounded-full bg-bg-muted p-2.5 hover:bg-bg-emphasized motion-safe:transition-colors"
                 >
-                  <Ellipsis aria-hidden="true" size={18} className="shrink-0" />
+                  {/* [TASK-412, Marcus granskningsserver 2026-09-06]
+                      *"Ikonen med de tre prickarna ser ut att vara mindre
+                      än filtreringsikonen, de ska vara EXAKT lika stora."*
+
+                      MÄTT (Playwright `getBBox()` på båda SVG:erna, live mot
+                      denna sida, samma `size={18}`): `Filter`-glyfens
+                      TECKENGEOMETRI (inte den 18×18 renderade rutan) är
+                      x=2 y=3 bredd≈20 höjd≈19 av 24 — fyller ~83 % ×~79 % av
+                      sin ruta. `Ellipsis`s tre cirklar (r=1, mittpunkter
+                      y=12) mäter x=4 y=11 bredd=16 höjd=2 av 24 — bara ~8 %
+                      höjd. Lucides `Ellipsis` ÄR geometriskt gles (tre
+                      punkter, ingen fylld form); en bokstavlig höjd-matchning
+                      hade krävt ~4,75× större `size` (≈85 px) — synligt
+                      absurt, och hade dessutom gjort KNAPPEN större än
+                      tratten (padding är fast `p-2.5`, en större `size`
+                      växer knappens innehållsruta och därmed hela cirkeln —
+                      mätt: `size=22` gav en 42×42 px-knapp mot trattens
+                      38×38, `size=20` gav 40×40).
+
+                      LÖSNINGEN HÅLLER `size={18}` (SAMMA renderade SVG-ruta,
+                      SAMMA 38×38 px-knapp som tratten — mätt oförändrat) och
+                      höjer i stället `strokeWidth` från default 2 till 4:
+                      cirklarnas STRECK (inte deras `r`) gör dem visuellt
+                      solida i stället för tunna ringar. Optiskt provat
+                      stegvis mot en verklig rendering (inte gissat):
+                      `strokeWidth=2` (original) → tunt, exakt Marcus
+                      klagomål; `strokeWidth=5` → prickarna vidrör varandra
+                      och smälter ihop (cirkelradie efter streck = r+w/2 =
+                      3,5, avstånd mellan mittpunkter = 7 ⇒ 7=7, exakt
+                      kyssande); `strokeWidth=4` → tydligt fylligare/mörkare,
+                      fortfarande tre SKILDA prickar (radie 3, 1 enhets
+                      luft kvar). Samma optiska korrigering typografi
+                      kallar "optical sizing" — en glesare glyf kompenseras
+                      med extra vikt, inte med större yta. */}
+                  <Ellipsis aria-hidden="true" size={18} strokeWidth={4} className="shrink-0" />
                 </AriaButton>
               }
             >
