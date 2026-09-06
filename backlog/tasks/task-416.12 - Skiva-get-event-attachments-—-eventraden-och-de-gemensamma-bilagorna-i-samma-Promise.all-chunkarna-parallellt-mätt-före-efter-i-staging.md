@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:23'
-updated_date: '2026-09-06 14:18'
+updated_date: '2026-09-06 14:45'
 labels:
   - ready-for-agent
 dependencies: []
@@ -119,4 +119,21 @@ get-event-attachments --project-ref pqtshyierkdgwdnxuirz --use-api, exit
 Prod-deploy görs av Marcus via fas4-prod-deploy.sh --deploya <prod-ref>
 (prod-refen anges av honom, aldrig av en agent — deny-prod-ref.sh). Denna
 PR ändrar bara staging.
+
+## Runda 2 (efter granskning, commit 4c948c05)
+
+FYND 1 (granskaren, warning): chunk-hämtningen i fetchAttachmentsByRecordIds saknade ett samtidighetstak mot P4 (delad 5 req/s). Fixat med withConcurrencyLimit — kapar till 2 samtidiga chunk-anrop, dokumenterat i kommentar. En request håller aldrig fler än 3 Airtable-anrop i luften.
+
+FYND 2 (orkestreraren, warning): runda 1 tappade overlappet mellan kandidater och egna-batchen (bara eventrad+kandidater överlappade, inte egna). Fixat till treväga-kedja: kandidaterP startas FÖRST (tyst .catch mot unhandled rejection på 404-vägen), sedan eventrad, sedan egna, sedan await kandidaterP sist. Förväntad tid nu max(kandidater, eventrad+egna). 404-vägen kostar nu ett extra oanvänt kandidat-anrop — medvetet.
+
+Mätserie runda 2 (ren A/B, tillfällig runda-1-redeploy för fräsch baslinje, sedan slutlig runda-2-redeploy):
+- Stort event (297 bilagor, ~6 chunkar, taket binder): median 1.724s -> 1.750s (+26ms, inom brus — chunk-taket kostar något här, uppvägs delvis av overlap-fixen). Fortfarande ~350ms bättre än ursprunglig baslinje (2.100s).
+- Litet event (61 bilagor, 1 chunk, taket binder inte): median 1.550s -> 1.391s (-159ms, -10.3%)
+- Byte-diff: 10/10 par byte-identiska
+- Isolerad get-event-attachments.staging.test.ts: 13/13 grön mot slutlig kod
+- typecheck/biome/build: exit 0
+
+Slutlig deploy till STAGING (pqtshyierkdgwdnxuirz), commit 4c948c05, exit 0.
+
+PR-kroppen uppdaterad med full runda-2-sektion. Draft-läget på PR #2394 sattes av orkestreraren (marcus803, convert_to_draft) 2026-09-06 14:29:31Z som del av runda-1-hanteringen — INTE rört av agenten, per uppdrag.
 <!-- SECTION:NOTES:END -->
