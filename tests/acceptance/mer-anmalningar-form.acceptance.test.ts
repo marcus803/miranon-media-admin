@@ -1158,6 +1158,17 @@ test.describe('Regressionsvakt: fasta syskon-positioner håller FilterRad odemon
     await page.getByTestId('filter-period').getByRole('button').click();
     await page.getByRole('option', { name: 'Kommande', exact: true }).click();
 
+    // POSITIV SYNKRONISERINGSPUNKT (review-runda 2 fynd 3): bevisar att
+    // rerendern efter periodbytet FAKTISKT skett innan frånvaron nedan
+    // läses. Utan denna rad kan `toHaveCount(0)` uppfyllas för att den mätte
+    // FÖRE reconciliation, inte för att vakten håller — Playwright
+    // uppfyller `toHaveCount(0)` i samma ögonblick elementet inte finns,
+    // oavsett om React hunnit committa. `filter-period`s trigger visar det
+    // VALDA alternativets text (`SelectValue`), så väntan bevisar att
+    // Select-kontrollen (och därmed hela panelens rerender) är klar.
+    await expect(page).toHaveURL(/[?&]period=upcoming/);
+    await expect(page.getByTestId('filter-period')).toContainText('Kommande');
+
     // Live-regionen ska förbli TOM genom hela fel-fönstret — ingen
     // räknartext, sann eller falsk, ska annonseras medan källan har gett
     // upp. `page.getByText` matchar hela sidan, inte bara en scopad region,
@@ -1165,6 +1176,92 @@ test.describe('Regressionsvakt: fasta syskon-positioner håller FilterRad odemon
     await expect(page.getByText(/^Visar anmälningar för/)).toHaveCount(0);
     await expect(page.getByText(/anmälningar\.$/)).toHaveCount(0);
     await expect(felbesked).toBeVisible();
+  });
+
+  /**
+   * Review-runda 3 (TASK-416.19, PR #2423, Marcus mandat) — RESTPOST av
+   * runda 2:s fynd 1: `dataOkand`-vakten på de två effekterna stoppar bara
+   * NYA värden, den nollställer aldrig ett REDAN SATT `periodAnnouncement`.
+   * `useState`-värdet överlever alltså en övergång INTO felläget om det
+   * sattes under ett TIDIGARE laddat läge.
+   *
+   * VÄGEN, byggd exakt som utlåtandet beskriver: (1) sidan laddar in med
+   * riktig data, (2) Lotta byter period — `periodAnnouncement` sätts till
+   * en ÄKTA räknartext, (3) en SENARE refetch misslyckas. TanStack Query
+   * sätter då `status: 'error'` OVILLKORLIGT och BEHÅLLER `data`
+   * (query-core, reducerns `case 'error'` spreadar state) — `isError` blir
+   * sann, `dataOkand` blir sann, men `periodAnnouncement`-STATE:T rörs
+   * aldrig av det (ingen av de två effekterna kör om utan en NY period/
+   * filter-nyckel). Utan gårdagens fix (`{dataOkand ? '' : …}` i
+   * renderingen) hade den gamla räknartexten stått kvar i
+   * tillgänglighetsträdet bredvid `MessageBox`s `role="alert"`.
+   *
+   * REFETCH-VÄGEN: `router.ts` sätter `refetchOnReconnect: 'always'` —
+   * `'always'` kringgår query-cores egen `isStale()`-koll helt
+   * (`shouldFetchOn`: `value === 'always' || (value !== false &&
+   * isStale(...))`), till skillnad från `refetchOnWindowFocus: true` som
+   * KRÄVER att queryn är stale (5 min `staleTime`, för färsk direkt efter
+   * den första lyckade laddningen ovan för att en ren
+   * `visibilitychange`-dispatch ska trigga om). Ett syntetiskt
+   * offline→online-par (`onlineManager` i `@tanstack/query-core` lyssnar
+   * bokstavligen på `window`s `online`/`offline`-event, verifierat i
+   * `node_modules/@tanstack/query-core/build/modern/onlineManager.js`)
+   * tvingar därför fram en OVILLKORLIG refetch av `registrations.all`
+   * regardless av `staleTime` — den mock som styrs av `lyckas` nedan låter
+   * den refetchen svara 500.
+   *
+   * TVÅSIDIGT BEVISAT: kört mot commit `6278f0d6` (runda 2:s head, INNAN
+   * denna rättning) föll detta test — den gamla räknartexten stod kvar i
+   * felläget. Kört mot rättningen är det grönt.
+   */
+  test('en TIDIGARE satt räknartext läcker inte ut när en SENARE refetch misslyckas (laddat → filterbyte → error, review-runda 3)', async ({
+    page,
+    network,
+  }) => {
+    let lyckas = true;
+    network.use(
+      http.get(EF('get-registrations'), () =>
+        lyckas ? json({ registrations: blandadeRader() }) : json({ error: 'x' }, 500),
+      ),
+    );
+    await page.goto('/mer/anmalningar');
+
+    // (1) Genuint LADDAT läge — riktig data, inget fel.
+    await expect(page.getByRole('heading', { level: 1, name: 'Anmälningar' })).toBeVisible();
+    await expect(page.getByText('3 anmälningar', { exact: true })).toBeVisible();
+
+    // (2) Periodbyte i laddat läge — `periodAnnouncement` sätts till en ÄKTA
+    // räknartext (Kim/Bo/Eva-mängden har inga event-ID:n att slå upp, så
+    // "Kommande"/"Tidigare" ger 0 träffar bland `blandadeRader()` — det
+    // AVGÖRANDE här är bara att TEXTEN existerar, inte dess siffra).
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('filter-period').getByRole('button').click();
+    await page.getByRole('option', { name: 'Kommande', exact: true }).click();
+
+    await expect(page).toHaveURL(/[?&]period=upcoming/);
+    await expect(page.getByTestId('filter-period')).toContainText('Kommande');
+    const raknartext = page.getByText(/^Visar anmälningar för/);
+    await expect(raknartext).toBeVisible();
+
+    // (3) Nästa `get-registrations`-anrop misslyckas — en OVILLKORLIG
+    // refetch via `refetchOnReconnect: 'always'` (se docblocket ovan),
+    // oberoende av `staleTime` (datan är sekunder gammal, alltså INTE
+    // stale — en ren `visibilitychange` (refetchOnWindowFocus) hade därför
+    // inte triggat om här).
+    lyckas = false;
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+    });
+
+    const felbesked = page.getByRole('alert').filter({ hasText: 'Kunde inte hämta anmälningarna' });
+    await expect(felbesked).toBeVisible({ timeout: 20_000 });
+
+    // Den GAMLA räknartexten får INTE synas i felläget, trots att
+    // `periodAnnouncement`-state:t fortfarande bär det gamla värdet.
+    await expect(raknartext).toHaveCount(0);
+    await expect(page.getByText(/anmälningar\.$/)).toHaveCount(0);
   });
 });
 

@@ -411,17 +411,20 @@ export function AnmalningarSida({
 
   // "Har jag en pålitlig siffra/kontroll?" — deklarerad HÄR (inte längre
   // nere vid `headerBlock`) eftersom BÅDA live-region-effekterna nedan
-  // (period/filter-annonseringen) behöver den som vakt, utöver sidkromets
-  // "Visa alla anmälningar"-länk (se dess docblock längre ner). ANVÄNDS AV
-  // TRE PLATSER, EN DEFINITION — annars glider guard-villkoren isär, exakt
-  // det review-runda 2 (TASK-416.19) fångade: period-/filter-effekterna
-  // vaktade tidigare bara `isPending`, medan FilterRad självt (och alltså
-  // dess Select-kontroller) redan är fullt interaktivt i isError. Ett
-  // periodbyte MEDAN felbeskedet visas satte då `periodAnnouncement` till
-  // en falsk räknartext ("… 0 anmälningar.") i en sr-only-region bredvid
+  // (period/filter-annonseringen) behöver den som vakt. ANVÄNDS AV FYRA
+  // PLATSER, EN DEFINITION — annars glider guard-villkoren isär, exakt det
+  // review-runda 2 (TASK-416.19) fångade: period-/filter-effekterna vaktade
+  // tidigare bara `isPending`, medan FilterRad självt (och alltså dess
+  // Select-kontroller) redan är fullt interaktivt i isError. Ett periodbyte
+  // MEDAN felbeskedet visas satte då `periodAnnouncement` till en falsk
+  // räknartext ("… 0 anmälningar.") i en sr-only-region bredvid
   // `MessageBox`s `role="alert"` — två motstridiga besked till en
   // skärmläsare, samma felklass TASK-416.4 review-runda 1 redan städade
-  // bort ur skelettet.
+  // bort ur skelettet. De fyra platserna: de två live-region-effekterna
+  // (nedan), sidkromets "Visa alla anmälningar"-länk (se dess docblock
+  // längre ner) och `dataLaddadAnnonsering` (se dess egen deklaration
+  // längre ner) — review-runda 2 fynd 2 fångade att denna kommentar
+  // tidigare räknade TRE och utelämnade den sistnämnda.
   const dataOkand = isPending || isError;
 
   // SAMMA `events.list`-nyckel som EventsList/EventValjare — dedupar mot
@@ -863,20 +866,34 @@ export function AnmalningarSida({
 
   // Periodens/filtrets egna live-region — FAST POSITION i alla tre lägen
   // (tidigare bara monterad i laddat-grenen, vilket sköt headerBlock till
-  // barn-index 1 i just den grenen). `periodAnnouncement` förblir tom
-  // sträng i BÅDE isPending OCH isError: de två effekterna ovan (`prevPeriod`
-  // respektive `prevFilterNyckel`) vaktar med `dataOkand` (isPending ELLER
-  // isError), inte bara `isPending` (review-runda 2, TASK-416.19). Utan den
-  // bredare vakten kunde Lotta byta period/filter MEDAN felbeskedet stod
-  // uppe — FilterRads Period-`Select` och Event-kontrollen är fullt
-  // interaktiva redan i isError, se effekternas egen kommentar — och
-  // regionen hade då annonserat en falsk räknartext ("… 0 anmälningar.")
-  // bredvid `MessageBox`s `role="alert"`. Med `dataOkand`-vakten kan
-  // effekterna aldrig sätta ett nytt värde förrän datan genuint har landat,
-  // så regionen förblir tyst genom hela fel-fönstret.
+  // barn-index 1 i just den grenen).
+  //
+  // DET ÄR DET RENDERADE INNEHÅLLET, INTE `periodAnnouncement`-STATE:T, SOM
+  // GARANTERAS TOMT I FELLÄGET (review-runda 3, TASK-416.19 — restpost av
+  // runda 2:s fynd 1). De två effekterna ovan (`prevPeriod` respektive
+  // `prevFilterNyckel`) vaktar med `dataOkand` (isPending ELLER isError) mot
+  // att sätta ETT NYTT värde medan felet visas — men `periodAnnouncement`
+  // är ett `useState` UTAN egen nollställning, så en räknartext satt under
+  // ett TIDIGARE laddat läge ("Visar anmälningar för kommande event. 12
+  // anmälningar.") lever kvar i state om en SENARE refetch misslyckas:
+  // laddat → filterbyte (texten sätts) → error. Den vägen är realistisk,
+  // inte konstruerad — `router.ts` sätter `refetchOnWindowFocus: true` och
+  // `refetchOnReconnect: 'always'` med `staleTime` 5 min, och TanStack Query
+  // sätter `status: 'error'` OVILLKORLIGT och BEHÅLLER gammal `data` vid en
+  // misslyckad refetch (query-core, reducerns `case 'error'`). Utan
+  // `dataOkand`-villkoret NEDAN i själva renderingen hade den gamla,
+  // numera missvisande räknartexten stått kvar i tillgänglighetsträdet
+  // bredvid `MessageBox`s `role="alert"`.
+  //
+  // (En tidigare formulering här påstod att `periodAnnouncement`
+  // "förblir tom sträng i BÅDE isPending OCH isError" — sant för en FÖRSTA
+  // felladdning, eftersom effekterna då aldrig hunnit sätta något, men
+  // falskt för laddat→error-vägen ovan. Rättat review-runda 3 — se
+  // effekternas egna kommentarer för vad `dataOkand`-vakten DÄR faktiskt
+  // garanterar: inga NYA felaktiga värden, ingen nollställning av gamla.)
   const filterAnnonsering = (
     <p className="sr-only" aria-live="polite">
-      {periodAnnouncement}
+      {dataOkand ? '' : periodAnnouncement}
     </p>
   );
 
