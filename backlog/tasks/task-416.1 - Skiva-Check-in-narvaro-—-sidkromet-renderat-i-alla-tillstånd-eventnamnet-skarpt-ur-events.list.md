@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:19'
-updated_date: '2026-09-06 14:41'
+updated_date: '2026-09-06 16:32'
 labels:
   - ready-for-agent
 dependencies: []
@@ -46,4 +46,6 @@ Ny handler tests/support/fixturvarld/handlers.ts: get-attendance (tom lista, ATT
 Ny mätning: tests/acceptance/event-checkin-laddlage.acceptance.test.ts (hallbarMock-mönstret från hem-laddlage.acceptance.test.ts). Mätta tal (2026-09-06, 1280x720, Chromium): h1 boundingBox {x:376,y:128,width:528,height:36} identisk under laddning och efter datalandning. Första listraden boundingBox {x:361,y:380,width:558,height:65} identisk under laddning (skelettrad) och efter (riktig li). Krävde TVÅ anmälda i fixturen (inte en) — divide-y sätter border-bottom-width på alla rader UTOM den sista; med en enda rad är den både först och sist (ingen border), medan skelettets tre fasta rader alltid gör första raden till en icke-sista (med border) — en en-rads-fixtur hade jämfört en border-lös rad mot en border-bärande.
 
 Regressionskontroll: event-checkin-dorrlistan.acceptance.test.ts 6/6 grönt (2 körningar), dorrlista-promoverings-grind.spec.ts (visual-desktop+mobile) 30/30 grönt inkl axe — loaded-state-DOM ORÖRD (facit intakt).
+
+Review-runda 4, INFO (bokfört, inte rättat): asymmetri mellan de två fel-platshållarna. h1-radens eventnamn/datum-platshållare (VariantD, "text-body"-slotten) är aria-hidden utan eget sr-only-besked; FramstegskortD:s isError-gren fick ett sr-only-besked ("Framsteg kunde inte hämtas") i review-runda 3. Skälet är inte en glömska utan ADR-113:s "en kanal räcker": h1-radens fel är samma fel som isListError redan annonserar via listkroppens MessageBox (role="alert") i SAMMA render — en andra kanal där hade dubblerat annonseringen. FramstegskortD är däremot en egen landmärkes-region (aria-label="Framsteg") som en skärmläsare kan navigera till DIREKT, förbi den lineära lässekvensen som annars skulle nå MessageBox — utan sin egen sr-only-text hade den regionen annonserats tom just vid en sådan direktnavigering. Samma "en kanal räcker"-princip ger alltså två olika svar beroende på om ytan är en egen landmärkes-region eller inte.
 <!-- SECTION:NOTES:END -->

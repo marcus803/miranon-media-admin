@@ -561,12 +561,27 @@ test.describe('Check-in — Lugnt laddläge (TASK-416.1)', () => {
     const h1 = page.getByRole('heading', { level: 1, name: 'Check-in' });
     await expect(h1).toBeVisible();
 
+    // TIDEN HÖR TILL KONTRAKTET (review-runda 4, acceptance-bas.ts § samma
+    // rubrik): `get-event` svarar 500 och `useDorrEvent` bär INGET eget
+    // `retry`-predikat (till skillnad från `EventDetail`/`PersonDetail`),
+    // så felet går genom BÅDA retry-lagren — `fetchWithRetry` (lager 1) och
+    // QueryClient-defaulten (lager 2, `router.ts`) — innan `eventIsError`
+    // blir sant: ~7–8 s ren backoff, räknat ur samma konstanter som husets
+    // fyra precedensfall (hem-senaste-aktivitet:175, event-anteckningar:436,
+    // mer-aktivitetshistorik:392, persons-list:479). Alla assertions nedan
+    // som läser `namnrad`/`framsteg`/`alert` väntar in SAMMA avgörande —
+    // varje enskild av dem, oavsett vilken som råkar exekvera FÖRST, måste
+    // därför kunna bära hela fönstret själv (`{ timeout: 20_000 }`, samma
+    // marginal som precedensfallens). Projektets `expect`-default (15 s,
+    // `playwright.config.ts` § "TIDSBUDGETARNA ÄR HÄRLEDDA") är kalibrerad
+    // för kall-laddning, INTE för en retry-backoff-kedja av det här slaget.
+
     // FYND 1 — eventnamnraden: STATISK platshållare, aldrig ett `Skeleton`-
     // block (ingen shimmer-klass går att hitta på den, till skillnad från
     // riktiga laddlägen — se `dorrlista-skelettrad` i det första testet ovan).
     const namnrad = page.locator('h1 + p');
-    await expect(namnrad).toHaveText('—');
-    await expect(namnrad).not.toHaveClass(/animate-skeleton-shimmer/);
+    await expect(namnrad).toHaveText('—', { timeout: 20_000 });
+    await expect(namnrad).not.toHaveClass(/animate-skeleton-shimmer/, { timeout: 20_000 });
 
     // FYND 2 — Framsteg-regionen: INGEN aria-busy (felet väntar inte längre
     // på något) och ETT sr-only-besked så regionen inte annonseras tom för
@@ -574,13 +589,13 @@ test.describe('Check-in — Lugnt laddläge (TASK-416.1)', () => {
     // pending-beskedet SAMTIDIGT (ömsesidigt uteslutande grenar).
     const framsteg = page.getByRole('region', { name: 'Framsteg' });
     await expect(framsteg).toBeVisible();
-    await expect(framsteg).toHaveAttribute('aria-busy', 'false');
-    await expect(framsteg).toContainText('Framsteg kunde inte hämtas');
-    await expect(framsteg).not.toContainText('Laddar framsteg…');
+    await expect(framsteg).toHaveAttribute('aria-busy', 'false', { timeout: 20_000 });
+    await expect(framsteg).toContainText('Framsteg kunde inte hämtas', { timeout: 20_000 });
+    await expect(framsteg).not.toContainText('Laddar framsteg…', { timeout: 20_000 });
 
     // Det FAKTISKA felbeskedet bärs av listkroppen (samma `isListError`),
     // inte upprepat i sidkromet — samma delning av ansvar som review-runda
     // 1 FYND 1 etablerade.
-    await expect(page.getByRole('alert')).toContainText('kunde inte hämtas');
+    await expect(page.getByRole('alert')).toContainText('kunde inte hämtas', { timeout: 20_000 });
   });
 });
