@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 14:45'
-updated_date: '2026-09-06 15:27'
+updated_date: '2026-09-06 15:33'
 labels:
   - ready-for-agent
 dependencies: []
@@ -53,4 +53,15 @@ Kortets ursprungstal (108 px / 225 px, review-fynd PR #2397) avsåg troligen ack
 Rubrik-fix: skeleton-titelns bredd-override (w-28/w-32) togs bort — Skeleton-primitivens default `w-full` matchar det riktiga `<h1>`s stretch-till-fullbredd i flex-col-föräldern (align-items: stretch). Utan denna ändring hade `toEqual` fällt på bredd trots identisk höjd/position.
 
 Testfiler: tests/acceptance/mer-maillogg-laddlage.acceptance.test.ts, tests/acceptance/mer-vantelista-laddlage.acceptance.test.ts.
+
+PREMISS-PASS SLUTFÖRT — 108/225 px EXAKT REPRODUCERADE (engångsdiagnos, ej committad, samma metodik som review-agentens PR #2397: total sektionshöjd pending vs laddat, skift = laddat − pending):
+
+- Väntelista, baseline (origin/main, tre rader, alla fyra fält): pending=427 laddat=652 skift=225 — EXAKT match mot PR #2397:s tabell.
+- Maillogg, baseline (origin/main, tre rader, filterSnapshot=null dvs 3 av 4 fält): pending=427 laddat=535 skift=108 — EXAKT match. (Med alla fyra fält ifyllda blev laddat=604, skift=177 — review använde alltså sannolikt en rad UTAN Segment/filter.)
+
+Efter fixen (samma diagnos, samma data):
+- Väntelista: pending=652 laddat=652 skift=0 — perfekt.
+- Maillogg (3 av 4 fält, samma dataset som ovan): pending=604 laddat=535 skift=−69 — skelettet är NU 69 px FÖR HÖGT för en rad utan Segment/filter, eftersom MailLogSkeletonRow reserverar plats för alla fyra fält (MAX-anatomin, per uppdragets "upp till fyra Field-rader"). Med alla fyra fält ifyllda (så som den committade acceptance-mätningen testar) är skiftet exakt 0 — se AC #2.
+
+Bokfört avvägning: en skeleton som renderas FÖRE data kan inte veta om en specifik rad kommer sakna Segment/filter. Vald väg (MAX-anatomi, fyra platshållarrader) ger EXAKT 0 px för den vanliga fullständiga raden och ett litet ÖVER-skott (~69 px, motsatt riktning mot tidigare UNDER-skott på 100+ px) för rader utan Segment/filter — en väsentlig förbättring men inte en universell 0-px-garanti för varje möjlig fältkombination. Ingen ytterligare åtgärd vidtagen i denna skiva (utanför scope: att göra skeletonen fält-count-medveten kräver antingen förhandskunskap om datan eller en explicit designavvägning som inte efterfrågats).
 <!-- SECTION:NOTES:END -->
