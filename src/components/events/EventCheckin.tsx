@@ -427,6 +427,7 @@ function FramstegskortD({
   kvitto,
   klass,
   isPending = false,
+  isError = false,
 }: {
   klara: number;
   totalt: number;
@@ -441,8 +442,18 @@ function FramstegskortD({
    * som `FilterRad`s `isPending`-gren (`primitives/FilterRad.tsx`). Utan
    * detta hade `totalt === 0` under laddning renderat den felaktiga texten
    * "Alla är incheckade" (samma uträkning som `kvar === 0`).
+   *
+   * `isPending`/`isError` är MEDVETET separata (review-runda 2, FYND 3) —
+   * VariantD skickade tidigare `isPending || isListError`, vilket gav evig
+   * shimmer på ett genuint fel (`isListPending` blir aldrig sant för en
+   * TanStack-query som redan bytt status till `'error'`, så animationen
+   * hade fortsatt utan att någonsin lösa upp sig). Principen är fastslagen
+   * tvärs S123:s skivor (416.4, 416.8): skeleton/shimmer ENBART i pending;
+   * ett fel visar en STATISK platshållare i samma geometri, ingen animation,
+   * och felbeskedet i listkroppen bär tillståndet — kortet upprepar det inte.
    */
   isPending?: boolean;
+  isError?: boolean;
 }) {
   const kvar = Math.max(0, totalt - klara);
   const andel = totalt === 0 ? 0 : Math.round((100 * klara) / totalt);
@@ -478,6 +489,18 @@ function FramstegskortD({
           </span>
           {isPending ? (
             <Skeleton variant="text" className="col-start-1 row-start-1 w-2/5" />
+          ) : isError ? (
+            // Statisk platshållare (review-runda 2, FYND 3) — ett tankstreck,
+            // ÄKTA text (inte ett `Skeleton`-block): bär sin egen textbaslinje
+            // precis som den riktiga raden hade gjort, så `items-baseline`
+            // inte behöver den osynlig-mät-text-omväg badge-cellen nedan
+            // kräver (den cellen saknar egen text i BÅDA sina andra grenar).
+            <span
+              aria-hidden="true"
+              className="col-start-1 row-start-1 whitespace-nowrap text-text-muted"
+            >
+              —
+            </span>
           ) : (
             <span className="col-start-1 row-start-1 whitespace-nowrap tabular-nums">
               {kvar === 0 ? 'Alla är incheckade' : `${kvar} kvar att checka in`}
@@ -509,6 +532,13 @@ function FramstegskortD({
             </span>
             <Skeleton variant="text" className="col-start-1 row-start-1 rounded-full" />
           </span>
+        ) : isError ? (
+          <span
+            aria-hidden="true"
+            className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 font-medium text-caption text-text-muted tabular-nums"
+          >
+            —
+          </span>
         ) : (
           <span className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 font-medium text-caption tabular-nums">
             {`${klara} av ${totalt}`}
@@ -517,19 +547,26 @@ function FramstegskortD({
       </div>
       <div aria-hidden="true" className="h-1.5 rounded-full bg-surface">
         <div
+          // `isError` fryser bredden på 0 % precis som `isPending` — ingen
+          // animation uppstår ändå (`transition-[width]` reagerar bara på en
+          // FAKTISK förändring, och båda felfallen står stilla på 0), men
+          // uttryckt explicit hellre än att luta sig på den bieffekten.
           className="h-full rounded-full bg-primary-muted motion-safe:transition-[width]"
-          style={{ width: isPending ? '0%' : `${andel}%` }}
+          style={{ width: isPending || isError ? '0%' : `${andel}%` }}
         />
       </div>
       {/* HÖJDLÅSET (S103-konvergensvarvet, Marcus punkt 4): kortet får ALDRIG
           växa. Kvitto-raden renderas ALLTID i sin slutgeometri och står tom
           tills första incheckningen - samma regel som personlistans
           e-postrad (`DorrRadD` § HÖJDLÅSET). Tidigare växte kortet ~40 px
-          vid första incheckningen. Under laddning (`isPending`) finns inget
-          kvitto att visa — samma tomma slutgeometri, aldrig `kvitto`-propen
-          (den bär `senaste`-härledningen som alltid är `null` innan datan
-          finns ändå, men explicit är säkrare än implicit här). */}
-      <div className="-mb-1 flex min-h-9 items-center gap-2 pt-1">{isPending ? null : kvitto}</div>
+          vid första incheckningen. Under laddning ELLER fel (`isPending`/
+          `isError`) finns inget kvitto att visa — samma tomma slutgeometri,
+          aldrig `kvitto`-propen (den bär `senaste`-härledningen som alltid är
+          `null` innan datan finns ändå, men explicit är säkrare än implicit
+          här). */}
+      <div className="-mb-1 flex min-h-9 items-center gap-2 pt-1">
+        {isPending || isError ? null : kvitto}
+      </div>
     </section>
   );
 }
@@ -690,12 +727,46 @@ function SessionsRadD({
   onValj,
 }: {
   sessioner: readonly AttendanceSessionValue[];
-  vald: AttendanceSessionValue;
+  /** `null` = session ännu inte härledd (review-runda 2, FYND 2) — eventet
+   *  har inte landat. Se `useSessionsval` för varför härledningen väntar. */
+  vald: AttendanceSessionValue | null;
   onValj: (s: AttendanceSessionValue) => void;
 }) {
   if (sessioner.length <= 1) return null;
+
+  if (vald === null) {
+    // SESSION ÄNNU INTE HÄRLEDD. `ToggleButtonGroup`s `disallowEmptySelection`
+    // är ett FÖRSEGLAT beslut (primitivens egen docblock: "alltid en vald …
+    // en annan mönsterklass", `disallowEmptySelection` finns inte ens i dess
+    // konsument-typade props) — primitiven kan alltså strukturellt INTE
+    // uttrycka "inget val". Renderar därför INTE primitiven här: samma
+    // spårgeometri (track `rounded-full bg-bg-muted p-1`, segment `grid
+    // auto-cols-fr`, pill-storleken `min-h-11`) som INERTA `<span>`:ar utan
+    // någon markerad pill. `aria-hidden`: inget att interagera med eller
+    // annonsera förrän ett värde finns — samma idiom som kryssrute-
+    // reservationen i listkroppens skelettrader (`size-11 shrink-0` span).
+    return (
+      <div
+        data-testid="dorrlista-sessionsrad"
+        className="mt-1 flex flex-col gap-1.5"
+        aria-hidden="true"
+      >
+        <div className="grid w-full auto-cols-fr grid-flow-col rounded-full bg-bg-muted p-1">
+          {sessioner.map((s) => (
+            <span
+              key={s}
+              className="flex min-h-11 select-none items-center justify-center rounded-full px-2.5 py-2 text-center font-medium text-small text-text-secondary opacity-50"
+            >
+              {s}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="mt-1 flex flex-col gap-1.5">
+    <div data-testid="dorrlista-sessionsrad" className="mt-1 flex flex-col gap-1.5">
       <ToggleButtonGroup
         label="Vilken session checkar du in?"
         spread
@@ -846,8 +917,21 @@ function VariantD({
   // Anmälningarna är variant D:s källa (se `byggRaderD`) — `registrations`/
   // `attendance` deklareras högst upp i komponenten nu (samma queries som
   // `isListPending`/`isListError` läser, inget nytt anrop, ingen ny cache-post).
+  //
+  // `session ?? AttendanceSession.DAG_1` (review-runda 2, FYND 2): en ren
+  // beräkningsfallback, ALDRIG visad — `session === null` innebär per
+  // definition att `event` saknas, vilket i sin tur gör `isListPending`
+  // eller `isListError` sant (bägge väver in eventets egna flaggor), så
+  // varken listkroppen eller `FramstegskortD` renderar `rader`/`antalKlara`
+  // förrän session är känd. Utan fallbacken hade `byggRaderD` behövt ett
+  // eget null-läge för ett resultat som ändå aldrig når skärmen.
   const { rader, avbokade, utanDeltagande } = useMemo(
-    () => byggRaderD(registrations.data ?? [], attendance.data ?? [], session),
+    () =>
+      byggRaderD(
+        registrations.data ?? [],
+        attendance.data ?? [],
+        session ?? AttendanceSession.DAG_1,
+      ),
     [registrations.data, attendance.data, session],
   );
 
@@ -1075,7 +1159,8 @@ function VariantD({
         klara={antalKlara}
         totalt={rader.length}
         klass="mt-1"
-        isPending={isListPending || isListError}
+        isPending={isListPending}
+        isError={isListError}
         kvitto={
           senaste && (
             <>
@@ -1115,7 +1200,20 @@ function VariantD({
           redan testade vägen (eventet klart, attendance/registrations
           fortfarande laddar) ska förbli oförändrad — sökfältet är aktivt
           där precis som förut. Disabled-läget täcker bara den ovanliga
-          vägen där vi inte ens har ett event att söka BLAND. */}
+          vägen där vi inte ens har ett event att söka BLAND.
+          VISUELL disabled-markering (review-runda 2, FYND 1) — huset
+          `Button.tsx`s konvention (`data-[disabled]:cursor-not-allowed
+          data-[disabled]:opacity-50`) speglad hit via `group-data-[disabled]`
+          (`SearchField` bär redan `group`, samma mekanism som
+          `group-data-[empty]:hidden` på rensa-knappen två rader ned). Utan
+          detta hade `isDisabled` bara varit ett osynligt attribut — fältet
+          hade sett lika aktivt ut, disabled eller ej.
+          `prefers-contrast: more`: `--mm-input-border` (`--mm-border-field`,
+          neutral-400) är redan ≥3:1 mot vit yta OSETT av opacity — WCAG
+          1.4.11 undantar dessutom inaktiva kontroller helt från kravet.
+          Samma opacity-only-mönster (utan egen contrast-more-motregel) som
+          `Button.tsx`/`ToggleButtonGroup.tsx` redan bär för SINA disabled-
+          lägen; ingen ny risk introducerad. */}
       <SearchField
         aria-label="Sök bland de anmälda"
         value={fraga}
@@ -1126,11 +1224,11 @@ function VariantD({
         <div className="relative">
           <AriaInput
             placeholder="Sök på namn eller e-post"
-            className="text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) mm-fokusring-vid-fokus min-h-11 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
+            className="text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) mm-fokusring-vid-fokus min-h-11 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body group-data-[disabled]:cursor-not-allowed group-data-[disabled]:opacity-50 [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
           />
           <AriaButton
             aria-label="Rensa sökningen"
-            className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden"
+            className="absolute top-1/2 right-2 flex size-8 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden group-data-[disabled]:opacity-50"
           >
             <X aria-hidden="true" size={16} className="shrink-0" />
           </AriaButton>
@@ -1141,8 +1239,13 @@ function VariantD({
           återstår"-räknaren är RIVEN - den upprepade framstegskortets
           rubrik. Kvar är det raden ensam bär: sökutfallet och det explicita
           bortfallet (avbokade visas aldrig tyst borttagna). Ingen träff-
-          textrad utan sökning = ingen rad alls. */}
-      {!isListPending && (fraga || avbokade > 0) && (
+          textrad utan sökning = ingen rad alls.
+          `!isListError` (review-runda 2, FYND 2-följdfix): `avbokade` är
+          BYGGD ur `byggRaderD`s session-fallback (se ovan) och kan bli > 0
+          även medan `session` fortfarande är `null` — utan denna vakt hade
+          raden kunnat visa "N avbokade visas inte" baserat på en session vi
+          ännu inte vet är rätt, medan listkroppen själv är i fel-läge. */}
+      {!isListPending && !isListError && (fraga || avbokade > 0) && (
         <p role="status" aria-live="polite" className="px-4 text-small text-text-muted">
           {[
             fraga ? `Visar ${traffar.length} av ${rader.length} anmälda för "${fraga}".` : null,
@@ -1299,8 +1402,12 @@ function VariantD({
       {/* DATA-FÖRBEHÅLLET står EFTER listan, inte före: det är ett faktum om
           basen som den skarpa skivan måste lösa, inte något Lotta handlar på
           vid dörren. Före listan kostade det topp-utrymme som första raden
-          behövde bättre (se sessionsnoten ovan). Tyst får det aldrig vara. */}
-      {utanDeltagande > 0 && (
+          behövde bättre (se sessionsnoten ovan). Tyst får det aldrig vara.
+          `session != null` (review-runda 2, FYND 2-följdfix): samma skäl som
+          meta-radens vakt — `utanDeltagande` är byggd på session-FALLBACKEN
+          och texten namnger sessionen rakt av; ingen anledning att visa ett
+          påstående om "Dag 1" innan vi faktiskt vet att det är rätt dag. */}
+      {session != null && utanDeltagande > 0 && (
         <p className="px-4 text-caption text-text-muted">
           {`${utanDeltagande} av ${rader.length} saknar deltaganderad för ${session} i basen. Dörren visar dem ändå: den skarpa skivan måste skapa raden vid incheckning, inte dölja personen.`}
         </p>
@@ -1320,11 +1427,21 @@ function VariantD({
  * Dag 2 om dagens datum är eventets slutdatum, i övrigt Dag 1. Gissningen
  * visas ALLTID för Lotta och kan alltid styras om.
  *
- * `event: Event | undefined` (review-runda 1, FYND 2): `VariantD` monteras nu
- * innan eventet nödvändigtvis landat. Utan ett event kan inte "Dag 2 om
- * dagens datum är slutdatum"-grenen prövas — den hoppas över (`event?.`) och
- * härledningen faller tillbaka på `sessioner[0]`, exakt samma fallback som
- * redan gäller när `sessioner.length <= 1`.
+ * `event: Event | undefined` — returnerar `session: … | null` (review-runda
+ * 2, FYND 2, SKÄRPT från runda 1:s första försök). Runda 1 lät härledningen
+ * falla tillbaka på `sessioner[0]` när `event` saknades — men `sessioner`
+ * (byggd ur ATTENDANCE/REGISTRATIONS, oberoende av `event`) kan bli > 1 INNAN
+ * eventet landat, om attendance/registrations råkar svara snabbare. Följden:
+ * togglen visade "Dag 1" (den ärvda fallbacken), och när eventet SEDAN landar
+ * och råkar vara sista dagen byter `harledd` TYST till "Dag 2" — exakt det
+ * osynkade hopp skivan finns för att förhindra, bara flyttat en nivå ned.
+ *
+ * Lösningen: härled INGET värde alls förrän `event` finns. `session` är
+ * `null` tills dess (och `SessionsRadD` visar då sin INERTA platshållar-gren,
+ * ingen pill vald) — ANNARS `vald ?? harledd`, precis som förut. Ett värde
+ * sätts alltså EN gång, i SAMMA render som eventet landar och listkroppen
+ * (som redan väver in `eventIsPending`/`eventIsError` i `isListPending`/
+ * `isListError`) går från skelett till innehåll.
  */
 function useSessionsval(event: Event | undefined, rader: Dorrad[]) {
   const sessioner = useMemo(
@@ -1348,10 +1465,13 @@ function useSessionsval(event: Event | undefined, rader: Dorrad[]) {
   }, [sessioner, event?.slutdatum]);
 
   const [vald, setVald] = useState<AttendanceSessionValue | null>(null);
-  const session = vald ?? harledd;
+  const session = vald ?? (event ? harledd : null);
 
-  /** Datumtexten för den valda sessionen — Dag 1 = start, Dag 2 = slut. */
+  /** Datumtexten för den valda sessionen — Dag 1 = start, Dag 2 = slut. Ingen
+   *  session (ännu) ⇒ ingen text — samma tomma-tills-känt-regel som resten
+   *  av kromets fält-för-fält-degradering. */
   const datumtext = useMemo(() => {
+    if (session === null) return null;
     const iso =
       session === AttendanceSession.DAG_2
         ? (event?.slutdatum ?? null)

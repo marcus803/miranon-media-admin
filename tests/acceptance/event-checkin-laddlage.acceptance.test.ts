@@ -3,7 +3,11 @@ import type { NetworkFixture } from '@msw/playwright';
 import { http } from 'msw';
 import type { z } from 'zod';
 import type { AttendanceSchema, RegistrationSchema } from '../../src/domain/schemas';
-import { EVENT_DETAIL_RESPONSE, VISUAL_EVENT_ID } from '../support/fixturvarld/fixture-data';
+import {
+  EVENT_DETAIL_RESPONSE,
+  FROZEN_NOW,
+  VISUAL_EVENT_ID,
+} from '../support/fixturvarld/fixture-data';
 import { EF, json } from '../support/fixturvarld/handlers';
 import { expect, test } from './acceptance-bas';
 
@@ -53,6 +57,18 @@ import { expect, test } from './acceptance-bas';
  * `EventCheckin`, se dess docblock) degraderar kromet fält-för-fält — namn/
  * datum → skelett, sökfältet → `isDisabled`, framstegskortet → `aria-busy` —
  * i stället för att hoppa över hela sidkromet.
+ *
+ * FJÄRDE TESTET (review-runda 2, FYND 2) — "attendance/registrations landar
+ * FÖRE eventet": samma håll-bara-mock-form men med en TVÅDAGARSFIXTUR
+ * (`sessioner.length === 2`), och `get-attendance`/`get-registrations`
+ * besvarade DIREKT medan `get-event` hålls. Bevisar `SessionsRadD`s
+ * placeholder-gren (`useSessionsval`s `session: … | null`): ingen radio
+ * existerar alls innan eventet landat (INTE bara "ingen ikryssad" — hela
+ * radiogroup/radio-semantiken är frånvarande, se `SessionsRadD`s docblock
+ * för varför `ToggleButtonGroup`s förseglade `disallowEmptySelection` gör
+ * "ingen vald pill" strukturellt ouppnåeligt via primitiven), och EXAKT en
+ * pill markeras när eventet landar — aldrig en synlig övergång mellan två
+ * olika val, eftersom inget val fanns att byta FRÅN.
  */
 
 const EVENT_ID = VISUAL_EVENT_ID;
@@ -377,5 +393,134 @@ test.describe('Check-in — Lugnt laddläge (TASK-416.1)', () => {
 
     expect(h1BoxLaddat).toEqual(h1BoxLaddar);
     expect(forstaRadBoxLaddat).toEqual(forstaRadBoxLaddar);
+  });
+
+  test('attendance/registrations landar FÖRE eventet (flerdagarsfixtur): sessionstoggeln visar inget val och byter aldrig annat än från inget till det härledda', async ({
+    page,
+    network,
+  }) => {
+    // Review-runda 2, FYND 2. Ett ANNAT event-ID än de två andra testen —
+    // medvetet FRÅNVARANDE ur `EVENTS_RESPONSE.events`, samma skäl som
+    // "eventet självt parkerat" ovan. Frusen klocka (`FROZEN_NOW`,
+    // 2026-09-15): eventets datum (oktober 2026) får ALDRIG sammanfalla med
+    // "idag" i `useSessionsval`s Dag 2-heuristik, oavsett vilket datum denna
+    // testsvit faktiskt körs på — annars vore assertionen om VILKEN dag som
+    // härleds klockberoende och skör (samma disciplin som
+    // `event-checkin-dorrlistan.acceptance.test.ts`s filhuvud § DETERMINISMEN).
+    await page.clock.install({ time: FROZEN_NOW });
+
+    const EVENT_ID_SENT = 'recLaddlageEventSent01';
+    const ANMALAN_SENT_A = 'recLaddlageAnmSent01';
+    const ANMALAN_SENT_B = 'recLaddlageAnmSent02';
+
+    const st = {
+      hall: true,
+      parkerade: [] as Array<() => void>,
+      slappAlla() {
+        for (const slapp of this.parkerade.splice(0)) slapp();
+      },
+    };
+    const vantaOmHallen = () =>
+      st.hall ? new Promise<void>((slapp) => st.parkerade.push(slapp)) : Promise.resolve();
+
+    network.use(
+      // ENDAST get-event hålls — attendance/registrations besvaras direkt,
+      // så de landar FÖRE eventet (exakt det race FYND 2 beskriver: en
+      // >1-session-fixtur blir avslöjad av attendance-datan innan eventets
+      // slutdatum finns att pröva "är idag sista dagen?" mot).
+      http.get(EF('get-event'), async ({ request }) => {
+        const id = new URL(request.url).searchParams.get('id');
+        if (id !== EVENT_ID_SENT) return json(EVENT_DETAIL_RESPONSE);
+        await vantaOmHallen();
+        return json({
+          event: {
+            ...EVENT_DETAIL_RESPONSE.event,
+            id: EVENT_ID_SENT,
+            eventNamn: 'Utbildning Sent Landad',
+            eventlabel: 'Sent landad 1–2 okt',
+            startdatum: '2026-10-01',
+            slutdatum: '2026-10-02',
+          },
+        });
+      }),
+      http.get(EF('get-registrations'), ({ request }) => {
+        const eventId = new URL(request.url).searchParams.get('eventId');
+        if (eventId !== EVENT_ID_SENT) return json({ registrations: [] });
+        return json({
+          registrations: [
+            reg({ id: ANMALAN_SENT_A, eventId: EVENT_ID_SENT }),
+            reg({
+              id: ANMALAN_SENT_B,
+              fornamn: 'Beata',
+              efternamn: 'Berg',
+              email: 'beata@example.se',
+              personId: 'recLaddlagePers002',
+              eventId: EVENT_ID_SENT,
+            }),
+          ],
+        });
+      }),
+      http.get(EF('get-attendance'), () =>
+        json({
+          attendance: [
+            att({
+              id: 'recLaddlageDeltSent01',
+              anmalanId: ANMALAN_SENT_A,
+              eventId: EVENT_ID_SENT,
+              session: 'Dag 1',
+            }),
+            att({
+              id: 'recLaddlageDeltSent02',
+              anmalanId: ANMALAN_SENT_B,
+              personId: 'recLaddlagePers002',
+              personNamn: NAMN_B,
+              eventId: EVENT_ID_SENT,
+              session: 'Dag 2',
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await page.goto(`/event/${EVENT_ID_SENT}/narvaro`);
+
+    const h1 = page.getByRole('heading', { level: 1, name: 'Check-in' });
+    await expect(h1).toBeVisible();
+
+    // Sidkromet står, men INGEN session är vald ännu: `ToggleButtonGroup`s
+    // radiogroup/radio-semantik existerar inte alls (placeholder-grenen i
+    // `SessionsRadD`) — bara de dämpade, icke-interaktiva platshållarna.
+    const sessionsrad = page.getByTestId('dorrlista-sessionsrad');
+    await expect(sessionsrad).toBeVisible();
+    await expect(page.getByRole('radio')).toHaveCount(0);
+    await expect(page.getByText('Dag 1', { exact: true })).toBeVisible();
+    await expect(page.getByText('Dag 2', { exact: true })).toBeVisible();
+
+    const skelettrader = page.getByTestId('dorrlista-skelettrad');
+    await expect(skelettrader.first()).toBeVisible();
+
+    await page.mouse.move(0, 0);
+    const sessionsradBoxInnan = await sessionsrad.boundingBox();
+
+    st.hall = false;
+    st.slappAlla();
+
+    // Eventet landar: EXAKT en pill markerad — aldrig noll, aldrig två, och
+    // aldrig en SYNLIG övergång mellan två OLIKA valda pills (det fanns
+    // inget valt att byta FRÅN; `session` var `null` fram tills nu).
+    await expect(page.getByText('Utbildning Sent Landad')).toBeVisible();
+    const radiogroup = page.getByRole('radiogroup', { name: 'Vilken session checkar du in?' });
+    await expect(radiogroup).toBeVisible();
+    await expect(page.getByRole('radio', { checked: true })).toHaveCount(1);
+    // Ingen dagens-datum-matchning möjlig (frusen klocka, oktober-fixtur i
+    // filhuvudet) ⇒ härledningen faller på `sessioner[0]` = "Dag 1".
+    await expect(page.getByRole('radio', { name: 'Dag 1', checked: true })).toBeVisible();
+    await expect(skelettrader).toHaveCount(0);
+
+    await page.evaluate(
+      () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+    );
+    const sessionsradBoxEfter = await sessionsrad.boundingBox();
+    expect(sessionsradBoxEfter).toEqual(sessionsradBoxInnan);
   });
 });
