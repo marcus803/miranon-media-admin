@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 01:06'
+updated_date: '2026-09-06 09:24'
 labels:
   - ready-for-agent
 dependencies:
@@ -194,4 +194,6 @@ RUNDA 2 2026-09-06 01:06 UTC (SHA efter denna commit: se PR #2362s senaste push)
 Grindar (förgrund, exitkod separat): check-facit.sh 0, check:docs 0 (14 gröna), typecheck 0, biome 0 (18 varn/83 info, oförändrat), check-langa-streck.mjs 0 (321 filer). Promoverings-grinden omkörd: 11/11 (10 + setup) gröna.
 
 Modell: Sonnet 5 (claude-sonnet-5).
+
+RESUME 4 (2026-09-06): Marcus granskar i PROD (flaggan är på via Vercel sedan S113 steg 14 — bundeln på admin.miranon.dev bär VITE_FEATURE_BETALNINGAR=pa och registrera-chunken; granskningsvyn ovan gäller lika i prod, men Registrera-trycket bokför på riktigt där). Hans fynd gav TASK-402.8 (pillsen bort, namnet klipps, beloppsknapparna under listan) som ändrar formen FÖRE stämpeln — AC #10 görs om på 402.8:s form (402.8 AC #6). 402.6 beror nu på 402.8.
 <!-- SECTION:NOTES:END -->
