@@ -1,11 +1,24 @@
 # Amendering 2026-09-06 — ariaSnapshot-paret deklareras, och fyra avvikelser bokförs (TASK-402.3)
 
-> Denna sidofil finns för att `facit.json` är AGENT-FRUSET. `ADR-104`-hooken
-> (`scripts/deny-facit-godkand-skrivning.sh`) vaktar `godkand`-fältet, och
-> uppdraget till denna skiva förbjuder uttryckligen varje agent-skrivning mot
-> manifestet — `referenser` inkluderat. Bokföringen bor därför i en sidofil
-> bredvid manifestet, formen kanoniserad i `ADR-102` § Updates 2026-08-22
-> § A3. `facit.json` är INTE rört av denna commit.
+> **RÄTTAD 2026-09-06 (runda 2, review-agentens fynd 2):** föregående version
+> av detta stycke påstod att `facit.json` var AGENT-FRUSET och att
+> `referenser`-fältet inte fick skrivas av en agent — en felaktig premiss.
+> `ADR-104`-hooken (`scripts/deny-facit-godkand-skrivning.sh`) fryser bara ett
+> manifest vars `godkand` REDAN är satt (icke-null); vår yta bär
+> `"godkand": null`, och hooken släpper varje skrivning som lämnar fältet
+> null (verifierat mot `scripts/lib/facit-godkand-skrivning.mjs`, som prövar
+> exakt `objekt.godkand !== null`). Per `ADR-102` § Updates 2026-08-22 § A5 är
+> DETTA den enda tidpunkt ett mekaniskt hash-lås (`referenser: [{ fil, sha256
+> }]`, `check-facit.sh`s invariant (d)) kan etableras — låset går inte att
+> lägga på retroaktivt sedan hooken fryst manifestet. `referenser` är därför
+> skrivet DIREKT i `facit.json` (10 poster, ett per ariaSnapshot-fil), inte i
+> denna sidofil. `godkand` är orört (`null` kvar).
+>
+> Denna sidofil finns kvar som NARRATIV — klassningen av de fyra avvikelserna,
+> deras Marcus-grund och vad som INTE är amenderat. Det formatet (prosa utan
+> hashar) är kanoniserat i `ADR-102` § Updates 2026-08-22 § A3 för just den
+> delen av bokföringen; det är bara `referenser`-nyckeln som A5 flyttar in i
+> manifestet självt.
 
 **Yta:** `bekraftelsesteget` (manifestets enda `ytor`-post, `"godkand": null`,
 låst 2026-09-05 med Marcus `"Lås som facit."`; källorna listade i manifestets
@@ -29,6 +42,11 @@ Paret är nu fött. Tio referenser, fem lägen × två bredder, alla i katalogen
 | efter Registrera | `bekraftelsesteget-efter-registrera-desktop-…` | `bekraftelsesteget-efter-registrera-ipad-…` |
 | Ångra-dialogen | `bekraftelsesteget-angra-dialog-desktop-…` | `bekraftelsesteget-angra-dialog-ipad-…` |
 | efter Registrera och skicka | `bekraftelsesteget-efter-skicka-desktop-…` | `bekraftelsesteget-efter-skicka-ipad-…` |
+
+**Hash-låst i `facit.json`s `referenser`-fält (runda 2, se rättelsen ovan):**
+samtliga tio, med varje fils faktiska `sha256` vid SHA `081a2e95` (denna
+skivas HEAD). `bash scripts/check-facit.sh` (invariant (d)) verifierar dem vid
+varje körning — grön i denna landning.
 
 Specen är `tests/e2e/bekraftelsesteget-promoverings-grind.staging.test.ts`.
 Den ligger i staging-e2e-klassen och INTE i `tests/visual/` — den hermetiska
