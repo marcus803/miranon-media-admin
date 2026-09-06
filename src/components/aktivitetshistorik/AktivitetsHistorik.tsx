@@ -484,8 +484,8 @@ function LaddLage() {
  * Filterraden (TASK-201.8, B-målet) — kategori + event (Select-primitiven,
  * ADR-044) + tidsperiod (ToggleButtonGroup-primitiven). "Ovanför kärnvyns
  * lista" (AC #1) — monterad i BÅDE isPending- och den laddade grenen
- * (TASK-416.3: sidkromet renderas i alla querytillstånd, ADR-113/PRD
- * TASK-416 — enbart isError-grenen saknar den fortfarande, oförändrat
+ * (TASK-416.3: sidkromet renderas i alla querytillstånd, PRD TASK-416 §
+ * Bakgrund — enbart isError-grenen saknar den fortfarande, oförändrat
  * scope), aldrig unmountad mellan dem. I isPending är HELA raden
  * `isDisabled` (kontrollerna kan inte styra en lista som inte finns än);
  * när första hämtningen landar går den över i den laddade grenen med
@@ -812,8 +812,8 @@ export function AktivitetsHistorik() {
         <header className={headerKlass}>
           <h1 className="font-semibold text-3xl">Aktivitetshistorik</h1>
         </header>
-        {/* TASK-416.3 — filterraden monterad ÄVEN i laddläget (ADR-113/PRD
-            TASK-416: sidkromet i alla querytillstånd, bara listkroppen
+        {/* TASK-416.3 — filterraden monterad ÄVEN i laddläget (PRD TASK-416
+            § Bakgrund: sidkromet i alla querytillstånd, bara listkroppen
             växlar). `isDisabled` spärrar samtliga kontroller — Lotta kan
             inte filtrera en lista som ännu inte finns. Identiska props som
             den laddade grenens FilterRad (utom isDisabled) håller

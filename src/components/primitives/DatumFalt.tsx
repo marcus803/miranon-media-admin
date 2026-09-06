@@ -41,8 +41,10 @@ export function DatumFalt({
    * segment nåbara) tills konsumentens data finns. RAC:s `DateRangePicker`
    * propagerar `isDisabled` till `Group`/`DateInput`/knappen internt (samma
    * mekanik som `Select`/`ToggleButtonGroup`); `data-[disabled]`-stilarna
-   * nedan speglar Input/Select/TextArea-primitivens golv. Default `false` —
-   * OmEventet/CreateEventForm är opåverkade av tillägget. */
+   * nedan speglar Input/Select/TextArea-primitivens golv. Utelämnad =
+   * `undefined`, vilket RAC behandlar som aktiverad (ingen egen
+   * destruktureringsdefault här) — OmEventet/CreateEventForm är opåverkade
+   * av tillägget. */
   isDisabled?: boolean;
 }) {
   const segKlass =
