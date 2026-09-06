@@ -586,7 +586,7 @@ test('regeln är stabil över flera rader i kön — var och en bedöms för sig
  * SAMMA TVÅ-RIKTNINGS-DISCIPLIN som resten av filen.
  */
 
-test('en anmälan med ett oskickat kvitto ger en post — namnet är RADENS, beloppet är INBETALNINGENS', () => {
+test('en anmälan med ett oskickat kvitto ger en post, namnet är RADENS, beloppet är INBETALNINGENS', () => {
   const r = rad({
     personNamn: 'Cecilia Örning',
     saknas: 0,
@@ -600,7 +600,7 @@ test('en anmälan med ett oskickat kvitto ger en post — namnet är RADENS, bel
   ]);
 });
 
-test('EN ANMÄLAN kan bidra med FLERA poster — avgift och slutbetalning kan båda vänta samtidigt', () => {
+test('EN ANMÄLAN kan bidra med FLERA poster, avgift och slutbetalning kan båda vänta samtidigt', () => {
   const r = rad({
     personNamn: 'Bengt Lindqvist',
     saknas: 0,

@@ -95,19 +95,17 @@
 // (`VALBARA_BETALSATT` i `Betalningar.schema.ts` utesluter det uttryckligen),
 // så uteslutningen kan aldrig dölja en riktig, Lotta-registrerad betalning.
 //
-// KÄND, MEDVETET OLÖST GRÄNS (ADR-086 — bokförd, inte tyst löst): Lottas
-// kryssruta "Skicka kvitto" i registreringsformuläret persisteras INGENSTANS
-// — `RegistreraInbetalningInput` bär den aldrig till servern
-// (`Betalningar.schema.ts`). En inbetalning registrerad MED kryssrutan URTAGEN
-// är därför, i Postgres, BYTE FÖR BYTE identisk med en som väntar på att
-// köas: `status = 'aktiv'`, `kvitto_id = null`, ingen jobbrad. Denna skiva
-// kan inte skilja dem åt utan ett nytt persisterat fält på `inbetalningar`,
-// och att lägga till ett sådant kräver att röra registreringsformuläret
-// (`RegistreraForm.tsx`) — en annan skivas kollisionsyta i denna omgång.
-// Bedömd risk: LÅG. Kryssrutan defaultar till ibockad och kan bara ändras av
-// Lotta i formuläret (aldrig av backfillen, som har sin egen uteslutning
-// ovan) — men en rad registrerad MED kryssrutan urtagen kommer, tills detta
-// löses, felaktigt visas som "kvitto att skicka".
+// KRYSSRUTAN "SKICKA KVITTO" — LÖST (TASK-367 review runda 1, FYND 2, Marcus
+// beslut 2026-09-06 "Definitivt A"). Stod tidigare här som en känd, öppen
+// begränsning: registreringsformulärets kryssruta persisterades ingenstans,
+// så en inbetalning registrerad MED kryssrutan URTAGEN var i Postgres byte
+// för byte identisk med en som väntade på att köas. Kolumnen
+// `inbetalningar.kvitto_avbojt` (migration
+// `20260906165100_inbetalning_kvitto_avbojt.sql`) stänger hålet:
+// `registrera-inbetalning` skriver `!medKvitto` dit, och kandidatfrågan
+// nedan (`.eq('kvitto_avbojt', false)`) utesluter sådana rader — samma
+// princip som `betalsatt <> 'Historik'` redan bär för backfillen, fast för
+// ett AVSIKTLIGT val i stället för en historisk rad.
 
 import { requireUser } from '../_shared/auth.ts';
 import { corsHeadersFor, handleCors } from '../_shared/cors.ts';
@@ -123,7 +121,7 @@ import {
   skapaAdminKlient,
 } from '../_shared/betalningar-db.ts';
 import { lasNumeric, summeraKronor } from '../_shared/betalningsbelopp.ts';
-import { valjPris } from '../_shared/betalningsharledning.ts';
+import { raknasSomForfallen, valjPris } from '../_shared/betalningsharledning.ts';
 
 const LOGG = '[hamta-oppna-betalningar]';
 const ANMALNINGAR_TABELL_BAS = 'Anmälningar';
@@ -269,6 +267,7 @@ Deno.serve(async (req) => {
       .select('id, anmalan_record_id, belopp')
       .eq('status', 'aktiv')
       .is('kvitto_id', null)
+      .eq('kvitto_avbojt', false)
       .neq('betalsatt', BACKFILL_BETALSATT);
     if (kandidatFel) throw kandidatFel;
 
@@ -465,8 +464,14 @@ Deno.serve(async (req) => {
       const spegel = scalarNumber(f['Summa inbetalt (kr)']);
       const summaInbetalt = summaPerAnmalan.get(rad.id) ?? 0;
       const deadline = scalarString(f['Deadline slutbetalning']);
+      const saknas = scalarNumber(f['Saknas (kr)']);
 
-      if (deadline !== null && deadline.slice(0, 10) < idag) forfallna += 1;
+      // [TASK-367 review runda 1, FYND 1] Se `_shared/betalningsharledning.ts`s
+      // `raknasSomForfallen`-docblock för varför `saknas > 0` krävs HÄR också
+      // — inte bara i `OPPEN_BETALNING_FILTER`. `raderExtra` (§ "KVITTO ATT
+      // SKICKA" ovan) bryter antagandet att varje rad redan har `Saknas
+      // (kr) > 0`.
+      if (raknasSomForfallen(saknas, deadline, idag)) forfallna += 1;
 
       const kursnamn = lookupText(f['Kurs (from Event)']);
       const ort = lookupText(f['Ort (from Event)']);
@@ -484,7 +489,7 @@ Deno.serve(async (req) => {
         eventStartdatum: ev?.startdatum ?? null,
         eventTyp: ev?.typ ?? null,
         anmalanStatus: selectName(f['Status'] ?? null),
-        saknas: scalarNumber(f['Saknas (kr)']),
+        saknas,
         gallandePris: valjPris(avtalatPris, prisFranEvent, ev?.pris ?? null),
         anmalningsavgift: ev?.avgift ?? null,
         summaInbetalt,

@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-03 07:46'
+updated_date: '2026-09-06 16:48'
 labels:
   - ready-for-agent
 dependencies: []
@@ -31,3 +32,9 @@ PRD TASK-346 § Kvittot ('Registrera först, skicka sedan') och § Inkorgen ('K 
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Review-fynd (runda 1, PR #2416): kortets beskrivning påstår att härledningen 'kostar inga extra anrop' — det stämmer för Postgres-sidan (en global fråga läggs till, ersätter ingen), men EF-huvudets ANROPSBUDGET-avsnitt (hamta-oppna-betalningar/index.ts) visar korrekt att en fullbetald anmälan med oskickat kvitto kräver en EXTRA batchad Airtable-sökning (+ceil(extra anmälningar / 50)). Kortets premiss är alltså felställd i den delen; koden är korrekt och dokumenterar sin egen budget.
+<!-- SECTION:NOTES:END -->

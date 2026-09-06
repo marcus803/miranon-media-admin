@@ -59,10 +59,13 @@ import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
 const HAMTA_OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
 const KOA_KVITTON = '**/functions/v1/koa-kvitton';
 const HAMTA_JOBBSTATUS = '**/functions/v1/hamta-jobbstatus*';
+const REGISTRERA_INBETALNING = '**/functions/v1/registrera-inbetalning';
 
 const EVENT_ID = 'recTASK367EVENT01';
 const ANMALAN_ID = 'recTASK367ANMALN1';
+const ANMALAN_ID_2 = 'recTASK367ANMALN2';
 const INBETALNING_ID = 'a1b2c3d4-0367-4367-8367-000000000001';
+const INBETALNING_ID_2 = 'a1b2c3d4-0367-4367-8367-000000000003';
 const JOBB_ID = 'a1b2c3d4-0367-4367-8367-000000000002';
 
 type Json = Record<string, unknown>;
@@ -94,6 +97,37 @@ function fullbetaldMedOskickatKvitto(overrides: Json = {}): Json {
     deadlineSlutbetalning: null,
     kvittonAttSkicka: 0,
     oskickadeKvitton: [{ inbetalningId: INBETALNING_ID, belopp: 500 }],
+    ...overrides,
+  };
+}
+
+/**
+ * [TASK-367 review runda 1, FYND 2] En ÖPPEN anmälan (`saknas > 0`) — den
+ * ordinarie inkorgs-listans form, med "Registrera betalning" tillgänglig.
+ * Används av de två registrerings-testerna nedan: de öppnar formuläret,
+ * registrerar, och verifierar VAD SOM SKICKADES (`medKvitto`) — inte hur
+ * raden ser ut EFTER, som `fullbetaldMedOskickatKvitto` (ovan) redan äger.
+ */
+function oppenAnmalanAttRegistrera(overrides: Json = {}): Json {
+  return {
+    anmalanRecordId: ANMALAN_ID_2,
+    personNamn: 'Task367 Kryssrutsson',
+    personEpost: null,
+    personTelefon: null,
+    eventId: EVENT_ID,
+    eventNamn: 'Task367-kurs',
+    eventStartdatum: '2099-06-01',
+    eventTyp: 'Utbildning',
+    anmalanStatus: 'Bekräftad (mail skickat)',
+    saknas: 500,
+    gallandePris: 500,
+    anmalningsavgift: null,
+    summaInbetalt: 0,
+    summaInbetaltSpegel: 0,
+    spegelIFas: true,
+    deadlineSlutbetalning: null,
+    kvittonAttSkicka: 0,
+    oskickadeKvitton: [],
     ...overrides,
   };
 }
@@ -167,15 +201,21 @@ test.describe('TASK-367 — kvitto att skicka härleds ur Postgres, inte flikens
     // flikens minne existerar inte här.
     await expect(page.locator('section[aria-label="Registrerat nu"]')).toHaveCount(0);
 
-    // DEN NYA, DURABLA SEKTIONEN VISAR RADEN.
-    const block = page.locator('section[aria-label="Kvitto att skicka"]');
+    // DEN NYA, DURABLA SEKTIONEN VISAR RADEN. `getByRole('region', {name})`
+    // — inte en `aria-label`-attributselektor — eftersom sektionen sedan
+    // review-fynd 3 (runda 1) namnges via `aria-labelledby` mot sin synliga
+    // `<h2>`, inte via `aria-label` direkt. Rollbaserad matchning läser den
+    // BERÄKNADE tillgängliga namnet oavsett vilkendera formen som bär det.
+    const block = page.getByRole('region', { name: 'Kvitto att skicka' });
     await expect(block).toBeVisible();
     await expect(block.getByText('Task367 Testsson')).toBeVisible();
     const knapp = block.getByRole('button', { name: 'Skicka 1 kvitto' });
     await expect(knapp).toBeVisible();
 
+    // AxeBuilder `.include()` tar bara CSS-selektorer (ingen roll/namn-
+    // matchning), därav `data-testid` i stället för `aria-label` som krok.
     const axeResultat = await new AxeBuilder({ page })
-      .include('section[aria-label="Kvitto att skicka"]')
+      .include('[data-testid="kvitto-att-skicka"]')
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();
     expect(axeResultat.violations).toEqual([]);
@@ -190,16 +230,192 @@ test.describe('TASK-367 — kvitto att skicka härleds ur Postgres, inte flikens
   test('flikbyte/omladdning tappar aldrig raden', async ({ page }) => {
     await mocka(page, () => [fullbetaldMedOskickatKvitto()]);
     await page.goto('/mer/betalningar');
-    await expect(page.locator('section[aria-label="Kvitto att skicka"]')).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Kvitto att skicka' })).toBeVisible();
 
     // OMLADDNING — fyndets ordagranna scenario (S115 Del 2): "bytte flik".
     // Sidan monteras om från noll: `registrerade`/`vantande` initieras tomma
     // igen (`useState<[]>([])`). Framgången är att sektionen ÄNDÅ finns
     // kvar, eftersom den läser EF:ens Postgres-svar, aldrig React-state.
     await page.reload();
-    const block = page.locator('section[aria-label="Kvitto att skicka"]');
+    const block = page.getByRole('region', { name: 'Kvitto att skicka' });
     await expect(block).toBeVisible();
     await expect(block.getByText('Task367 Testsson')).toBeVisible();
     await expect(block.getByRole('button', { name: 'Skicka 1 kvitto' })).toBeVisible();
+  });
+});
+
+test.describe('TASK-367 review runda 1, FYND 2 — "Skicka kvitto"-kryssrutan skickas till servern', () => {
+  /**
+   * TVÅSIDIGT BEVIS PÅ KLIENT-TRÅDNINGEN (server-uteslutningen bevisas skarpt
+   * i `tests/api/hamta-oppna-betalningar-kvitto-avbojt.staging.test.ts`, mot
+   * verklig staging-data). `RegistreraForm.tsx` skickade tidigare ALDRIG
+   * `medKvitto` till `registrera-inbetalning` — fältet levde bara i
+   * `props.onKlar({..., medKvitto, ...})`, alltså i UI-svaret. Dessa två
+   * test fångar exakt DEN regressionen: de fångar POST-kroppen
+   * `registrera-inbetalning` faktiskt tar emot, oavsett vad servern (mockad
+   * här) sedan gör med den.
+   *
+   * Andra halvan av varje test — att en efterföljande sidladdning visar/
+   * döljer raden i "Kvitto att skicka" — är en KONSEKVENS av `oskickadeKvitton`
+   * (redan bevisad ovan), simulerad här genom att mocken svarar som den
+   * RIKTIGA servern skulle: `kvitto_avbojt = true` ⇒ tomt array.
+   */
+  test('kryssrutan URTAGEN: medKvitto: false skickas, och raden syns INTE efter omladdning', async ({
+    page,
+  }) => {
+    let radLista = [oppenAnmalanAttRegistrera()];
+    let sistaMedKvitto: unknown;
+
+    await mockValjarLista(page, [
+      valjarRad({ id: EVENT_ID, namn: 'Task367-kurs', startdatum: '2099-06-01' }),
+    ]);
+    await page.route(HAMTA_OPPNA_BETALNINGAR, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ betalningar: radLista, forfallna: 0 }),
+      });
+    });
+    await page.route(REGISTRERA_INBETALNING, async (route: Route) => {
+      const body = route.request().postDataJSON() as { medKvitto: unknown };
+      sistaMedKvitto = body.medKvitto;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          inbetalning: {
+            id: INBETALNING_ID_2,
+            anmalanRecordId: ANMALAN_ID_2,
+            ogonblicksbildNamn: 'Task367 Kryssrutsson',
+            ogonblicksbildEvent: 'Task367-kurs',
+            ogonblicksbildEventdatum: '2099-06-01',
+            belopp: 500,
+            betalsatt: 'Swish',
+            betalningsdatum: '2026-09-06',
+            typ: 'inbetalning',
+            status: 'aktiv',
+            makuleradSkal: null,
+            makuleradNar: null,
+            bankreferens: null,
+            kvittoId: null,
+            notering: null,
+            skapadAv: 'staging-user@miranon.test',
+            skapadNar: '2026-09-06T00:00:00.000Z',
+          },
+          harledning: {
+            summa: 500,
+            gallandePris: 500,
+            saknas: 0,
+            avgiftKlar: true,
+            alltKlart: true,
+            arForelasning: false,
+          },
+          spegel: { skrivet: true, forsok: 1, skal: null },
+        }),
+      });
+    });
+
+    await page.goto('/mer/betalningar');
+    await page.getByRole('button', { name: 'Registrera betalning' }).click();
+    const formulär = page.getByRole('form', { name: /Registrera betalning för/ });
+    await expect(formulär).toBeVisible();
+
+    // TANGENTBORD, INTE PEKARE — mätt, dokumenterad fälla i
+    // `betalningar-inkorg-utskicksflode.staging.test.ts` (samma kryssruta):
+    // den dekorativa ikon-`<span>` ovanpå den nativa `<input>` fångar
+    // Playwrights pekar-baserade `.click()` ("intercepts pointer events").
+    // `.focus()` + `Space` är den robusta vägen, samma fix som den filen.
+    const kryssruta = formulär.getByRole('checkbox', { name: 'Skicka kvitto' });
+    await kryssruta.focus();
+    await page.keyboard.press(' ');
+    await expect(kryssruta).not.toBeChecked();
+    await formulär.getByRole('button', { name: 'Registrera', exact: true }).click();
+    await expect.poll(() => sistaMedKvitto).toBe(false);
+
+    // Fullbetald (mockens `harledning.saknas: 0`) OCH kvitto_avbojt=true på
+    // servern (simulerat): nästa hämtning ska INTE räkna raden som "kvitto
+    // att skicka".
+    radLista = [oppenAnmalanAttRegistrera({ saknas: 0, summaInbetalt: 500, oskickadeKvitton: [] })];
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Kvitto att skicka' })).toHaveCount(0);
+  });
+
+  test('kryssrutan IKRYSSAD (default): medKvitto: true skickas, och raden syns efter omladdning', async ({
+    page,
+  }) => {
+    let radLista = [oppenAnmalanAttRegistrera()];
+    let sistaMedKvitto: unknown;
+
+    await mockValjarLista(page, [
+      valjarRad({ id: EVENT_ID, namn: 'Task367-kurs', startdatum: '2099-06-01' }),
+    ]);
+    await page.route(HAMTA_OPPNA_BETALNINGAR, async (route: Route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ betalningar: radLista, forfallna: 0 }),
+      });
+    });
+    await page.route(REGISTRERA_INBETALNING, async (route: Route) => {
+      const body = route.request().postDataJSON() as { medKvitto: unknown };
+      sistaMedKvitto = body.medKvitto;
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          inbetalning: {
+            id: INBETALNING_ID_2,
+            anmalanRecordId: ANMALAN_ID_2,
+            ogonblicksbildNamn: 'Task367 Kryssrutsson',
+            ogonblicksbildEvent: 'Task367-kurs',
+            ogonblicksbildEventdatum: '2099-06-01',
+            belopp: 500,
+            betalsatt: 'Swish',
+            betalningsdatum: '2026-09-06',
+            typ: 'inbetalning',
+            status: 'aktiv',
+            makuleradSkal: null,
+            makuleradNar: null,
+            bankreferens: null,
+            kvittoId: null,
+            notering: null,
+            skapadAv: 'staging-user@miranon.test',
+            skapadNar: '2026-09-06T00:00:00.000Z',
+          },
+          harledning: {
+            summa: 500,
+            gallandePris: 500,
+            saknas: 0,
+            avgiftKlar: true,
+            alltKlart: true,
+            arForelasning: false,
+          },
+          spegel: { skrivet: true, forsok: 1, skal: null },
+        }),
+      });
+    });
+
+    await page.goto('/mer/betalningar');
+    await page.getByRole('button', { name: 'Registrera betalning' }).click();
+    const formulär = page.getByRole('form', { name: /Registrera betalning för/ });
+    await expect(formulär).toBeVisible();
+
+    // Kryssrutan RÖRS INTE — default är ikryssad.
+    await formulär.getByRole('button', { name: 'Registrera', exact: true }).click();
+    await expect.poll(() => sistaMedKvitto).toBe(true);
+
+    // Fullbetald OCH kvitto_avbojt=false (default): nästa hämtning SKA
+    // räkna raden som "kvitto att skicka".
+    radLista = [
+      oppenAnmalanAttRegistrera({
+        saknas: 0,
+        summaInbetalt: 500,
+        oskickadeKvitton: [{ inbetalningId: INBETALNING_ID_2, belopp: 500 }],
+      }),
+    ];
+    await page.reload();
+    const block = page.getByRole('region', { name: 'Kvitto att skicka' });
+    await expect(block).toBeVisible();
+    await expect(block.getByText('Task367 Kryssrutsson')).toBeVisible();
   });
 });

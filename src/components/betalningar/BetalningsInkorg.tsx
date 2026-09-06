@@ -455,16 +455,37 @@ function KvittoAttSkickaBlock({
   pending: boolean;
   onSkicka: () => void;
 }) {
+  const rubrikId = useId();
   if (poster.length === 0) return null;
   const flertal = poster.length === 1 ? 'kvitto' : 'kvitton';
 
   return (
     <section
-      aria-label="Kvitto att skicka"
+      aria-labelledby={rubrikId}
+      // `data-testid`, INTE `aria-label`: sedan FYND 3 (review runda 1) är
+      // `<h2>`:n den ENDA namnkällan (`aria-labelledby` ovan). Testkroken
+      // ger sviterna ett stabilt CSS-mål (AxeBuilder `.include()` tar bara
+      // CSS-selektorer, ingen roll/namn-matchning) utan att återinföra den
+      // dubblering FYND 3 tog bort — samma mönster som `data-testid=
+      // "markering-batchbar"`/`"inkorg-sandstatus"` redan bär i denna fil.
+      data-testid="kvitto-att-skicka"
       className="flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong"
     >
       <div className="flex items-center justify-between gap-3">
-        <h2 className="font-semibold text-body">Kvitto att skicka</h2>
+        {/* [TASK-367 review runda 1, FYND 3] EN NAMNKÄLLA, INTE TVÅ.
+            `RegistreratNuBlock` rev sin rubrik helt (Marcus: "känns
+            överflödig") och bär bara `aria-label` — ingen visuell
+            dubblering finns där att undvika. HÄR finns motsatt skäl att
+            BEHÅLLA rubriken synlig: sektionen ska vara en skanningsbar,
+            igenkännbar rubrik på sidan (till skillnad från
+            `RegistreratNuBlock`, som är kontextuell till det Lotta just
+            gjorde) — men den fick tidigare namnge sektionen TVÅ gånger
+            samtidigt (`aria-label` OCH den synliga `<h2>`:n, ord för ord
+            identiska). `aria-labelledby` gör `<h2>`:n till den ENDA
+            namnkällan: samma text läses upp en gång, inte två. */}
+        <h2 id={rubrikId} className="font-semibold text-body">
+          Kvitto att skicka
+        </h2>
         {/* Räknaren annonseras, seende läser den i knappens egen etikett
             nedan — samma arbetsfördelning som markerings-radens räknare
             (`MarkeringsAtgardsRad`). */}

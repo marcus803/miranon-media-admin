@@ -268,6 +268,18 @@ export type RegistreraInbetalningInput = {
   /** Rå inmatning: '2 500,00', '2500,50', '1000:-'. Normaliseras på servern. */
   belopp: string;
   betalsatt: (typeof VALBARA_BETALSATT)[number];
+  /**
+   * [TASK-367 review runda 1, FYND 2] "Skicka kvitto"-kryssrutan
+   * (`RegistreraForm.tsx`). Servern skriver `kvitto_avbojt = !medKvitto` på
+   * inbetalningen (migration `20260906165100_inbetalning_kvitto_avbojt.sql`)
+   * — den durabla "kvitto att skicka"-härledningen (`hamta-oppna-
+   * betalningar`) läser den flaggan för att aldrig återuppliva en betalning
+   * Lotta MEDVETET registrerade utan kvitto. OBLIGATORISKT (inte `?:`) med
+   * avsikt: ett valfritt fält hade kunnat glömmas av en ANNAN anropskälla än
+   * `RegistreraForm.tsx` utan att TypeScript sa ifrån — exakt den tysta
+   * glidningen som gjorde fältet nödvändigt att lägga till i första läget.
+   */
+  medKvitto: boolean;
   /** ISO-datum (YYYY-MM-DD). Utelämnat = i dag, satt server-side. */
   betalningsdatum?: string;
   typ?: InbetalningsTyp;
