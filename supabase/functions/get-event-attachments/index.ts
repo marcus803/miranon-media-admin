@@ -101,6 +101,20 @@ const ATTACHMENTS_LINK_FIELD = 'Bilagor';
 // listanrop per chunk. Spegel av get-event-notes:s NOTES_BATCH_SIZE.
 const ATTACHMENTS_BATCH_SIZE = 50;
 
+// [TASK-416.12 runda 2] Explicit tak på HUR MÅNGA chunkar som får ligga i
+// luften samtidigt i `fetchAttachmentsByRecordIds` — mot P4 (Airtables
+// DELADE 5 req/s-tak, docs/reference/airtable-constraints.md). Utan tak
+// skulle `Promise.all` över ALLA chunkar höja denna EF:s egen burst-
+// samtidighet obegränsat för ett event med väldigt många Bilagor-länkar;
+// `airtable-retry.ts` skyddar bara REAKTIVT (30 s golv efter en 429), inte
+// proaktivt mot att orsaka en. Tak 2 håller denna funktionens egen
+// samtidighet vid högst 2, oavsett `ids.length` — kombinerat med
+// `fetchGemensammaKandidater()` som kan vara i flykt samtidigt (se
+// Deno.serve nedan) håller EN request aldrig fler än 3 Airtable-anrop i
+// luften samtidigt (1 kandidater + 2 chunkar, ELLER 1 eventrad + 1
+// kandidater innan chunkarna ens startat).
+const ATTACHMENTS_CHUNK_CONCURRENCY = 2;
+
 // Fält att hämta ur Bilagor — Lagringsnyckel UTESLUTS MEDVETET (server-internt,
 // se filhuvudet). mapAttachmentRecord läser bara dessa fält ändå (TASK-147.12
 // lade till Dokumentklass, TASK-275.2 lade till Räckvidd/Kursfamilj/
@@ -139,18 +153,50 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
-/** Batch-hämta record-ID:n ur Bilagor via chunkad `OR(RECORD_ID()=…)`. */
+/**
+ * [TASK-416.12 runda 2] Kör `tasks` med högst `limit` samtidiga anrop —
+ * ren "worker pool"-form (varje worker plockar nästa lediga index tills
+ * kön är tom), resultatet i SAMMA ORDNING som `tasks`. Ingen extern
+ * beroende (p-limit e.dyl.) behövs för ett tak på 2 — se
+ * `ATTACHMENTS_CHUNK_CONCURRENCY` för motivet (P4).
+ */
+async function withConcurrencyLimit<T>(
+  tasks: readonly (() => Promise<T>)[],
+  limit: number,
+): Promise<T[]> {
+  const results: T[] = new Array(tasks.length);
+  let next = 0;
+  async function worker(): Promise<void> {
+    while (next < tasks.length) {
+      const i = next++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, tasks.length) }, worker));
+  return results;
+}
+
+/**
+ * Batch-hämta record-ID:n ur Bilagor via chunkad `OR(RECORD_ID()=…)`.
+ *
+ * [TASK-416.12, tak tillagt runda 2] Chunkarna hämtas parallellt i stället
+ * för i en sekventiell for-loop — de är oberoende anrop (olika
+ * `RECORD_ID()`-mängder, samma tabell/fält) — men BEGRÄNSAT till
+ * `ATTACHMENTS_CHUNK_CONCURRENCY` samtidiga anrop (se den konstantens
+ * kommentar för P4-motivet). Union-ordningen spelar ingen roll: resultatet
+ * dedupliceras på record-ID och sorteras på `Skapad` längre ned i
+ * anropskedjan.
+ */
 async function fetchAttachmentsByRecordIds(ids: readonly string[]): Promise<AirtableRow[]> {
-  const out: AirtableRow[] = [];
-  for (const idChunk of chunk(ids, ATTACHMENTS_BATCH_SIZE)) {
+  const tasks = chunk(ids, ATTACHMENTS_BATCH_SIZE).map((idChunk) => () => {
     const filterByFormula = `OR(${idChunk.map((rid) => `RECORD_ID()='${rid}'`).join(',')})`;
-    const records = (await fetchFromAirtable(BILAGOR_TABLE, {
+    return fetchFromAirtable(BILAGOR_TABLE, {
       filterByFormula,
       fields: ATTACHMENT_FIELDS,
-    })) as AirtableRow[];
-    out.push(...records);
-  }
-  return out;
+    }) as Promise<AirtableRow[]>;
+  });
+  const chunks = await withConcurrencyLimit(tasks, ATTACHMENTS_CHUNK_CONCURRENCY);
+  return chunks.flat();
 }
 
 /**
@@ -264,7 +310,28 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1) Eventraden — ETT single-get. null = 404 (ärver get-event/get-event-notes-kontraktet).
+    // 1) Mängd (b) — DE GEMENSAMMA KANDIDATERNA — startas FÖRST och utan
+    //    `await`: `fetchGemensammaKandidater()` beror inte på eventraden
+    //    (den hämtar `Räckvidd ≠ Event` oavsett event), så den ska ligga i
+    //    flykt genom HELA resten av kedjan nedan, inte bara överlappa
+    //    eventraden. [TASK-416.12 runda 2] En tidig, tyst `.catch()` fäster
+    //    HÄR — inte för att svälja felet (den fäster på en SEPARAT then-
+    //    kedja; `kandidaterP` självt förblir opåverkat, så `await
+    //    kandidaterP` i steg 5 kastar fortfarande om anropet fallerade) —
+    //    utan enbart för att en tidig rejection (t.ex. eventet visar sig
+    //    saknas, 404 nedan, och ingen når raden `await kandidaterP` alls)
+    //    aldrig ska synas som en "unhandled rejection" i loggen. Se
+    //    docs/reference/airtable-constraints.md P4 för samtidighetstaket
+    //    (`ATTACHMENTS_CHUNK_CONCURRENCY`) som håller nere hur många
+    //    Airtable-anrop den HÄR parallelliteten kan addera till.
+    const kandidaterP = fetchGemensammaKandidater();
+    kandidaterP.catch(() => {});
+
+    // 2) Eventraden — ETT single-get, parallellt med (1) ovan. null = 404
+    //    (ärver get-event/get-event-notes-kontraktet). Priset på 404-vägen:
+    //    kandidat-anropet i (1) har redan avfyrats och kastas ohämtat — ett
+    //    extra, oanvänt Airtable-anrop för det ovanliga felfallet, MEDVETET
+    //    accepterat för att vinna latens på normalfallet (event hittas).
     const eventRecord = await fetchAirtableRecord(EVENTPLANERING_TABLE, eventId);
     if (!eventRecord) {
       return new Response(JSON.stringify({ error: 'Event not found' }), {
@@ -273,7 +340,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // 2) Eventets Bilagor-record-ID:n ur den omvända länken. Tom/saknad → tom
+    // 3) Eventets Bilagor-record-ID:n ur den omvända länken. Tom/saknad → tom
     //    lista (ej fel; ett event utan bilagor är ett giltigt tillstånd —
     //    normalfallet innan TASK-146.4/146.5-flödena körts för eventet).
     const attachmentIds: string[] = Array.isArray(eventRecord.fields[ATTACHMENTS_LINK_FIELD])
@@ -292,23 +359,28 @@ Deno.serve(async (req) => {
       platsIds: lasPlatsIds(eventRecord.fields[EVENT_PLATS_FIELD]),
     };
 
-    // 3) UNIONEN av TVÅ mängder — parallellt (oberoende Airtable-anrop,
-    //    ingen delad state). Mängd (b) hämtas ALLTID: till skillnad från
-    //    TASK-275.2:s formel-matchning är den inte villkorad av att eventet
-    //    har en Kursfamilj — ett event UTAN familj kan mycket väl matcha en
-    //    plats-bunden eller axellös gemensam bilaga.
-    const [egna, kandidater] = await Promise.all([
-      attachmentIds.length > 0 ? fetchAttachmentsByRecordIds(attachmentIds) : [],
-      fetchGemensammaKandidater(),
-    ]);
+    // 4) Mängd (a) — eventets EGNA bilagor. Kan först starta nu: den behöver
+    //    `attachmentIds` ur eventraden. `kandidaterP` (mängd b, steg 1) är
+    //    redan i flykt sedan innan eventraden ens svarade och överlappar
+    //    HELA denna hämtningen också, inte bara eventraden.
+    const egna = attachmentIds.length > 0 ? await fetchAttachmentsByRecordIds(attachmentIds) : [];
 
-    // 4) MATCHNINGEN I KOD (ADR-057: i EF/_shared, aldrig i klienten) —
+    // 5) Väl HÄR — inte tidigare — hämtas resultatet av (1). Har `kandidaterP`
+    //    redan svarat (det vanliga: den är oftast snabbare än eventrad+egna
+    //    tillsammans) återupptar `await` omedelbart utan extra väntan; har
+    //    den INTE svarat väntar vi in den nu. Total tid för lyckad väg blir
+    //    därmed max(kandidater, eventrad + egna) i stället för
+    //    max(eventrad, kandidater) + egna (runda 1:s form, som tappade
+    //    överlappet mellan kandidaterna och egna-batchen).
+    const kandidater = await kandidaterP;
+
+    // 6) MATCHNINGEN I KOD (ADR-057: i EF/_shared, aldrig i klienten) —
     //    varje kandidat prövas mot eventets tre axlar av den rena
     //    `matcharEvent` (egen enhetstestsvit, tests/api/rackvidd-
     //    matchning.test.ts). Legacy-värdena normaliseras inuti den.
     const matchande = kandidater.filter((row) => matcherEventRad(row, eventetsAxlar));
 
-    // 5) Deduplicera på record-ID (en gemensam bilaga kan träffas av BÅDE
+    // 7) Deduplicera på record-ID (en gemensam bilaga kan träffas av BÅDE
     //    (a) och (b) — se filhuvudets union-stycke) INNAN mappning.
     const byId = new Map<string, AirtableRow>();
     for (const row of [...egna, ...matchande]) {
@@ -316,7 +388,7 @@ Deno.serve(async (req) => {
     }
     const attachments = Array.from(byId.values()).map(mapAttachmentRecord);
 
-    // 6) Nyast först — konsekvent med get-event-notes:s CRM-ordning (senast
+    // 8) Nyast först — konsekvent med get-event-notes:s CRM-ordning (senast
     //    tillagda överst i väljaren, mest sannolikt relevant för Lotta just nu).
     attachments.sort((a, b) => (a.skapad < b.skapad ? 1 : a.skapad > b.skapad ? -1 : 0));
 
