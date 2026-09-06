@@ -49,14 +49,27 @@ import { expect, type Page, test } from './acceptance-bas';
  *   bevisat sina motsvarande ytor med. Den mäter, GRÖNT, h2-rubriken PLUS
  *   kortkroppen/första raden på Nästa event och Senaste aktivitet, samt
  *   ENBART h2-rubriken (plus, `utanY`-avgränsat, Förfallna betalningars
- *   h2) på Nya anmälningar/Förfallna betalningar — de TVÅ senare
- *   sektionernas FÖRSTA RAD har ett eget, separat MÄTT fynd: se de två
- *   `test.fail()`-testen strax efter huvudtestet, som dokumenterar (utan att
- *   fälla CI) att `Skeleton variant="listRow"` INTE matchar den riktiga
- *   avatar-radens boundingBox i vare sig `NyaAnmalningar.tsx` eller
- *   `ForfallnaBetalningar.tsx` — en defekt TASK-416.9 aldrig rörde (dess
- *   diff `cfcd3628` gällde uteslutande `NastaEvent.tsx`/
- *   `SenasteAktivitetKompakt.tsx`).
+ *   h2) på Nya anmälningar/Förfallna betalningar.
+ *
+ *   FÖRSTA RADEN på just DESSA två kort (Nya anmälningar/Förfallna
+ *   betalningar) mäts MEDVETET INTE här ännu: TASK-416.13:s ursprungliga
+ *   varv mätte den och fann att `Skeleton variant="listRow"` INTE matchar
+ *   den riktiga avatar-radens boundingBox ({width:568,height:72} skelett
+ *   mot {width:545,height:66} riktig rad, samma defekt i båda
+ *   komponenterna) — en defekt `TASK-416.9` aldrig rörde (dess diff
+ *   `cfcd3628` gällde uteslutande `NastaEvent.tsx`/
+ *   `SenasteAktivitetKompakt.tsx`). Ett första försök bokförde fyndet som
+ *   två `test.fail()`-test, men den formen visade sig FEL i detta repo:
+ *   hermetik-självtestet (`npm run test:acceptance:sjalvtest`,
+ *   `hermetik-vakt.ts`) kör HELA acceptance-sviten UTAN fixturens svar och
+ *   kräver att VARJE test då faller med `OmockadRequestError` — ett
+ *   `test.fail()`-test som "lyckas fallera" av ETT ANNAT skäl (den kända
+ *   geometri-defekten, inte ett omockat nätverksanrop) rapporteras av
+ *   självtestet som "överlevde utan fixturens svar", vilket är EXAKT den
+ *   tysta fällan hermetik-vakten finns för att fånga. Mätningen av
+ *   dessa två kort-rader flyttas därför till TASK-416.18, TILLSAMMANS med
+ *   fixen för listradsskelettet — samma skiva löser och bevisar, i stället
+ *   för att bevisa en defekt en annan mekanism i repot inte kan hantera.
  * - Framträdande-formen är mätlåst per task-8.1 (kommentaren på task-8.4):
  *   skeleton från första bildrutan, INGEN CSS-driven fördröjning — bevisas
  *   computed (L272) medan nätverket är parkerat.
@@ -615,103 +628,4 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
     expect(utanY(efter.senasteH2)).toEqual(utanY(under.senasteH2));
     expect(utanY(efter.senasteRad)).toEqual(utanY(under.senasteRad));
   });
-
-  /**
-   * KÄND, MÄTT DEFEKT — UTANFÖR TASK-416.13:s scope, `src/**` rörs INTE här.
-   *
-   * `Skeleton variant="listRow"` (`Skeleton.tsx`, `h-[3lh] w-full`) — den
-   * FASTA tvårads-placeholdern `NyaAnmalningar.tsx`/`ForfallnaBetalningar.tsx`
-   * båda renderar under `anmalDataPending` — matchar INTE en riktig
-   * avatar+tvåradsrads boundingBox. Mätt i DENNA fixtur (Chromium, 1280×720,
-   * 2026-09-06): skeleton `{width:568, height:72}`, riktig rad
-   * `{width:545, height:66}` (x/y oförändrat — bara storleken glider).
-   * Trolig dubbel orsak: (1) `h-[3lh]` (tre radhöjder) mot en rad som i
-   * verkligheten bär TVÅ textrader + `py-3`; (2) skeletonen sitter DIREKT i
-   * `role="status"`-containern (full sektionsbredd) medan den riktiga raden
-   * sitter i en `<ul>` med `pr-3` + `scrollbar-inline` (permanent
-   * scrollbar-gutter), en smalare innehållsbredd.
-   *
-   * `TASK-416.9` (denna skivas egen förutsättning) rörde ALDRIG dessa två
-   * komponenter — dess diff (`cfcd3628`) ändrade bara `NastaEvent.tsx` och
-   * `SenasteAktivitetKompakt.tsx`. Defekten fanns alltså redan FÖRE
-   * TASK-416.13 och upptäcktes AV mätningen denna skiva lägger till — precis
-   * ADR-083s poäng: filhuvudet ska beskriva vad testet FAKTISKT bevisar,
-   * aldrig mer. `test.fail()` håller detta test GRÖNT i CI (Playwright
-   * kräver att testet faktiskt fallerar; fallerar det INTE en dag —
-   * komponenten fixad — flaggar Playwright ett OVÄNTAT pass, vilket är
-   * signalen att ta bort denna annotation). Rapporterat till orkestreraren
-   * i denna skivas slutrapport; ingen ny backlog-post myntad här (det
-   * beslutet ligger hos orkestreraren/Marcus).
-   */
-  test.fail(
-    'KÄND DEFEKT — Nya anmälningars listradsskelett matchar INTE den riktiga radens boundingBox (ej denna skivas scope)',
-    async ({ page, network }) => {
-      await arrangeraTomCache(page);
-      const mocken = hallbarMock(network, medMatningsdata());
-      await page.goto('/hem');
-
-      const radLaddar = page
-        .locator(
-          'section[aria-labelledby="hem-nya-anmalningar"] [role="status"] span[aria-hidden="true"]',
-        )
-        .first();
-      await expect(radLaddar).toBeVisible();
-      await page.mouse.move(0, 0);
-      const under = await radLaddar.boundingBox();
-      if (!under) throw new Error('boundingBox saknas för Nya anmälningars rad UNDER laddning');
-
-      mocken.hall = false;
-      mocken.slappAlla();
-      await expect(page.getByText('2 nya anmälningar att bekräfta')).toBeVisible();
-      await page.evaluate(
-        () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
-      );
-
-      const radLaddad = page
-        .locator('section[aria-labelledby="hem-nya-anmalningar"]')
-        .getByRole('listitem')
-        .first();
-      const efter = await radLaddad.boundingBox();
-      if (!efter) throw new Error('boundingBox saknas för Nya anmälningars rad EFTER datalandning');
-
-      expect(efter).toEqual(under);
-    },
-  );
-
-  test.fail(
-    'KÄND DEFEKT — Förfallna betalningars listradsskelett matchar INTE den riktiga radens boundingBox (ej denna skivas scope)',
-    async ({ page, network }) => {
-      await arrangeraTomCache(page);
-      const mocken = hallbarMock(network, medMatningsdata());
-      await page.goto('/hem');
-
-      const radLaddar = page
-        .locator(
-          'section[aria-labelledby="hem-forfallna"] [role="status"] span[aria-hidden="true"]',
-        )
-        .first();
-      await expect(radLaddar).toBeVisible();
-      await page.mouse.move(0, 0);
-      const under = await radLaddar.boundingBox();
-      if (!under)
-        throw new Error('boundingBox saknas för Förfallna betalningars rad UNDER laddning');
-
-      mocken.hall = false;
-      mocken.slappAlla();
-      await expect(page.getByText('2 förfallna betalningar')).toBeVisible();
-      await page.evaluate(
-        () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
-      );
-
-      const radLaddad = page
-        .locator('section[aria-labelledby="hem-forfallna"]')
-        .getByRole('listitem')
-        .first();
-      const efter = await radLaddad.boundingBox();
-      if (!efter)
-        throw new Error('boundingBox saknas för Förfallna betalningars rad EFTER datalandning');
-
-      expect(efter).toEqual(under);
-    },
-  );
 });

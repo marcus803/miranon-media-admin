@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:23'
-updated_date: '2026-09-06 15:42'
+updated_date: '2026-09-06 15:50'
 labels:
   - ready-for-agent
 dependencies: []
@@ -83,4 +83,29 @@ Grindar (rörd fil-klass): typecheck 0 fel, biome check 0 fel (repo-brett:
 1742/1742 gröna; test:apis api-staging-del blockerades av en AKTIV,
 SAMTIDIG CI-körnings staging-preflight-lås (post-merge.yml, körning
 34042154674) — miljövillkor, inte en regression av denna diff.
+
+AMENDERING (orkestrerar-order, Marcus mandat, efter CI-fällning PR #2412):
+CI-kön fällde PR:n i "Acceptance — tvåsidigt bevis (hermetik-självtest)"
+(run 34043212879). Orsak: hermetik-självtestet (npm run test:acceptance:sjalvtest,
+hermetik-vakt.ts) kör HELA acceptance-sviten UTAN fixturens svar och kräver
+att VARJE test faller med OmockadRequestError — mina två test.fail()-test
+"överlevde" i stället (de fallerade av ETT ANNAT skäl, den kända
+geometri-defekten, inte ett omockat nätverksanrop), vilket självtestet
+korrekt tolkar som "beviser ingenting om appens databeteende".
+
+test.fail() är alltså FEL FORM i detta repo för att bokföra en känd defekt
+i en acceptance-fil. Åtgärd: de två test.fail()-testen TOGS BORT helt.
+Mätningen av Nya anmälningars och Förfallna betalningars RUBRIKER
+(gröna, opåverkade av fyndet) behölls i huvudtestet. Filhuvudet skriver nu
+att FÖRSTA RADEN på just dessa två kort mäts i TASK-416.18 (redan mintad),
+tillsammans med fixen för listradsskelettet — samma skiva bevisar och löser,
+i stället för att bevisa en defekt en delad testklass-mekanism inte kan
+hantera isolerat.
+
+Verifierat om: npm run test:acceptance:sjalvtest -- tests/acceptance/
+hem-laddlage.acceptance.test.ts → 6/6 tester fällda med OmockadRequestError,
+exit 0 (beviset håller). npx playwright test --project=acceptance
+tests/acceptance/hem-laddlage.acceptance.test.ts → 6/6 passed, exit 0.
+typecheck 0 fel, biome check 0 fel. Ny head-SHA på samma gren
+(task/416.13-hem-laddlage-boundingbox): se PR #2412.
 <!-- SECTION:NOTES:END -->
