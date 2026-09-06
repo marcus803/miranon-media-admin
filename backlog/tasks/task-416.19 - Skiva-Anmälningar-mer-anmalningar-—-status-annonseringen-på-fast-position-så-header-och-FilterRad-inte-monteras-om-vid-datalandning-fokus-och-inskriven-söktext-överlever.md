@@ -7,6 +7,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 16:37'
+updated_date: '2026-09-06 17:24'
 labels:
   - ready-for-agent
 dependencies: []
@@ -23,14 +24,14 @@ Källa: review-agentens fynd på PR #2415 (TASK-416.2, S123, 2026-09-06), verifi
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Header och FilterRad har samma barnindex i isPending-, isError- och laddat läge (ett returträd, fasta positioner)
-- [ ] #2 Acceptance-test: fokus och inskriven söktext överlever isPending→laddat och isError→laddat, tvåsidigt bevisat
-- [ ] #3 Befintliga anmälnings-acceptance/visual-grinder gröna, axe-svep grönt, boundingBox-mätningen från 416.4 fortsatt identisk
+- [x] #1 Header och FilterRad har samma barnindex i isPending-, isError- och laddat läge (ett returträd, fasta positioner)
+- [x] #2 Acceptance-test: fokus och inskriven söktext överlever isPending→laddat och isError→laddat, tvåsidigt bevisat
+- [x] #3 Befintliga anmälnings-acceptance/visual-grinder gröna, axe-svep grönt, boundingBox-mätningen från 416.4 fortsatt identisk
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
-- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
-- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [x] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [x] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [x] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->

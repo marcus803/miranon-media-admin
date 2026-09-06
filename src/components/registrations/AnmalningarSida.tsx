@@ -775,185 +775,209 @@ export function AnmalningarSida({
     ></FilterRad>
   );
 
-  if (isPending) {
-    return (
-      <div className="flex flex-col gap-4">
-        {sidRam}
-        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
-          {headerBlock}
-          {filterRadBlock}
-          {/* Roselli-anatomin: STATUS-rollen bärs av listkroppen som
-              faktiskt laddar, inte av hela ankaret (EventsLists mönster,
-              `EventsList.tsx` isPending-grenen) — headerBlock/filterRadBlock
-              är redan sitt eget besked (skeleton-antalsrad + FilterRads
-              egen `isPending`), och ska inte läsas upp en andra gång som en
-              del av EN stor busy-region. */}
-          <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
-            <span className="sr-only">Laddar anmälningarna…</span>
-            {/* SAMMA RADGEOMETRI SOM DEN LADDADE LISTAN (TASK-416.4 AC #2/#3,
-                MÄTT — inte antaget). Kortet var tidigare `p-4` (padding på
-                ALLA sidor) medan `<ul>` nedan bara bär `px-4` (raderna får
-                sin höjd av EGEN `py-2.5`, som här) — en engångs-mätning
-                (headless Playwright, hallbar mock av `get-registrations`,
-                1280 px viewport) visade att den skillnaden sköt FÖRSTA
-                radens `boundingBox()` 16 px längre ner i skelettläget än i
-                det laddade läget (y 258 mot y 242). `divide-y` + per-rad
-                `py-2.5` (i stället för kortets egen vertikala padding +
-                `gap-3`) är EXAKT `<ul>`/`<li>`s egen boxmodell — samma
-                mätning EFTER fixen: x 373/373, y 242/242, bredd 534/534,
-                höjd 70/69 (1 px, sub-pixel-avrundning) i pending/laddat.
-                Talen står i PR-kroppen, inte i en kvarlämnad testfil. */}
-            <div className="-mx-4 flex flex-col divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
-              {['a', 'b', 'c'].map((k) => (
-                <div key={k} className="flex items-center gap-3 py-2.5">
-                  <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
-                  <div className="flex flex-1 flex-col gap-1">
-                    <Skeleton variant="text" className="w-2/5" />
-                    <Skeleton variant="text" className="w-3/5 text-small" />
-                  </div>
-                </div>
-              ))}
+  // ═══ ETT RETURTRÄD, FASTA SYSKON-POSITIONER (TASK-416.19) ═══════════════
+  //
+  // Källa: review-agentens fynd på PR #2415 (S123): koden bar TRE separata
+  // `return`-grenar (isPending/isError/laddat), och laddat-grenen skjöt in
+  // `<p role=status>Anmälningarna laddade.</p>` FÖRE `headerBlock` medan
+  // isPending/isError hade `headerBlock` som FÖRSTA barn. React reconcilerar
+  // barn POSITIONELLT utan keys — ett extra barn längst fram i EN gren
+  // förskjuter varenda efterföljande barns index i just den grenen, och ett
+  // index-mismatch mellan grenar tvingar fram en FULL remount av allt från
+  // den punkten (headerBlock OCH filterRadBlock, alltså hela `<FilterRad>`
+  // med sitt interna `oppen`-state och sin `EventValjare`-kontroll). Lotta
+  // tappade fokus och inskriven text i filtret EXAKT när `registrations.all`
+  // landade eller föll.
+  //
+  // Förlagan (TASK-416.8, `Intresserade.tsx`, samma bugg samma grund) löser
+  // det genom att göra HELA komponenten till ETT `return` där varje block
+  // (`dataLaddadAnnonsering`, `headerBlock`, `filterRadBlock`,
+  // `filterAnnonsering`, `datakropp`) sitter på en FAST plats bland sina
+  // syskon i VARJE render — bara INNEHÅLLET i en position växlar (ofta till
+  // `null`), aldrig POSITIONEN självs närvaro. Samma fix här.
+  //
+  // ── EN MÄTT, OFRÅNKOMLIG GRÄNS (bokförd i slutrapporten) ─────────────────
+  // AC #2 efterfrågar "fokus + inskriven söktext i FilterRads sökfält"
+  // bevarat över BÅDA isPending→laddat och isError→laddat. `FilterRad.tsx`
+  // (rad ~298–312) visar ENBART dekorativa, ofokuserbara skeletonblock för
+  // ALLA dimensioner — `dim.kontroll` (EventValjares sökfält) monteras INTE
+  // — så länge dess EGEN `isPending`-prop är sann, och den propen är BUNDEN
+  // till exakt samma boolean som väljer render-grenen här
+  // (`isPending={isPending}` ovan). De två flippar alltså ATOMISKT
+  // tillsammans: i samma ögonblick sidan lämnar sin isPending-gren visar
+  // FilterRad redan RIKTIGA kontroller. Ett "fortfarande isPending, men
+  // sökfältet är fokuserbart"-ögonblick kan därför strukturellt inte
+  // existera — inte en testbrist, en egenskap hos koden som den står.
+  // Regressionstestet för isPending→laddat bevisar därför samma underliggande
+  // fel (FilterRad remonteras inte) via tratt-knappen + panelens öppna
+  // state (båda ÄKTA, alltid-monterade element, även under isPending) i
+  // stället för via sökfältet; isError→laddat-testet använder sökfältet
+  // bokstavligt, eftersom FilterRads `isPending`-prop redan är falsk i
+  // fel-läget (docblocket vid `filterRadBlock` ovan: "ENDAST isPending …
+  // ALDRIG dataOkand").
+  const dataLaddadAnnonsering = dataOkand ? null : (
+    <p className="sr-only" role="status" aria-live="polite">
+      Anmälningarna laddade.
+    </p>
+  );
+
+  // Periodens/filtrets egna live-region — FAST POSITION i alla tre lägen
+  // (tidigare bara monterad i laddat-grenen, vilket sköt headerBlock till
+  // barn-index 1 i just den grenen). `periodAnnouncement` förblir tom
+  // sträng i isPending (effekterna vaktar `isPending` explicit); i isError
+  // KAN den få innehåll om Lotta hinner ändra ett filter innan felet visas
+  // — regionen annonserar det då korrekt i stället för att tyst tappa
+  // beskedet, vilket var det GAMLA (icke avsedda) beteendet när denna nod
+  // bara existerade i laddat-grenen.
+  const filterAnnonsering = (
+    <p className="sr-only" aria-live="polite">
+      {periodAnnouncement}
+    </p>
+  );
+
+  // Datakroppen — DEN ENDA delen som växlar mellan tillstånden (skeleton /
+  // felbesked / tomt-läge / filtrerat tomt-läge / lista), på EN FAST
+  // syskon-position sist i det enda returträdet nedan.
+  const datakropp = isPending ? (
+    // Roselli-anatomin: STATUS-rollen bärs av listkroppen som faktiskt
+    // laddar, inte av hela ankaret (EventsLists mönster, `EventsList.tsx`
+    // isPending-grenen) — headerBlock/filterRadBlock är redan sitt eget
+    // besked (skeleton-antalsrad + FilterRads egen `isPending`), och ska
+    // inte läsas upp en andra gång som en del av EN stor busy-region.
+    <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
+      <span className="sr-only">Laddar anmälningarna…</span>
+      {/* SAMMA RADGEOMETRI SOM DEN LADDADE LISTAN (TASK-416.4 AC #2/#3,
+          MÄTT — inte antaget). Kortet var tidigare `p-4` (padding på ALLA
+          sidor) medan `<ul>` nedan bara bär `px-4` (raderna får sin höjd av
+          EGEN `py-2.5`, som här) — en engångs-mätning (headless Playwright,
+          hallbar mock av `get-registrations`, 1280 px viewport) visade att
+          den skillnaden sköt FÖRSTA radens `boundingBox()` 16 px längre ner
+          i skelettläget än i det laddade läget (y 258 mot y 242). `divide-y`
+          + per-rad `py-2.5` (i stället för kortets egen vertikala padding +
+          `gap-3`) är EXAKT `<ul>`/`<li>`s egen boxmodell — samma mätning
+          EFTER fixen: x 373/373, y 242/242, bredd 534/534, höjd 70/69 (1 px,
+          sub-pixel-avrundning) i pending/laddat. Talen står i PR-kroppen,
+          inte i en kvarlämnad testfil. */}
+      <div className="-mx-4 flex flex-col divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
+        {['a', 'b', 'c'].map((k) => (
+          <div key={k} className="flex items-center gap-3 py-2.5">
+            <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+            <div className="flex flex-1 flex-col gap-1">
+              <Skeleton variant="text" className="w-2/5" />
+              <Skeleton variant="text" className="w-3/5 text-small" />
             </div>
           </div>
-        </div>
+        ))}
       </div>
-    );
-  }
-
-  if (isError) {
-    return (
-      <div className="flex flex-col gap-4">
-        {sidRam}
-        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
-          {headerBlock}
-          {filterRadBlock}
-          <MessageBox intent="error" title="Kunde inte hämta anmälningarna">
-            {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
-          </MessageBox>
-        </div>
+    </div>
+  ) : isError ? (
+    <MessageBox intent="error" title="Kunde inte hämta anmälningarna">
+      {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
+    </MessageBox>
+  ) : visasRader.length === 0 ? (
+    // Filter-tomläget är SKILT från period-/lägestomläget: här FINNS
+    // anmälningar i perioden men dimensionsfiltren matchar inga, och Rensa
+    // är återvägen (EventsLists form). Är själva perioden tom finns inget
+    // att rensa fram — då gäller den vanliga copyn.
+    aktiva > 0 && periodRader.length > 0 ? (
+      // Typografin är sidans EGEN tomlägeskonvention (`text-small
+      // text-text-muted`, punkt i slutet — samma som `tomtText`), inte
+      // EventsLists centrerade `py-12`-form: här bor tomläget direkt i
+      // listans flöde, inte i ett kortformat.
+      <div className="flex flex-col items-start gap-3">
+        <p className="text-small text-text-muted">Inga anmälningar matchar filtren.</p>
+        <AriaButton
+          onPress={rensaFilter}
+          className="rounded-full bg-bg-muted px-3.5 py-2 font-medium text-small hover:bg-bg-emphasized motion-safe:transition-colors"
+        >
+          Rensa filter
+        </AriaButton>
       </div>
-    );
-  }
+    ) : (
+      <p className="text-small text-text-muted">{tomtText(visaAtgardskon, period)}</p>
+    )
+  ) : (
+    <ul
+      aria-label="Anmälningar"
+      className="-mx-4 divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong"
+    >
+      {visasRader.map((reg) => {
+        const namn = displayName(reg);
+        const tid = inskickadTid(reg);
+        const relTid = Number.isFinite(tid) ? relativTid(tid, nuMs) : null;
+        // Undertexten är eventets IDENTITET ("kurs · ort · datum"),
+        // inte längre tid+eventnamn hopslagna. Marcus 2026-08-23:
+        // "under namnet har vi event, ort, datum, EXAKT så vill jag att
+        // anmälningslistan också ska ha." `eventIdentitet` är Hems egen
+        // hjälpare — lånad, inte återuppfunnen.
+        const undertext =
+          eventIdentitet(reg, reg.eventId ? eventsById.get(reg.eventId) : undefined) || ' ';
+        const behoverKoppling = behoverAtgard(reg);
+        const namnKlass =
+          'min-w-0 truncate font-medium text-body underline-offset-2 after:absolute after:inset-0 hover:underline';
 
-  return (
-    <div className="flex flex-col gap-4">
-      {sidRam}
-      <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
-        <p className="sr-only" role="status" aria-live="polite">
-          Anmälningarna laddade.
-        </p>
+        // Triggerns cva-bas (Button.tsx) lägger `inline-flex`/padding/
+        // min-höjd/bakgrund för sin `md`-standardstorlek — samtliga
+        // neutraliseras här (tailwind-merge löser konflikten, `cn`
+        // applicerar `className` SIST) så knappen läser som radens
+        // vanliga namn-länk, inte som en knapp-pill.
+        const namnTriggerKlass = `min-h-0 justify-start gap-0 rounded-none p-0 hover:bg-transparent data-[hovered]:bg-transparent data-[pressed]:bg-transparent ${namnKlass}`;
 
-        {headerBlock}
-
-        {filterRadBlock}
-        <p className="sr-only" aria-live="polite">
-          {periodAnnouncement}
-        </p>
-
-        {visasRader.length === 0 ? (
-          // Filter-tomläget är SKILT från period-/lägestomläget: här FINNS
-          // anmälningar i perioden men dimensionsfiltren matchar inga, och
-          // Rensa är återvägen (EventsLists form). Är själva perioden tom
-          // finns inget att rensa fram — då gäller den vanliga copyn.
-          aktiva > 0 && periodRader.length > 0 ? (
-            // Typografin är sidans EGEN tomlägeskonvention (`text-small
-            // text-text-muted`, punkt i slutet — samma som `tomtText`), inte
-            // EventsLists centrerade `py-12`-form: här bor tomläget direkt i
-            // listans flöde, inte i ett kortformat.
-            <div className="flex flex-col items-start gap-3">
-              <p className="text-small text-text-muted">Inga anmälningar matchar filtren.</p>
-              <AriaButton
-                onPress={rensaFilter}
-                className="rounded-full bg-bg-muted px-3.5 py-2 font-medium text-small hover:bg-bg-emphasized motion-safe:transition-colors"
-              >
-                Rensa filter
-              </AriaButton>
-            </div>
-          ) : (
-            <p className="text-small text-text-muted">{tomtText(visaAtgardskon, period)}</p>
-          )
-        ) : (
-          <ul
-            aria-label="Anmälningar"
-            className="-mx-4 divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong"
-          >
-            {visasRader.map((reg) => {
-              const namn = displayName(reg);
-              const tid = inskickadTid(reg);
-              const relTid = Number.isFinite(tid) ? relativTid(tid, nuMs) : null;
-              // Undertexten är eventets IDENTITET ("kurs · ort · datum"),
-              // inte längre tid+eventnamn hopslagna. Marcus 2026-08-23:
-              // "under namnet har vi event, ort, datum, EXAKT så vill jag att
-              // anmälningslistan också ska ha." `eventIdentitet` är Hems egen
-              // hjälpare — lånad, inte återuppfunnen.
-              const undertext =
-                eventIdentitet(reg, reg.eventId ? eventsById.get(reg.eventId) : undefined) || ' ';
-              const behoverKoppling = behoverAtgard(reg);
-              const namnKlass =
-                'min-w-0 truncate font-medium text-body underline-offset-2 after:absolute after:inset-0 hover:underline';
-
-              // Triggerns cva-bas (Button.tsx) lägger `inline-flex`/padding/
-              // min-höjd/bakgrund för sin `md`-standardstorlek — samtliga
-              // neutraliseras här (tailwind-merge löser konflikten, `cn`
-              // applicerar `className` SIST) så knappen läser som radens
-              // vanliga namn-länk, inte som en knapp-pill.
-              const namnTriggerKlass = `min-h-0 justify-start gap-0 rounded-none p-0 hover:bg-transparent data-[hovered]:bg-transparent data-[pressed]:bg-transparent ${namnKlass}`;
-
-              const namnElement = behoverKoppling ? (
-                <AnmalningRadResolution registration={reg} triggerClassName={namnTriggerKlass}>
-                  {/* Triggern är en `inline-flex`-knapp, och `text-overflow:
+        const namnElement = behoverKoppling ? (
+          <AnmalningRadResolution registration={reg} triggerClassName={namnTriggerKlass}>
+            {/* Triggern är en `inline-flex`-knapp, och `text-overflow:
                     ellipsis` verkar bara på block-containrar med inline-
                     innehåll — på en flex-container KLIPPS texten i stället
                     utan ellips ("Disa Danielssc", mätt i facit-bilden
                     2026-08-23 vid 375 px). Den inre spannen är den block-
                     nivå truncaten faktiskt kan verka på. */}
-                  <span className="min-w-0 truncate">{namn}</span>
-                </AnmalningRadResolution>
-              ) : reg.eventId ? (
-                <Link
-                  to="/event/$eventId/anmalan/$registrationId"
-                  params={{ eventId: reg.eventId, registrationId: reg.id }}
-                  className={namnKlass}
-                >
-                  {namn}
-                </Link>
-              ) : (
-                // Kan inte inträffa i praktiken (UTAN_EVENT ⇒ behoverAtgard),
-                // men golvet är explicit: aldrig en död länk.
-                <span className="min-w-0 truncate font-medium text-body">{namn}</span>
-              );
+            <span className="min-w-0 truncate">{namn}</span>
+          </AnmalningRadResolution>
+        ) : reg.eventId ? (
+          <Link
+            to="/event/$eventId/anmalan/$registrationId"
+            params={{ eventId: reg.eventId, registrationId: reg.id }}
+            className={namnKlass}
+          >
+            {namn}
+          </Link>
+        ) : (
+          // Kan inte inträffa i praktiken (UTAN_EVENT ⇒ behoverAtgard),
+          // men golvet är explicit: aldrig en död länk.
+          <span className="min-w-0 truncate font-medium text-body">{namn}</span>
+        );
 
-              // RADENS GRID (2026-08-23, efter facit-bildens mobilfynd):
-              // fyra kolumner — avatar · innehåll (minmax(0,1fr)) · tid ·
-              // chevron — och två rader. Avatar, tid och chevron spänner
-              // båda raderna (tiden vertikalt centrerad mot HELA raden,
-              // exakt Hems `NyaAnmalningar`-form). Skälet till grid i
-              // stället för flex: vid 375 px tog tidskolumnen ("för 5 dagar
-              // sedan", ~104 px) och badgen ("Behöver kopplas", ~135 px)
-              // tillsammans mer än innehållskolumnen (~106 px) — identiteten
-              // fick 0 px ("R") och namnet klipptes. Under `sm` släpper
-              // tiden därför sin andra rad (`max-sm:row-end-2`) och rad 2
-              // får spänna in under den (`max-sm:col-end-4`): identiteten
-              // får ~90 px i stället för 0, utan att rad 1:s form eller
-              // höjdlåset rörs. På desktop är layouten pixelidentisk med
-              // flex-formen Marcus godkände. DOM-ordningen är oförändrad
-              // (namn → identitet/status → tid → chevron) — gridet placerar
-              // visuellt, skärmläsaren läser som förut. ENBART longhands
-              // (`row-start`/`row-end`, `col-start`/`col-end`): span-shorthanden
-              // `row-span-2` skrev över `row-start-1` i utdatan och kastade
-              // avataren till kolumn 3 — mätt i första bildtagningen.
-              return (
-                <li
-                  key={reg.id}
-                  className="relative grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 py-2.5"
-                >
-                  <div className="col-start-1 row-start-1 row-end-3 flex">
-                    <InitialAvatar namn={namn} />
-                  </div>
-                  <div className="col-start-2 row-start-1 flex min-w-0 items-center gap-2">
-                    {namnElement}
-                  </div>
-                  {/* RAD 2 — identiteten OCH statusen. Statusen låg tidigare
+        // RADENS GRID (2026-08-23, efter facit-bildens mobilfynd):
+        // fyra kolumner — avatar · innehåll (minmax(0,1fr)) · tid ·
+        // chevron — och två rader. Avatar, tid och chevron spänner
+        // båda raderna (tiden vertikalt centrerad mot HELA raden,
+        // exakt Hems `NyaAnmalningar`-form). Skälet till grid i
+        // stället för flex: vid 375 px tog tidskolumnen ("för 5 dagar
+        // sedan", ~104 px) och badgen ("Behöver kopplas", ~135 px)
+        // tillsammans mer än innehållskolumnen (~106 px) — identiteten
+        // fick 0 px ("R") och namnet klipptes. Under `sm` släpper
+        // tiden därför sin andra rad (`max-sm:row-end-2`) och rad 2
+        // får spänna in under den (`max-sm:col-end-4`): identiteten
+        // får ~90 px i stället för 0, utan att rad 1:s form eller
+        // höjdlåset rörs. På desktop är layouten pixelidentisk med
+        // flex-formen Marcus godkände. DOM-ordningen är oförändrad
+        // (namn → identitet/status → tid → chevron) — gridet placerar
+        // visuellt, skärmläsaren läser som förut. ENBART longhands
+        // (`row-start`/`row-end`, `col-start`/`col-end`): span-shorthanden
+        // `row-span-2` skrev över `row-start-1` i utdatan och kastade
+        // avataren till kolumn 3 — mätt i första bildtagningen.
+        return (
+          <li
+            key={reg.id}
+            className="relative grid grid-cols-[auto_minmax(0,1fr)_auto_auto] items-center gap-x-3 py-2.5"
+          >
+            <div className="col-start-1 row-start-1 row-end-3 flex">
+              <InitialAvatar namn={namn} />
+            </div>
+            <div className="col-start-2 row-start-1 flex min-w-0 items-center gap-2">
+              {namnElement}
+            </div>
+            {/* RAD 2 — identiteten OCH statusen. Statusen låg tidigare
                       som egen kolumn på rad 1 med RESERVERAD plats
                       (`invisible`, personlistans `Pill dold`-teknik). Den
                       formen är riven på Marcus order 2026-08-23, av en mätt
@@ -968,7 +992,7 @@ export function AnmalningarSida({
                       den YTTRE raden. Identiteten trunkeras i stället när
                       badgen tar plats — sekundär information, samma klass av
                       trunkering Hems egen identitetsrad redan bär. */}
-                  {/* FAST HÖJD (`min-h-5`), inte auto: badgen är högre än en
+            {/* FAST HÖJD (`min-h-5`), inte auto: badgen är högre än en
                       naken undertextrad, så utan golvet blev rader MED
                       åtgärdsbehov högre än rader utan — DoD #6:s höjdlås
                       bröts, och sviten fällde på just den jämförelsen.
@@ -978,34 +1002,54 @@ export function AnmalningarSida({
                       `min-h-6` (24 px) ligger över badgens verkliga höjd i
                       BÅDA fallen, så uniformiteten följer av golvet och inte
                       av en jagad decimal. */}
-                  <div className="col-start-2 row-start-2 flex min-h-6 min-w-0 items-center gap-2 max-sm:col-end-4">
-                    <span className="truncate text-caption text-text-muted">{undertext}</span>
-                    {behoverKoppling && (
-                      <span className="shrink-0">
-                        <StatusBadge ton="warning" storlek="sm">
-                          Behöver kopplas
-                        </StatusBadge>
-                      </span>
-                    )}
-                  </div>
-                  {/* Tiden — egen kolumn, högerställd och vertikalt centrerad
+            <div className="col-start-2 row-start-2 flex min-h-6 min-w-0 items-center gap-2 max-sm:col-end-4">
+              <span className="truncate text-caption text-text-muted">{undertext}</span>
+              {behoverKoppling && (
+                <span className="shrink-0">
+                  <StatusBadge ton="warning" storlek="sm">
+                    Behöver kopplas
+                  </StatusBadge>
+                </span>
+              )}
+            </div>
+            {/* Tiden — egen kolumn, högerställd och vertikalt centrerad
                     mot hela raden (`row-span-2` + gridets `items-center`).
                     Exakt Hems form (`NyaAnmalningar.tsx`: `shrink-0 pl-2
                     text-caption text-text-muted`), som Marcus pekade ut som
                     förlagan. Under `sm` bara rad 1 — se grid-noten ovan. */}
-                  <span className="col-start-3 row-start-1 row-end-3 pl-2 text-caption text-text-muted max-sm:row-end-2">
-                    {relTid}
-                  </span>
-                  <ChevronRight
-                    aria-hidden="true"
-                    size={18}
-                    className="col-start-4 row-start-1 row-end-3 text-text-secondary"
-                  />
-                </li>
-              );
-            })}
-          </ul>
-        )}
+            <span className="col-start-3 row-start-1 row-end-3 pl-2 text-caption text-text-muted max-sm:row-end-2">
+              {relTid}
+            </span>
+            <ChevronRight
+              aria-hidden="true"
+              size={18}
+              className="col-start-4 row-start-1 row-end-3 text-text-secondary"
+            />
+          </li>
+        );
+      })}
+    </ul>
+  );
+
+  // De FYRA barnen nedan (`dataLaddadAnnonsering`, `headerBlock`,
+  // `filterRadBlock`, `filterAnnonsering`, `datakropp` — sidRam är sidkromet
+  // och sitter MEDVETET utanför ankaret, se § YTANS ANKARE ovan) är FASTA
+  // SYSKON-POSITIONER som alltid finns med i samma ordning i VARJE render,
+  // oavsett isPending/isError/laddat. Det är den strukturen, inte en `key`,
+  // som håller `headerBlock`/`filterRadBlock`s DOM-identitet (och därmed
+  // FilterRads interna `oppen`-state, `EventValjare`s popover-state, samt
+  // fokus och inskriven text i dess sökfält) intakt genom VARJE
+  // tillståndsövergång (TASK-416.19 — samma form som `Intresserade.tsx`,
+  // TASK-416.8).
+  return (
+    <div className="flex flex-col gap-4">
+      {sidRam}
+      <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
+        {dataLaddadAnnonsering}
+        {headerBlock}
+        {filterRadBlock}
+        {filterAnnonsering}
+        {datakropp}
       </div>
     </div>
   );

@@ -936,6 +936,183 @@ test.describe('Anmälningssidans form (TASK-299.5 — /mer/anmalningar)', () => 
   });
 });
 
+/**
+ * Review-grinden runda 1 (TASK-416.4, PR #2415, Marcus mandat) — TASK-416.19.
+ *
+ * `headerBlock`/`filterRadBlock` monterades tidigare i TRE separata `return`-
+ * grenar där laddat-grenen skjöt in `<p role=status>Anmälningarna
+ * laddade.</p>` FÖRE `headerBlock` (barn-index 0) medan isPending/isError
+ * hade `headerBlock` som index 0. Reacts keyless reconciliation matchar barn
+ * POSITIONELLT — ett index-mismatch mellan grenar tvingar fram en FULL
+ * remount av `<FilterRad>` (och allt i den: panelens öppna/stängda state,
+ * `EventValjare`s popover-state, fokus, inskriven text). Fixat genom att göra
+ * HELA `AnmalningarSida` till ETT returträd med fasta syskon-positioner
+ * (samma form som `Intresserade.tsx`, TASK-416.8) — se komponentens egen
+ * docblock för den fulla motiveringen.
+ *
+ * ── TVÅ MÄTTA GRÄNSER SOM STYRDE TESTDESIGNEN NEDAN (bokförda i
+ * slutrapporten, INTE testbrister) ──────────────────────────────────────
+ *
+ * (1) `FilterRad.tsx` (~rad 298–312) visar ENBART dekorativa, ofokuserbara
+ * skelettblock för ALLA dimensioner — `EventValjare`s sökfält monteras INTE
+ * — så länge FilterRads egna `isPending`-prop är sann, och den propen är
+ * BUNDEN till exakt samma boolean som väljer AnmalningarSidas render-gren.
+ * De två flippar alltså ATOMISKT tillsammans: ett "fortfarande isPending,
+ * men sökfältet är fokuserbart"-ögonblick kan strukturellt inte existera.
+ *
+ * (2) Komponentens EGEN, redan befintliga a11y-effekt (se `announceRef`/
+ * `headingRef.current?.focus()` ovan, "Fokus -> <h1> ... när data anlänt (en
+ * gång per laddning)") flyttar OVILLKORLIGT fokus till `<h1>` FÖRSTA gången
+ * `registrations` blir sant under komponentens livstid — oavsett om den
+ * kommer från isPending ELLER isError. Mätt (2026-09-06, headless
+ * Playwright): en öppen `EventValjare`-popover med inskriven text stängs då
+ * av sitt EGET, KORREKTA blur-beteende (WAI-ARIA combobox-mönstret: stäng
+ * popovern när fokus lämnar den) — INTE av en remount. `get-events`
+ * anropades noll gånger extra under övergången (mätt via nätverksräknare),
+ * så det är inte heller en events-refetch som stör. Detta gör bokstavlig
+ * "fokus i sökfältet överlever" OMÖJLIG att bevisa för EN FÖRSTA lyckad
+ * laddning, oavsett om header/FilterRad remonteras eller ej — samma
+ * beteende skulle synas även i en HYPOTETISKT perfekt fixad komponent.
+ *
+ * DÄRFÖR: båda testen nedan bevisar den FAKTISKA regressionen (header/
+ * FilterRad byter INTE DOM-nod-identitet mellan isPending/isError och
+ * laddat) med en mekanism som är IMMUN mot ovanstående två gränser — en
+ * `data-`-markör satt via `page.evaluate()` på `filter-panel`-noden FÖRE
+ * övergången, kontrollerad att sitta kvar på SAMMA nod (inte en ny, omärkt
+ * nod) EFTER — plus att panelens ÖPPNA state (en `useState` intern i
+ * `FilterRad`, som skulle nollställas till `defaultOppen=false` vid en
+ * remount) håller genom övergången. Ingen av delarna rör fokus, så ingen av
+ * gränserna ovan stör mätningen.
+ *
+ * TVÅSIDIGT BEVISAT (Final Summary bär de exakta felmeddelandena): körda mot
+ * den GAMLA tre-`return`-strukturen (fixen i `AnmalningarSida.tsx` tillfälligt
+ * borttagen, testfilen orörd) föll BÅDA testen — markören var BORTA och
+ * panelen STÄNGD efter övergången i båda fallen (ny, omonterad `<FilterRad>`
+ * med `defaultOppen=false`). Körda mot fixen är båda gröna.
+ */
+test.describe('Regressionsvakt: fasta syskon-positioner håller FilterRad odemonterad (TASK-416.19)', () => {
+  /** DOM-nod-identitetsmarkör — immun mot fokus-/blur-bikonfunder (se
+      docblocket ovan): en remount ersätter noden och tar markören med sig,
+      en vanlig re-render av SAMMA nod behåller den. */
+  const REMOUNT_MARKOR = 'data-remount-marker-416-19';
+
+  async function markeraFilterPanel(page: Page): Promise<void> {
+    await page.evaluate((attr) => {
+      const el = document.querySelector('[data-testid="filter-panel"]');
+      el?.setAttribute(attr, 'markerad-fore-overgang');
+    }, REMOUNT_MARKOR);
+  }
+
+  function markorFinnsKvar(page: Page) {
+    return page.locator(`[data-testid="filter-panel"][${REMOUNT_MARKOR}="markerad-fore-overgang"]`);
+  }
+
+  /** Håller `get-registrations` öppet tills testet kallar `release()` —
+      gör isPending-fönstret deterministiskt (samma mönster som
+      `mer-intresserade.acceptance.test.ts` `mockLeads({ manualRelease })`). */
+  function mockRegistrationsManuell(network: NetworkFixture, rows: Row[]): () => void {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    network.use(
+      http.get(EF('get-registrations'), async () => {
+        await gate;
+        return json({ registrations: rows });
+      }),
+    );
+    return release;
+  }
+
+  /** FLAGGSTYRD (inte räkneverk): 404 tills testet kallar den returnerade
+      funktionen, DÄREFTER lyckas varje anrop — modellerar en riktig
+      isError → laddat-övergång via TanStack Querys `refetchOnWindowFocus`
+      (samma mekanism och motivering som
+      `mer-intresserade.acceptance.test.ts` `mockLeadsFelarTillsFlaggat`). */
+  function mockRegistrationsFelarTillsFlaggat(network: NetworkFixture, rows: Row[]): () => void {
+    let lyckas = false;
+    network.use(
+      http.get(EF('get-registrations'), () =>
+        lyckas ? json({ registrations: rows }) : json({ error: 'x' }, 404),
+      ),
+    );
+    return () => {
+      lyckas = true;
+    };
+  }
+
+  test('FilterRads panel-nod och öppna state överlever isPending → laddat (ingen remount)', async ({
+    page,
+    network,
+  }) => {
+    const release = mockRegistrationsManuell(network, blandadeRader());
+    await page.goto('/mer/anmalningar');
+
+    // Genuint isPending: skeleton-antalsraden och FilterRads egen
+    // skeleton-grid (ingen sökbar Event-kontroll monterad än, se docblocket
+    // ovan, gräns 1).
+    await expect(page.getByText('Laddar anmälningarna…')).toBeVisible();
+
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await markeraFilterPanel(page);
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+
+    release();
+    await expect(page.getByRole('heading', { level: 1, name: 'Anmälningar' })).toBeVisible();
+    await expect(page.getByText('3 anmälningar', { exact: true })).toBeVisible();
+
+    // SAMMA panel-nod (markören sitter kvar) OCH FORTFARANDE ÖPPEN — inte en
+    // ny, ostängd `<FilterRad>` (defaultOppen=false vid en remount).
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+  });
+
+  test('FilterRads panel-nod och öppna state överlever isError → laddat (ingen remount)', async ({
+    page,
+    network,
+  }) => {
+    const tillatLyckasHadanefter = mockRegistrationsFelarTillsFlaggat(network, [
+      reg({ fornamn: 'Carl', efternamn: 'Carlsson', inskickad: '2026-06-22T10:00:00.000Z' }),
+    ]);
+    await page.goto('/mer/anmalningar');
+
+    await expect(page.getByRole('alert')).toBeVisible();
+
+    // FilterRads `isPending`-prop är FALSK i fel-läget (docblocket ovan,
+    // gräns 1) — panelen visar REDAN riktiga kontroller, Event-väljaren
+    // inkluderad, så sökfältet KAN nås och skrivas i (bevisas nedan) — men
+    // se gräns 2 för varför dess FOKUS inte kan förväntas överleva.
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('event-valjare-trigger').click();
+    await expect(page.getByTestId('event-valjare-popover')).toBeVisible();
+
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök event eller ort' });
+    await sokfalt.fill('Sköv');
+    await expect(sokfalt).toBeFocused();
+    await expect(sokfalt).toHaveValue('Sköv');
+
+    await markeraFilterPanel(page);
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+
+    tillatLyckasHadanefter();
+    // Utlöser TanStack Querys refetchOnWindowFocus — den enda realistiska
+    // vägen isError → laddat i denna komponent (ingen "försök igen"-knapp).
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+
+    await expect(page.getByText('Carl Carlsson')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+
+    // SAMMA panel-nod (markören sitter kvar) OCH FORTFARANDE ÖPPEN genom
+    // övergången — den strukturella bevisföringen för AC #2, immun mot
+    // gräns 2:s (korrekta, avsiktliga) fokus→h1-steal och EventValjares
+    // egen blur-stängning av sin popover.
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+  });
+});
+
 test.describe('Radanatomin vid MOBIL bredd — namnkolumnen får inte klämmas ihjäl', () => {
   /**
    * REGRESSIONSVAKT, född ur en verklig bugg 2026-08-23.
