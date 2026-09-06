@@ -1,5 +1,22 @@
 # Amendering 2026-09-06 — formen före stämpeln: pillsen bort, namnet klipps, sätt-alla-knapparna under listan (TASK-402.8)
 
+> **STATUS 2026-09-06: FORMEN ITERERAS — §§ 3–5 BESKRIVER VARV 1, INTE DET SOM
+> LIGGER PÅ GRENEN NU.** Marcus efter varv 1: *"Jag tror 'sätt alla belopp'
+> måste få ett eget block/ruta och passa snyggare in i sidans design. Det ser
+> inte snyggt ut nu."* Varv 2 bytte den nakna raden mot ett block i husets
+> panelform (`rounded-2xl bg-bg-muted p-4`, rubrik + hjälptext över
+> knapparna). Bilderna i § 5, referens-tabellen i § 4 och beskrivningen av
+> etiketten i § 3 gäller därför **varv 1**.
+>
+> Bokföringen tas igen EN gång när formen är klar — Marcus, samma dag:
+> *"Angående min iteration på 'Sätt alla belopp' så måste vi ju inte ta nya
+> bilder och krångla, det gör vi när iterationerna är klara."* Fram till dess
+> är de åtta berörda `ariaSnapshot`-lägena markerade `test.fixme` i
+> `tests/e2e/bekraftelsesteget-promoverings-grind.staging.test.ts` (skälet och
+> återställningen står i den filens huvud), och `facit.json` är orörd sedan
+> varv 1. Denna ruta finns för att ett dokument som tyst beskriver en gammal
+> form är värre än inget dokument alls (`ADR-083`-disciplinen).
+
 **Yta:** `bekraftelsesteget` (manifestets enda `ytor`-post, `"godkand": null`,
 låst 2026-09-05 med Marcus `"Lås som facit."`).
 

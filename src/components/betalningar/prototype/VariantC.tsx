@@ -459,12 +459,46 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
       {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
       {kvar.length > 0 && (
         <div className="flex flex-col gap-3">
-          {/* ═══ SÄTT ALLA BELOPP — UNDER LISTAN (TASK-402.8) ═══════════════
-              Marcus 2026-09-06: *"jag vill ha dem under listan, inte över …
-              Listan ska vara i fokus direkt när hon kommer till
-              bulkregistreringen."* Knapparna står därför sist av det som rör
-              raderna, precis före avstämningen de påverkar — inte överst,
-              där varianterna A/B hade sina bulkval innan varv 12 rev dem.
+          {/* ═══ SÄTT ALLA BELOPP — ETT BLOCK UNDER LISTAN (TASK-402.8) ═════
+              PLATSEN (varv 1, Marcus 2026-09-06): *"jag vill ha dem under
+              listan, inte över … Listan ska vara i fokus direkt när hon
+              kommer till bulkregistreringen."* Blocket står sist av det som
+              rör raderna, precis före avstämningen det påverkar.
+
+              FORMEN (varv 2, Marcus på granskningsservern samma dag): *"Jag
+              tror 'sätt alla belopp' måste få ett eget block/ruta och passa
+              snyggare in i sidans design. Det ser inte snyggt ut nu."* Varv 1
+              lade en naken rad — etikett plus två knappar — mellan sista
+              gruppkortet och avstämningen. Den bar ingen av sidans former och
+              hörde därför visuellt ingenstans.
+
+              HUSETS PANELFORM, INTE EN NY: `rounded-2xl bg-bg-muted p-4` är
+              `FilterRad`s utfällda panel (`primitives/FilterRad.tsx`, den
+              enda andra panelen i appen som bär kontroller och inte
+              innehåll), och `bg-bg-muted` + `rounded-2xl` +
+              `contrast-more:border-border-strong` är dessutom exakt
+              `LISTA_KLASS` ovan. Blocket ligger i en behållare UTAN
+              horisontell padding, alltså kant i kant med gruppernas
+              `-mx-4`-omslag — samma vänster- och högerkant, samma radie,
+              samma botten.
+
+              LUFTEN ÄR MÄTT, INTE ÖGONMÄTT (och prövas i
+              `bekraftelsesteget-formen-fore-stampeln.staging.test.ts`
+              § blockets luft): 16 px ovanför, alltså gruppernas inbördes
+              rytm (listsektionens `gap-4`), och 12 px ned till avstämningen,
+              alltså samma avstånd avstämningen själv har till summaraden
+              (`mt-1` + `pt-2`). `-mt-2` är det som gör det första talet:
+              rot-sektionens `gap-6` ger 24 px mellan toppnivå-barnen, och
+              blocket ska ligga TÄTARE än så — det hör ihop med listan ovanför
+              och inte med sidans nästa avdelning.
+
+              RUBRIKEN ÄR INGEN `<h2>`, med avsikt. Sidans h2:er är
+              INNEHÅLLS-avdelningar ("Behöver din hand", eventgrupperna) i
+              `text-lg font-semibold`; detta är en KONTROLL-panel, som
+              `FilterRad` (som inte heller bär någon rubrik). En h2 i
+              `text-body font-medium` hade dessutom sett ut som brödtext i en
+              rubriknivå och gjort dokumentöversikten sämre, inte bättre — på
+              en yta som är facit-låst och ligger hos Marcus för granskning.
 
               ETIKETTEN BÄRS AV VARJE KNAPPS EGET NAMN, inte av ett
               `role="group"`. Tre skäl, i den ordningen: en gruppetikett
@@ -476,16 +510,31 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               `useSemanticElements` föreslår för `role="group"` — är fel både
               semantiskt (gruppen bär två HANDLINGAR, inga formulärfält) och i
               layout (en `legend` renderas som fieldsettens caption och blir
-              aldrig en flex-item, så etiketten hade hoppat upp på egen rad).
-              Förlagan `BeloppsgenvagsKnappar` (`radfalt.tsx`) kom undan med
-              ett fieldset just för att dess legend var `sr-only`.
-
-              Den synliga texten står alltså kvar för ögat och upprepas i
-              knapparnas namn för örat — samma mönster som `ForslagsKnappar`
-              nedan, där "Förslag" är en synlig span utan egen roll. */}
-          <div className="flex flex-col gap-2 px-4">
+              aldrig en flex-item). Förlagan `BeloppsgenvagsKnappar`
+              (`radfalt.tsx`) kom undan med ett fieldset just för att dess
+              legend var `sr-only`. */}
+          <div
+            /* MÄTPUNKTEN för blockets luft och bredd. `data-testid` och inte
+               ett tillgängligt namn, av samma skäl som sektionens egen krok
+               ovan: ett namn hade gjort behållaren till en landmark i
+               tillgänglighetsträdet. En testid kostar ingenting där. */
+            data-testid="satt-alla-block"
+            className="-mt-2 flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong"
+          >
+            <div className="flex flex-col gap-1">
+              <p className="font-medium text-body">Sätt alla belopp</p>
+              {/* HJÄLPTEXTEN SÄGER BÅDA HALVORNA av regeln — vad knappen gör
+                  OCH vad den inte rör. Den andra halvan är den som annars
+                  kostar: en rad i hand-högen ser markerad ut och står kvar
+                  när Lotta trycker, och utan raden läses det som en bugg. */}
+              <p className="text-caption text-text-muted">
+                Skriver över förslagen på alla markerade rader. Rader som behöver din hand rörs
+                inte.
+              </p>
+            </div>
+            {/* `flex-wrap`: på iPad 820 ryms båda knapparna på en rad, men
+                formen får inte bero på det. Vänsterställda i båda fallen. */}
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-body text-text-secondary">Sätt alla belopp:</span>
               {SATT_ALLA.map((v) => (
                 <Button
                   key={v.val}

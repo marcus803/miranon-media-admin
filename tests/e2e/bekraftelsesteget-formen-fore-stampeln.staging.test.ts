@@ -236,24 +236,98 @@ test.describe('TASK-402.8 — pillsen bort och namnet klippt (AC #1, AC #2)', ()
 });
 
 test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
-  test('knapparna står UNDER listan och OVANFÖR avstämningen', async ({ page }) => {
+  /**
+   * [VARV 2] BLOCKETS PLATS, LUFT OCH BREDD — MÄTT, INTE ÖGONMÄTT.
+   *
+   * Marcus på granskningsservern 2026-09-06: *"Jag tror 'sätt alla belopp'
+   * måste få ett eget block/ruta och passa snyggare in i sidans design. Det
+   * ser inte snyggt ut nu."* Varv 1 lade en naken rad mellan sista
+   * gruppkortet och avstämningen. Kraven på blocket är geometriska, alltså
+   * mätbara — och det som är mätbart ska mätas, annars är "passar in i
+   * sidans design" ett omdöme som ingen kan pröva igen.
+   */
+  for (const [namn, viewport] of [
+    ['desktop', DESKTOP],
+    ['ipad', IPAD],
+  ] as const) {
+    test(`${namn} — blocket ligger under listan, kant i kant med grupperna, med 16/12 px luft`, async ({
+      page,
+    }) => {
+      const steget = await oppna(page, viewport);
+
+      const listan = steget.getByRole('region', { name: 'Markerade inbetalningar' });
+      const forstaGruppen = steget.getByRole('list').first();
+      const block = steget.getByTestId('satt-alla-block');
+      const avstamningen = steget.locator('dl');
+
+      const listBox = await listan.boundingBox();
+      const gruppBox = await forstaGruppen.boundingBox();
+      const blockBox = await block.boundingBox();
+      const dlBox = await avstamningen.boundingBox();
+      expect(listBox).not.toBeNull();
+      expect(gruppBox).not.toBeNull();
+      expect(blockBox).not.toBeNull();
+      expect(dlBox).not.toBeNull();
+      if (!listBox || !gruppBox || !blockBox || !dlBox) return;
+
+      // PLATSEN (varv 1): under listan, ovanför avstämningen.
+      expect(blockBox.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
+      expect(blockBox.y).toBeLessThan(dlBox.y);
+
+      // KANT I KANT MED GRUPPERNA. Gruppernas `<ul>` bär `-mx-4` mot
+      // listsektionens `px-4` och ligger därför i kolumnens ytterkant;
+      // blocket ligger i en behållare utan horisontell padding och ska hamna
+      // på exakt samma x och samma bredd.
+      expect(Math.round(blockBox.x)).toBe(Math.round(gruppBox.x));
+      expect(Math.round(blockBox.width)).toBe(Math.round(gruppBox.width));
+
+      /* LUFTEN, MÄTT MOT DET SOM FAKTISKT LIGGER OVANFÖR.
+         16 px ovanför = gruppernas inbördes rytm (listsektionens `gap-4`);
+         12 px under = samma avstånd avstämningen har till sin egen summarad
+         (`mt-1` + `pt-2`).
+
+         FÖREGÅENDE ELEMENT LÄSES UR DOM:EN, INTE ANTAS VARA LISTAN. Första
+         versionen mätte mot listsektionen och fick 497 px — i DENNA fixtur
+         ligger "Behöver din hand" emellan (David saknar pris och därmed
+         kandidat). Talet 16 gäller avståndet till det som står närmast
+         ovanför, vilket är hela poängen med rytmen; vilken sektion det är
+         beror på datat. */
+      const luft = await block.evaluate((el) => {
+        const behallare = el.parentElement;
+        const foregaende = behallare?.previousElementSibling;
+        const dl = behallare?.querySelector('dl');
+        if (!behallare || !foregaende || !dl) return null;
+        const mitt = el.getBoundingClientRect();
+        return {
+          over: Math.round(mitt.top - foregaende.getBoundingClientRect().bottom),
+          under: Math.round(dl.getBoundingClientRect().top - mitt.bottom),
+        };
+      });
+      expect(luft).toEqual({ over: 16, under: 12 });
+
+      // Ingen horisontell rullning av blocket, särskilt inte vid 820.
+      const overflod = await page.evaluate(
+        () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      );
+      expect(overflod).toBeLessThanOrEqual(0);
+    });
+  }
+
+  test('blocket bär rubrik och hjälptext, och hjälptexten säger vad knapparna INTE rör', async ({
+    page,
+  }) => {
     const steget = await oppna(page, DESKTOP);
+    const block = steget.getByTestId('satt-alla-block');
 
-    const listan = steget.getByRole('region', { name: 'Markerade inbetalningar' });
-    const etiketten = steget.getByText('Sätt alla belopp:');
-    const avstamningen = steget.locator('dl');
-
-    const listBox = await listan.boundingBox();
-    const etikettBox = await etiketten.boundingBox();
-    const dlBox = await avstamningen.boundingBox();
-    expect(listBox).not.toBeNull();
-    expect(etikettBox).not.toBeNull();
-    expect(dlBox).not.toBeNull();
-    if (!listBox || !etikettBox || !dlBox) return;
-
-    // Marcus 2026-09-06: "jag vill ha dem under listan, inte över."
-    expect(etikettBox.y).toBeGreaterThanOrEqual(listBox.y + listBox.height);
-    expect(etikettBox.y).toBeLessThan(dlBox.y);
+    await expect(block.getByText('Sätt alla belopp', { exact: true })).toBeVisible();
+    await expect(
+      block.getByText(
+        'Skriver över förslagen på alla markerade rader. Rader som behöver din hand rörs inte.',
+      ),
+    ).toBeVisible();
+    // Båda knapparna bor i blocket, ingen annanstans på sidan.
+    await expect(steget.getByRole('button', { name: AVGIFTSKNAPP })).toHaveCount(1);
+    await expect(block.getByRole('button', { name: ALLTKNAPP })).toHaveCount(1);
   });
 
   test('appens förslag står kvar tills en knapp trycks', async ({ page }) => {
