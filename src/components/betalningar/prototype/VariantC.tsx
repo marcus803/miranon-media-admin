@@ -629,6 +629,15 @@ function RadFormular({
       // samma skäl (Marcus 2026-09-01: "Inga fält som ser frikopplade ut
       // under en separatorlinje").
       visaAvdelare={false}
+      // [TASK-411, RUNDA 3 — BEHÅLL DENNA RAD VID MERGE FRÅN main/402.8]
+      // `RadFormular` monteras ALLTID inuti ett grönt markerat kort
+      // (`kortKlass(true)`, båda anropsställena ovan — `HandKort` och det
+      // öppna `vald`-kortet). Utan denna prop faller `RegistreraForm` till
+      // `notisBakgrund="standard"` (grön) och success-notisen blir osynlig
+      // mot kortets egen `--mm-success-bg` — exakt kollisionen kedjan
+      // `RegistreraForm.tsx` § `notisBakgrund` finns för att förhindra. Se
+      // den propens docblock för hela resonemanget.
+      notisBakgrund="vit"
       lage="redigera"
       startvarden={{
         belopp: rad.belopp,
