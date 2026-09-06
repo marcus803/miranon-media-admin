@@ -1,11 +1,14 @@
 import { expect, test } from '@playwright/test';
 import {
+  antalAterstallning,
   antalRegistreradeKvitton,
   antalSattAlla,
   arRegistrerbar,
+  aterstallForslag,
   avstamning,
   type BekraftelseRad,
   baraOmkorning,
+  berorsAvAterstallning,
   berorsAvSattAlla,
   blockrader,
   byggRader,
@@ -511,4 +514,88 @@ test('avstämningen räknar om efter ett sätt-alla-tryck', () => {
     { klass: 'allt', antal: 2, summa: 6000 },
   ]);
   expect(summera(sattAllaBelopp(morgonen(), 'allt')).summa).toBe(9000);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   § ÅTERSTÄLL FÖRSLAGEN (TASK-402.8 varv 3) — vägen tillbaka
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Samma fyra kanter som sätt-alla, plus en femte som är knappens hela
+   existensberättigande: en rad som redan bär sitt förslag ÄNDRAS inte och ska
+   inte räknas. Räknades den hade knappen sagt "4 belopp återställda" när den
+   rörde noll. */
+
+test('aterstallForslag tar tillbaka appens förval, även på handskrivna belopp', () => {
+  const rader = morgonen();
+  const forslagen = rader.map(radbelopp);
+  // Ett bulk-tryck och en handskriven rad ovanpå det.
+  const andrade = sattAllaBelopp(rader, 'allt');
+  andrade[0] = { ...andrade[0], belopp: '750' };
+  expect(andrade.map(radbelopp)).toEqual([750, 1500, 2500, 3500]);
+
+  const tillbaka = aterstallForslag(andrade);
+  expect(tillbaka.map(radbelopp)).toEqual(forslagen);
+  // ANNA ÄR MED, trots att hennes belopp var handskrivet och inte satt av ett
+  // bulk-tryck: blockets text lovar "alla markerade rader", och en knapp som
+  // hemligt undantog de handskrivna hade varit omöjlig att förutsäga.
+  expect(radbelopp(tillbaka[0])).toBe(1500);
+});
+
+test('en rad som REDAN bär sitt förslag räknas inte och rörs inte', () => {
+  const rader = morgonen();
+  // Ingenting är ändrat ⇒ ingen rad avviker ⇒ knappen betyder ingenting.
+  expect(antalAterstallning(rader)).toBe(0);
+  expect(rader.every((r) => berorsAvAterstallning(r) === false)).toBe(true);
+  const tillbaka = aterstallForslag(rader);
+  expect(tillbaka.every((rad, i) => rad === rader[i])).toBe(true);
+
+  // Ändra EN rad ⇒ exakt en träff.
+  const en = [...rader];
+  en[2] = { ...en[2], belopp: '2 500' };
+  expect(antalAterstallning(en)).toBe(1);
+});
+
+test('en rad utan förslag (pris saknas i basen) rörs aldrig av återställningen', () => {
+  const rader = byggRader(
+    [
+      betalning({
+        anmalanRecordId: 'rec-utan-pris',
+        personNamn: 'Utan Pris',
+        gallandePris: null,
+        summaInbetalt: 0,
+      }),
+    ],
+    IDAG,
+    'Swish',
+  );
+  // Raden har inget förslag och ligger dessutom i hand-högen (tomt belopp).
+  const skriven = [{ ...rader[0], belopp: '900' }];
+  expect(berorsAvAterstallning(skriven[0])).toBe(false);
+  expect(aterstallForslag(skriven)[0]).toBe(skriven[0]);
+});
+
+test('hand-högen, avmarkerade och registrerade rader rörs inte av återställningen', () => {
+  const rader = sattAllaBelopp(morgonen(), 'allt');
+  rader[0] = { ...rader[0], belopp: '' }; // hand-högen
+  rader[1] = { ...rader[1], markerad: false };
+  rader[2] = { ...rader[2], utfall: { klass: 'registrerad', text: 'Registrerad' } };
+
+  expect(berorsAvAterstallning(rader[0])).toBe(false);
+  expect(berorsAvAterstallning(rader[1])).toBe(false);
+  expect(berorsAvAterstallning(rader[2])).toBe(false);
+  // Bara David är kvar som avvikande.
+  expect(antalAterstallning(rader)).toBe(1);
+
+  const tillbaka = aterstallForslag(rader);
+  expect(tillbaka[0]).toBe(rader[0]);
+  expect(tillbaka[1]).toBe(rader[1]);
+  expect(tillbaka[2]).toBe(rader[2]);
+  expect(radbelopp(tillbaka[3])).toBe(1000);
+});
+
+test('en FALLERAD rad återställs — den ska kunna köras om med förslaget', () => {
+  const rader = sattAllaBelopp(morgonen(), 'allt');
+  rader[3] = { ...rader[3], utfall: { klass: 'fel', text: 'nekad' } };
+  expect(berorsAvAterstallning(rader[3])).toBe(true);
+  expect(radbelopp(aterstallForslag(rader)[3])).toBe(1000);
 });

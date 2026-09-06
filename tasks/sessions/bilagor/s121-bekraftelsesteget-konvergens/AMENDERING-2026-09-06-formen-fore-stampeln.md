@@ -1,12 +1,21 @@
 # Amendering 2026-09-06 — formen före stämpeln: pillsen bort, namnet klipps, sätt-alla-knapparna under listan (TASK-402.8)
 
 > **STATUS 2026-09-06: FORMEN ITERERAS — §§ 3–5 BESKRIVER VARV 1, INTE DET SOM
-> LIGGER PÅ GRENEN NU.** Marcus efter varv 1: *"Jag tror 'sätt alla belopp'
-> måste få ett eget block/ruta och passa snyggare in i sidans design. Det ser
-> inte snyggt ut nu."* Varv 2 bytte den nakna raden mot ett block i husets
-> panelform (`rounded-2xl bg-bg-muted p-4`, rubrik + hjälptext över
-> knapparna). Bilderna i § 5, referens-tabellen i § 4 och beskrivningen av
-> etiketten i § 3 gäller därför **varv 1**.
+> LIGGER PÅ GRENEN NU.** Bilderna i § 5, referens-tabellen i § 4 och
+> beskrivningen av etiketten i § 3 gäller **varv 1**. Sedan dess:
+>
+> * **Varv 2** (Marcus: *"Jag tror 'sätt alla belopp' måste få ett eget
+>   block/ruta och passa snyggare in i sidans design. Det ser inte snyggt ut
+>   nu."*) — den nakna raden byttes mot ett block i husets panelform
+>   (`rounded-2xl bg-bg-muted p-4`, rubrik + hjälptext över knapparna).
+> * **Varv 3** (Marcus, tre punkter: *"Skapa påtagligt mer luft mellan sätt
+>   alla belopp-rutan och summeringsraderna nedanför."* · *"Ändra texten till
+>   'Skriver över föreslaget belopp på alla markerade rader. Rader som behöver
+>   din hand rörs inte.'"* · *"Sedan borde väl det finnas en 'Ångra knapp'
+>   också här eller? Om hon vill ändra tillbaka till föreslaget belopp?"*) —
+>   luften under blocket gick 12 → 24 px, hjälptexten fick Marcus ordalydelse,
+>   och en tredje knapp **"Återställ förslagen"** (ghost, sist, avstängd när
+>   ingen markerad rad avviker från sitt förslag) tillkom.
 >
 > Bokföringen tas igen EN gång när formen är klar — Marcus, samma dag:
 > *"Angående min iteration på 'Sätt alla belopp' så måste vi ju inte ta nya

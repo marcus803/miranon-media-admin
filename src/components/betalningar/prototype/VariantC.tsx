@@ -10,6 +10,7 @@ import { Button } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
+  antalAterstallning,
   antalSattAlla,
   baraOmkorning as arBaraOmkorning,
   arRegistrerbar,
@@ -285,6 +286,16 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
     modell.sattAllaBelopp(val);
     setSattAllaBesked(`${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`);
   };
+  /* Hur många rader som AVVIKER från sitt förslag just nu. Noll ⇒ knappen är
+     avstängd: en återställning som inte återställer något ska vara tyst. */
+  const aterstallningsTraffar = useMemo(() => antalAterstallning(kvar), [kvar]);
+  const aterstallForslagen = () => {
+    const antal = aterstallningsTraffar;
+    modell.aterstallForslag();
+    setSattAllaBesked(
+      `${plural(antal, 'belopp återställt', 'belopp återställda')} till förslaget.`,
+    );
+  };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
   // sjönk "10 inbetalningar 12 000 kr" rad för rad under körningen (mätt).
   const summering = useMemo(() => summera(bas), [bas]);
@@ -519,7 +530,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
                ovan: ett namn hade gjort behållaren till en landmark i
                tillgänglighetsträdet. En testid kostar ingenting där. */
             data-testid="satt-alla-block"
-            className="-mt-2 flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong"
+            className="-mt-2 mb-3 flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong"
           >
             <div className="flex flex-col gap-1">
               <p className="font-medium text-body">Sätt alla belopp</p>
@@ -528,8 +539,8 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
                   kostar: en rad i hand-högen ser markerad ut och står kvar
                   när Lotta trycker, och utan raden läses det som en bugg. */}
               <p className="text-caption text-text-muted">
-                Skriver över förslagen på alla markerade rader. Rader som behöver din hand rörs
-                inte.
+                Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand
+                rörs inte.
               </p>
             </div>
             {/* `flex-wrap`: på iPad 820 ryms båda knapparna på en rad, men
@@ -548,6 +559,31 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
                   {v.etikett}
                 </Button>
               ))}
+              {/* VÄGEN TILLBAKA (varv 3, Marcus: *"Sedan borde väl det finnas
+                  en 'Ångra knapp' också här eller? Om hon vill ändra tillbaka
+                  till föreslaget belopp?"*).
+
+                  "ÅTERSTÄLL FÖRSLAGEN" OCH INTE "ÅNGRA": knappen backar inte
+                  det senaste trycket utan sätter tillbaka appens förval
+                  (`forslagsbelopp`) på varje markerad rad. "Ångra" hade lovat
+                  en historik som sidan inte har — och som hade svarat på en
+                  annan fråga än den Marcus ställde.
+
+                  `ghost` OCH SIST: de två outline-knapparna är handlingen,
+                  denna är reträtten. Samma viktordning som radformulärets
+                  Klar/Avbryt (`RegistreraForm`).
+
+                  AVSTÄNGD NÄR INGEN RAD AVVIKER från sitt förslag — då
+                  betyder knappen ingenting, och en knapp som inte betyder
+                  något ska inte gå att trycka. */}
+              <Button
+                size="sm"
+                intent="ghost"
+                isDisabled={registrerar || aterstallningsTraffar === 0}
+                onPress={aterstallForslagen}
+              >
+                Återställ förslagen
+              </Button>
             </div>
             {/* Regionen finns FÖRE sitt innehåll och är tom tills något trycks
                 — en live-region som monteras samtidigt som texten annonseras

@@ -299,6 +299,62 @@ export function sattAllaBelopp(
   });
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   ÅTERSTÄLL FÖRSLAGEN (TASK-402.8 varv 3) — VÄGEN TILLBAKA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Marcus 2026-09-06: *"Sedan borde väl det finnas en 'Ångra knapp' också här
+   eller? Om hon vill ändra tillbaka till föreslaget belopp?"*
+
+   VAD DEN ÅTERSTÄLLER TILL: `forslagsbelopp`, alltså exakt det raden hade när
+   sidan byggdes (`byggRader`). Inte "beloppet före senaste trycket" — en
+   ångra-STACK hade krävt en historik som ingenting annat på sidan har, och
+   den hade dessutom svarat på en annan fråga än Marcus ställde.
+
+   VAD DEN RÖR: varje MARKERAD, ej registrerad rad utanför "Behöver din hand"
+   vars belopp AVVIKER från förslaget — inklusive rader Lotta skrivit för
+   hand. Att bara backa det ett bulk-tryck ändrade hade varit en osynlig
+   skillnad: blockets egen text lovar "alla markerade rader", och en knapp som
+   hemligt undantar de handskrivna raderna är omöjlig att förutsäga.
+
+   VAD DEN INTE RÖR: rader utan förslag (priset saknas i basen), hand-högen,
+   avmarkerade och redan registrerade rader — samma fyra kanter som
+   `sattAllaBelopp`, av samma skäl.
+
+   VARFÖR "AVVIKER" INGÅR I PREDIKATET: en rad som redan bär sitt förslag
+   ÄNDRAS inte av knappen och ska därför inte räknas i beskedet. Är ingen rad
+   avvikande betyder knappen ingenting, och då är den avstängd. */
+
+/**
+ * Skulle en återställning ändra denna rad? Fyra kanter som `berorsAvSattAlla`
+ * plus en femte: beloppet måste faktiskt AVVIKA från förslaget.
+ */
+export function berorsAvAterstallning(rad: BekraftelseRad): boolean {
+  if (!rad.markerad) return false;
+  if (rad.utfall?.klass === 'registrerad') return false;
+  if (saknarBelopp(rad)) return false;
+  const forslag = forslagsbelopp(rad.beloppsknappar);
+  if (forslag === null) return false;
+  return radbelopp(rad) !== forslag;
+}
+
+/** Hur många rader en återställning faktiskt ändrar — knappens besked. */
+export function antalAterstallning(rader: readonly BekraftelseRad[]): number {
+  return rader.filter(berorsAvAterstallning).length;
+}
+
+/**
+ * Raderna efter "Återställ förslagen". Orörda rader returneras som SAMMA
+ * objekt, precis som i `sattAllaBelopp`.
+ */
+export function aterstallForslag(rader: readonly BekraftelseRad[]): BekraftelseRad[] {
+  return rader.map((rad) => {
+    if (!berorsAvAterstallning(rad)) return rad;
+    const forslag = forslagsbelopp(rad.beloppsknappar);
+    return forslag === null ? rad : { ...rad, belopp: visaKronor(forslag), ejGenomforbar: null };
+  });
+}
+
 /**
  * [TASK-402.3 AC #6] OMKÖRNINGS-URVALET: vilka rader "Försök igen" faktiskt
  * kör. Regeln är EN mening — de registrerbara rader som redan fallerat EN

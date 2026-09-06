@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Jobbstatus, OppenBetalning } from '@/domain/schemas';
 import {
   arRegistrerbar,
+  aterstallForslag,
   type BekraftelseRad,
   type Beloppsgenvag,
   byggRader,
@@ -161,6 +162,11 @@ export function useBekraftelsesteg(
    */
   const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
     setRader((tidigare) => sattAllaBelopp(tidigare, val));
+  }, []);
+
+  /** [TASK-402.8 varv 3] SAMMA rena regel som den skarpa hooken kallar. */
+  const aterstallForslagNu = useCallback(() => {
+    setRader((tidigare) => aterstallForslag(tidigare));
   }, []);
 
   const sattBetalsattAlla = useCallback((betalsatt: Betalsatt) => {
@@ -365,6 +371,7 @@ export function useBekraftelsesteg(
     summering,
     sattGenvag,
     sattAllaBelopp: sattAllaBeloppNu,
+    aterstallForslag: aterstallForslagNu,
     sattBetalsattAlla,
     sattDatumAlla,
     sattRadBelopp,

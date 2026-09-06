@@ -97,6 +97,12 @@ export type BekraftelsestegModell = {
    * därför samma tre rader kod tills `TASK-402.6` river den.
    */
   sattAllaBelopp: (val: SattAllaVal) => void;
+  /**
+   * [TASK-402.8 varv 3] "Återställ förslagen" — vägen tillbaka till appens
+   * förval per rad. Samma urvalsregel som `sattAllaBelopp`, plus att raden
+   * måste avvika från sitt förslag. Ren regel i `aterstallForslag`.
+   */
+  aterstallForslag: () => void;
   sattBetalsattAlla: (betalsatt: Betalsatt) => void;
   sattDatumAlla: (datum: string) => void;
   sattRadBelopp: (nyckel: string, belopp: string) => void;

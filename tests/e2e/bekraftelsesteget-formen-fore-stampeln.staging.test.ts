@@ -250,7 +250,7 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     ['desktop', DESKTOP],
     ['ipad', IPAD],
   ] as const) {
-    test(`${namn} — blocket ligger under listan, kant i kant med grupperna, med 16/12 px luft`, async ({
+    test(`${namn} — blocket ligger under listan, kant i kant med grupperna, med 16/24 px luft`, async ({
       page,
     }) => {
       const steget = await oppna(page, viewport);
@@ -282,9 +282,12 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
       expect(Math.round(blockBox.width)).toBe(Math.round(gruppBox.width));
 
       /* LUFTEN, MÄTT MOT DET SOM FAKTISKT LIGGER OVANFÖR.
-         16 px ovanför = gruppernas inbördes rytm (listsektionens `gap-4`);
-         12 px under = samma avstånd avstämningen har till sin egen summarad
-         (`mt-1` + `pt-2`).
+         16 px ovanför = gruppernas inbördes rytm (listsektionens `gap-4`).
+         24 px under = rot-sektionens `gap-6`, alltså avståndet mellan sidans
+         toppnivå-avdelningar. VARV 3, Marcus: *"Skapa påtagligt mer luft
+         mellan sätt alla belopp-rutan och summeringsraderna nedanför."*
+         Varv 2:s 12 px var avstämningens interna rytm och band blocket till
+         summeringen; 24 px säger i stället att de är två skilda saker.
 
          FÖREGÅENDE ELEMENT LÄSES UR DOM:EN, INTE ANTAS VARA LISTAN. Första
          versionen mätte mot listsektionen och fick 497 px — i DENNA fixtur
@@ -303,7 +306,7 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
           under: Math.round(dl.getBoundingClientRect().top - mitt.bottom),
         };
       });
-      expect(luft).toEqual({ over: 16, under: 12 });
+      expect(luft).toEqual({ over: 16, under: 24 });
 
       // Ingen horisontell rullning av blocket, särskilt inte vid 820.
       const overflod = await page.evaluate(
@@ -322,7 +325,7 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     await expect(block.getByText('Sätt alla belopp', { exact: true })).toBeVisible();
     await expect(
       block.getByText(
-        'Skriver över förslagen på alla markerade rader. Rader som behöver din hand rörs inte.',
+        'Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand rörs inte.',
       ),
     ).toBeVisible();
     // Båda knapparna bor i blocket, ingen annanstans på sidan.
@@ -406,6 +409,65 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
   });
 
+  /**
+   * [VARV 3] ÅTERSTÄLL FÖRSLAGEN — Marcus: *"Sedan borde väl det finnas en
+   * 'Ångra knapp' också här eller? Om hon vill ändra tillbaka till föreslaget
+   * belopp?"*
+   *
+   * Tre påståenden, i den ordning en användare möter dem: knappen är TYST när
+   * ingenting avviker, den tar tillbaka appens förval när något gör det, och
+   * den rör INTE de rader sätt-alla-knapparna inte heller rör.
+   */
+  test('Återställ förslagen är avstängd tills något avviker, och tar sedan tillbaka förvalen', async ({
+    page,
+  }) => {
+    const steget = await oppna(page, DESKTOP);
+    const aterstall = steget.getByRole('button', { name: 'Återställ förslagen' });
+
+    // TYST FRÅN BÖRJAN: varje rad bär redan sitt förslag.
+    await expect(aterstall).toBeDisabled();
+
+    await steget.getByRole('button', { name: ALLTKNAPP }).click();
+    // Anna och det långa namnet avviker nu (1 000 → 2 500). Bos hela rest ÄR
+    // 1 500, alltså samma tal som hans förslag — han räknas inte.
+    await expect(aterstall).toBeEnabled();
+
+    await aterstall.click();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
+    expect(await beloppFor(steget, LANGT_NAMN)).toBe('1000kr');
+    expect(await beloppFor(steget, 'Bo Restbelopp')).toBe('1500kr');
+    await expect(steget.getByText('2 belopp återställda till förslaget.')).toBeAttached();
+    // Och tyst igen, eftersom ingenting längre avviker.
+    await expect(aterstall).toBeDisabled();
+
+    // HAND-HÖGEN STÅR STILL genom hela varvet.
+    await expect(steget.getByRole('heading', { name: 'Behöver din hand 1' })).toBeVisible();
+    await expect(steget.getByText('3 inbetalningar', { exact: true })).toBeVisible();
+  });
+
+  test('Återställ förslagen tar tillbaka även ett HANDSKRIVET belopp, och beskedet böjs rätt', async ({
+    page,
+  }) => {
+    const steget = await oppna(page, DESKTOP);
+    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
+
+    await annasKort.getByRole('button', { name: 'Ändra belopp för Anna Avgift' }).click();
+    const beloppfalt = annasKort.getByLabel('Belopp i kronor');
+    await beloppfalt.fill('750');
+    await beloppfalt.blur();
+    await annasKort.getByRole('button', { name: 'Klar' }).click();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
+
+    const aterstall = steget.getByRole('button', { name: 'Återställ förslagen' });
+    await expect(aterstall).toBeEnabled();
+    await aterstall.click();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
+    // SINGULAR när det är EN rad. Uppdragets mall sa "N belopp återställda";
+    // sidan böjer i stället som sitt syskonbesked (`plural`) gör, eftersom
+    // "1 belopp återställda" inte är svenska.
+    await expect(steget.getByText('1 belopp återställt till förslaget.')).toBeAttached();
+  });
+
   test('knapparna nås med tangentbord, trycket annonseras, och axe är rent', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
 
@@ -424,6 +486,10 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
 
     await steget.getByRole('button', { name: ALLTKNAPP }).click();
     await expect(steget.getByText('3 belopp satta till hela beloppet.')).toBeAttached();
+
+    // Svepet efter trycket har dessutom "Återställ förslagen" i AKTIVT läge —
+    // avstängd i utgångsläget, alltså en annan nod för axe att pröva.
+    await expect(steget.getByRole('button', { name: 'Återställ förslagen' })).toBeEnabled();
 
     const efterTryck = await new AxeBuilder({ page }).include('main').analyze();
     expect(efterTryck.violations).toEqual([]);

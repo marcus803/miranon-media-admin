@@ -12,6 +12,7 @@ import { arDubblettfel } from './bankimport-rader';
 import { bokforImporterade } from './bankmappning-minne';
 import {
   arRegistrerbar,
+  aterstallForslag,
   type BekraftelseRad,
   type Beloppsgenvag,
   baraOmkorning,
@@ -275,6 +276,11 @@ export function useBekraftelsesteg(
    */
   const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
     setRader((tidigare) => sattAllaBelopp(tidigare, val));
+  }, []);
+
+  /** [TASK-402.8 varv 3] Vägen tillbaka — regeln bor i härledningen. */
+  const aterstallForslagNu = useCallback(() => {
+    setRader((tidigare) => aterstallForslag(tidigare));
   }, []);
 
   const sattBetalsattAlla = useCallback((betalsatt: Betalsatt) => {
@@ -668,6 +674,7 @@ export function useBekraftelsesteg(
     summering,
     sattGenvag,
     sattAllaBelopp: sattAllaBeloppNu,
+    aterstallForslag: aterstallForslagNu,
     sattBetalsattAlla,
     sattDatumAlla,
     sattRadBelopp,
