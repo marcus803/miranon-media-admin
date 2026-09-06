@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 09:11'
-updated_date: '2026-09-06 10:23'
+updated_date: '2026-09-06 11:02'
 labels:
   - ready-for-agent
 dependencies: []
@@ -24,7 +24,7 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 - [x] #1 Betalningsinkorgens filterrad renderas utfälld vid första besöket utan att användaren tryckt på tratt-knappen; Dölj filter fungerar som förut
 - [x] #2 FilterRad-primitiven bär en prop för start-läget; övriga konsumenter av FilterRad är oförändrade (grep på FilterRad-anrop bokförd i kortet)
 - [x] #3 Befintliga acceptans-/e2e-tester för inkorgen gröna; ett test täcker start-läget
-- [x] #4 Avståndet mellan Markera-knappens rad och filterkomponenten är 24 px (var 16 px, sektionens gap-4) — Marcus tillägg 2026-09-06: "lägg mer luft mellan markera-knappen och filtreringskomponenten också"
+- [x] #4 Avståndet mellan Markera-knappens rad och filterkomponenten är 40 px (var 16 px, sektionens gap-4; ett första varv gav 24 px men räckte inte i granskning) — Marcus två varv 2026-09-06: "lägg mer luft mellan markera-knappen och filtreringskomponenten också" följt av "Jag vill ha mer luft ÖVER markera knappen, luften under är bra som det är nu." Luften UNDER (mot listan) är oförändrad 16 px.
 <!-- AC:END -->
 
 ## Definition of Done
