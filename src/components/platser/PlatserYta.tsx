@@ -80,6 +80,13 @@ function faltForBlock(id: BlockId): PlatsFalt | undefined {
   return PLATS_BLOCK.find((b) => b.def.id === id)?.falt;
 }
 
+/** Skeletonets radbredder (TASK-416.7) — antalet platser är okänt före svaret
+ *  landar, så en FAST, liten rad-mängd väljs (samma val som `AktivitetsHistorik.
+ *  tsx`s fyra rader / Hem-kortens två) i stället för att gissa den verkliga
+ *  längden. Bredderna varieras deterministiskt, aldrig slumpat (PersonsList.tsx-
+ *  mönstret) så laddläget läses som en namnlista, inte en streckkod. */
+const PLATSER_SKELETON_BREDD = ['w-2/5', 'w-1/2', 'w-1/3'];
+
 export function PlatserYta() {
   const [valdId, setValdId] = useQueryState('id');
   const [visaNyPlats, setVisaNyPlats] = useState(false);
@@ -238,6 +245,12 @@ export function PlatserYta() {
             )}
 
             {isPending ? (
+              // TASK-416.7 (ADR-113 laddtrappan, greppet ur AktivitetsHistorik.tsx:436–447
+              // / PersonsList.tsx:852–878): skeletonet ritas INUTI samma kortcontainer
+              // (`divide-y rounded-xl border-transparent bg-surface px-3`) med samma
+              // radhöjd (`py-3`) som `platser-lista` nedan — tidigare stod två fristående
+              // textrader (~24 px) utanför containern medan laddat läge är ~48 px-rader i
+              // ett kort, så innehållet landade förskjutet när datan kom.
               <div
                 role="status"
                 aria-live="polite"
@@ -245,8 +258,23 @@ export function PlatserYta() {
                 className="flex flex-col gap-2"
               >
                 <span className="sr-only">Laddar platser…</span>
-                <Skeleton variant="text" className="w-2/5" />
-                <Skeleton variant="text" className="w-1/3" />
+                <div className="divide-y divide-border rounded-xl border border-transparent bg-surface px-3 contrast-more:border-border-strong">
+                  {PLATSER_SKELETON_BREDD.map((bredd, i) => (
+                    <div
+                      // biome-ignore lint/suspicious/noArrayIndexKey: fast skeleton-rad, ingen identitet
+                      key={i}
+                      className="flex items-center gap-3 py-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <Skeleton variant="text" className={`${bredd} text-body`} />
+                      </div>
+                      {/* Chevronens plats reserveras (16 px, ChevronRight size={16}
+                          nedan) utan att rita en affordans till en rad som ännu inte
+                          finns (PersonsList.tsx-mönstret). */}
+                      <span aria-hidden="true" className="size-4 shrink-0" />
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : isError ? (
               <MessageBox intent="error" title="Kunde inte hämta platser">

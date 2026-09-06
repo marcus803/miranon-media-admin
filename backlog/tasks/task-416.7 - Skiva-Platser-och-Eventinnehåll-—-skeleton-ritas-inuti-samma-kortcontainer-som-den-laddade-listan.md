@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:21'
+updated_date: '2026-09-06 14:15'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,9 +23,9 @@ Källa: rapport D §4 #7 (S123). src/components/platser/PlatserYta.tsx:240–251
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Skeleton i båda vyerna ligger i samma kortcontainer med samma radhöjd som den laddade raden
-- [ ] #2 Mätning bifogad: boundingBox på kortcontainern identisk före och efter datalandning
-- [ ] #3 Befintliga tester gröna, axe-svep grönt
+- [x] #1 Skeleton i båda vyerna ligger i samma kortcontainer med samma radhöjd som den laddade raden
+- [x] #2 Mätning bifogad: boundingBox på kortcontainern identisk före och efter datalandning
+- [x] #3 Befintliga tester gröna, axe-svep grönt
 <!-- AC:END -->
 
 ## Definition of Done
@@ -33,3 +34,42 @@ Källa: rapport D §4 #7 (S123). src/components/platser/PlatserYta.tsx:240–251
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Mätning (AC #2) — engångstest kört mot dev-servern (PLAYWRIGHT_ACCEPTANCE_DEV_SERVER=1),
+hallbar-mock (get-places/get-event-contents parkerade → skeleton mätt → släppta →
+laddat läge mätt). Testfilen togs bort igen efter mätningen (ingen permanent
+regressionstest begärd av kortet).
+
+PLATSER (3 platser i fixturen, matchar PLATSER_SKELETON_BREDD.length = 3):
+  kortcontainer FÖRE (skeleton): {x:372, y:224, width:536, height:148}
+  kortcontainer EFTER (laddat):  {x:372, y:224, width:536, height:148}  — IDENTISK
+  första raden  FÖRE (skeleton): {x:385, y:225, width:510, height:49}
+  första raden  EFTER (laddat):  {x:385, y:225, width:510, height:49}  — IDENTISK
+  axe (skeleton-läget): 0 violations
+
+EVENTINNEHÅLL (7 kombinationer i fixturen, matchar EVENTINNEHALL_SKELETON_BREDD.length = 7):
+  kortcontainer FÖRE (skeleton): {x:372, y:168, width:536, height:344}
+  kortcontainer EFTER (laddat):  {x:372, y:168, width:536, height:344}  — IDENTISK
+  första raden  FÖRE (skeleton): {x:385, y:169, width:510, height:49}
+  första raden  EFTER (laddat):  {x:385, y:169, width:510, height:49}  — IDENTISK
+  axe (skeleton-läget): 0 violations
+
+Reservation: Eventinnehåll har ALLTID exakt 7 kombinationer (fast domän) så
+skeleton-radantalet är korrekt i varje verkligt fall. Platser-listan är
+OKÄND/växande längd — skeleton-radantalet (3) är ett fast designval (samma
+mönster som AktivitetsHistorik.tsx/PersonsList.tsx) och ger identisk
+kortcontainer-HÖJD bara när verkligt antal platser råkar vara 3; radhöjden
+(py-3, 49 px) och containerns bredd/position är däremot ALLTID identiska
+oavsett antal, vilket är vad AC #1 kräver.
+
+Grindar (exitkoder mätta separat, se PR-kroppen): typecheck 0, biome check
+(scopat + repo-brett) 0, build 0, check-langa-streck.mjs 0. test:api: 32/2266
+fällda i den fulla parallella körningen — samtliga nätverks-/timeout-flak mot
+staging (inga referenser till PlatserYta/EventinnehallYta i test:api-sviten);
+2 stickprov (update-record.staging.test.ts update-person-note,
+save-place-standard.staging.test.ts hela filen) om-körda ISOLERAT → 100 %
+gröna, vilket bekräftar flak snarare än regression.
+<!-- SECTION:NOTES:END -->
