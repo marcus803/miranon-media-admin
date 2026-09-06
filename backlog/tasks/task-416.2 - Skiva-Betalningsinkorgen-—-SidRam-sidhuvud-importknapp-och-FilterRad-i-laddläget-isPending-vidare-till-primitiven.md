@@ -3,10 +3,10 @@ id: TASK-416.2
 title: >-
   Skiva: Betalningsinkorgen — SidRam, sidhuvud, importknapp och FilterRad i
   laddläget (isPending vidare till primitiven)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:20'
-updated_date: '2026-09-06 17:05'
+updated_date: '2026-09-06 18:09'
 labels:
   - ready-for-agent
 dependencies: []
