@@ -14,8 +14,12 @@
 >   din hand rörs inte.'"* · *"Sedan borde väl det finnas en 'Ångra knapp'
 >   också här eller? Om hon vill ändra tillbaka till föreslaget belopp?"*) —
 >   luften under blocket gick 12 → 24 px, hjälptexten fick Marcus ordalydelse,
->   och en tredje knapp **"Återställ förslagen"** (ghost, sist, avstängd när
->   ingen markerad rad avviker från sitt förslag) tillkom.
+>   och en tredje knapp **"Återställ förslagen"** (ghost, sist) tillkom.
+> * **Varv 4** (Marcus: *"när man trycker på 'Anmälningsavgift' eller 'Hela
+>   beloppet' behöver vi inte visa att knappen är aktiv? Hur gör vi detta i
+>   appen idag?"*) — de två knapparna blev husets `ToggleButtonGroup`
+>   (pill-toggel, `role="radiogroup"`), där valet står **intryckt** tills
+>   "Återställ förslagen" eller en handredigering släcker det.
 >
 > Bokföringen tas igen EN gång när formen är klar — Marcus, samma dag:
 > *"Angående min iteration på 'Sätt alla belopp' så måste vi ju inte ta nya

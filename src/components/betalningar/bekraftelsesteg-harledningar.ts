@@ -275,6 +275,31 @@ export function berorsAvSattAlla(rad: BekraftelseRad, val: SattAllaVal): boolean
   return genvagsbelopp(rad, val) !== null;
 }
 
+/**
+ * [TASK-402.8 varv 4] VILKET SÄTT-ALLA-VAL SOM ÄR AKTIVT, om något.
+ *
+ * Marcus: *"när man trycker på 'Anmälningsavgift' eller 'Hela beloppet'
+ * behöver vi inte visa att knappen är aktiv?"* Toggeln behöver alltså ett
+ * TILLSTÅND, och tillståndet finns redan i modellen som `aktivGenvag` —
+ * genvägstypen är bara bredare än toggelns två poster (den bär `forslag` och
+ * `annat` åt varianterna A/B).
+ *
+ * FUNKTIONEN ÄR EN SMALNING, INTE EN NY SANNING. Den säger "visa denna pill
+ * som intryckt" och ingenting annat; `forslag` (utgångsläget och läget efter
+ * en återställning) samt `null` (någon rad är handredigerad) betyder båda att
+ * INGEN pill är intryckt.
+ *
+ * VARFÖR TILLSTÅNDET INTE HÄRLEDS UR RADERNA I STÄLLET — prövat och
+ * förkastat: "varje rad bär sin avgifts-kandidat" är SANT redan i
+ * utgångsläget, eftersom `forslagsbelopp` väljer avgiften när den finns. En
+ * rad-härledd toggel hade därför lyst upp "Anmälningsavgift" innan Lotta rört
+ * något, och lyst kvar efter "Återställ förslagen" — raka motsatsen till vad
+ * knappen ska betyda.
+ */
+export function aktivtSattAllaVal(genvag: Beloppsgenvag | null): SattAllaVal | null {
+  return genvag === 'avgift' || genvag === 'allt' ? genvag : null;
+}
+
 /** Hur många rader ett sätt-alla-tryck faktiskt rör — knappens besked. */
 export function antalSattAlla(rader: readonly BekraftelseRad[], val: SattAllaVal): number {
   return rader.filter((rad) => berorsAvSattAlla(rad, val)).length;

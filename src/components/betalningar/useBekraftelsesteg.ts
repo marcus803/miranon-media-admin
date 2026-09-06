@@ -275,11 +275,16 @@ export function useBekraftelsesteg(
    * `tests/api/bekraftelsesteg-harledningar.test.ts`.
    */
   const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
+    // [varv 4] VALET BLIR TILLSTÅND, så toggeln kan visa det intryckt.
+    setAktivGenvag(val);
     setRader((tidigare) => sattAllaBelopp(tidigare, val));
   }, []);
 
   /** [TASK-402.8 varv 3] Vägen tillbaka — regeln bor i härledningen. */
   const aterstallForslagNu = useCallback(() => {
+    // `'forslag'` OCH INTE `null`: raderna bär nu exakt appens förval, vilket
+    // är en sannare beskrivning än "inget val". Båda släcker toggeln.
+    setAktivGenvag('forslag');
     setRader((tidigare) => aterstallForslag(tidigare));
   }, []);
 
@@ -300,8 +305,16 @@ export function useBekraftelsesteg(
     );
   }, []);
 
+  /* [varv 4] EN HANDREDIGERING SLÄCKER TOGGELN. Efter den bär raderna inte
+     längre ett uniformt val, och en intryckt pill hade påstått något som inte
+     är sant. Samma sak när en rad MARKERAS: den kommer in i mängden med sitt
+     eget belopp, inte med valets. En AVmarkering rör däremot ingenting — de
+     kvarvarande raderna bär fortfarande valet. */
   const sattRadBelopp = useCallback(
-    (nyckel: string, belopp: string) => andraRad(nyckel, { belopp, ejGenomforbar: null }),
+    (nyckel: string, belopp: string) => {
+      setAktivGenvag(null);
+      andraRad(nyckel, { belopp, ejGenomforbar: null });
+    },
     [andraRad],
   );
   const sattRadBetalsatt = useCallback(
@@ -317,7 +330,10 @@ export function useBekraftelsesteg(
     [andraRad],
   );
   const sattRadMarkerad = useCallback(
-    (nyckel: string, markerad: boolean) => andraRad(nyckel, { markerad }),
+    (nyckel: string, markerad: boolean) => {
+      if (markerad) setAktivGenvag(null);
+      andraRad(nyckel, { markerad });
+    },
     [andraRad],
   );
   const sattRadNotering = useCallback(
@@ -325,7 +341,10 @@ export function useBekraftelsesteg(
     [andraRad],
   );
   const sattRadVarden = useCallback(
-    (nyckel: string, varden: Radvarden) => andraRad(nyckel, { ...varden, ejGenomforbar: null }),
+    (nyckel: string, varden: Radvarden) => {
+      setAktivGenvag(null);
+      andraRad(nyckel, { ...varden, ejGenomforbar: null });
+    },
     [andraRad],
   );
 

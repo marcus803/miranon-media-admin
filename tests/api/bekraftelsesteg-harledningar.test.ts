@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import {
+  aktivtSattAllaVal,
   antalAterstallning,
   antalRegistreradeKvitton,
   antalSattAlla,
@@ -12,6 +13,7 @@ import {
   berorsAvSattAlla,
   blockrader,
   byggRader,
+  forslagsbelopp,
   grupperaRader,
   omkorningsUrval,
   radbelopp,
@@ -598,4 +600,35 @@ test('en FALLERAD rad återställs — den ska kunna köras om med förslaget', 
   rader[3] = { ...rader[3], utfall: { klass: 'fel', text: 'nekad' } };
   expect(berorsAvAterstallning(rader[3])).toBe(true);
   expect(radbelopp(aterstallForslag(rader)[3])).toBe(1000);
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   § TOGGELNS TILLSTÅND (TASK-402.8 varv 4)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+test('aktivtSattAllaVal smalnar genvägen till toggelns TVÅ poster', () => {
+  expect(aktivtSattAllaVal('avgift')).toBe('avgift');
+  expect(aktivtSattAllaVal('allt')).toBe('allt');
+  // Utgångsläget och läget efter en återställning: ingen pill intryckt.
+  expect(aktivtSattAllaVal('forslag')).toBeNull();
+  // Varianternas fjärde genväg hör inte till denna toggel.
+  expect(aktivtSattAllaVal('annat')).toBeNull();
+  // Handredigerad rad: modellen nollar valet.
+  expect(aktivtSattAllaVal(null)).toBeNull();
+});
+
+test('NEGATIV KONTROLL: toggeln kan INTE härledas ur radernas belopp', () => {
+  // Skälet till att tillståndet är lagrat och inte härlett, mätt i stället
+  // för resonerat: i UTGÅNGSLÄGET bär varje rad med en avgifts-kandidat redan
+  // exakt avgiften, eftersom `forslagsbelopp` väljer den när den finns. En
+  // rad-härledd toggel hade därför lyst upp "Anmälningsavgift" innan Lotta
+  // rört någonting — och lyst kvar efter "Återställ förslagen".
+  const rader = morgonen();
+  const nya = rader.filter((r) => r.beloppsknappar.some((k) => k.nyckel === 'avgift'));
+  expect(nya.length).toBeGreaterThan(0);
+  for (const rad of nya) {
+    const avgift = rad.beloppsknappar.find((k) => k.nyckel === 'avgift');
+    expect(forslagsbelopp(rad.beloppsknappar)).toBe(avgift?.belopp);
+    expect(radbelopp(rad)).toBe(avgift?.belopp);
+  }
 });

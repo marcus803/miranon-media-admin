@@ -161,11 +161,15 @@ export function useBekraftelsesteg(
    * göra exakt samma sak här som i den skarpa vägen.
    */
   const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
+    // [varv 4] SAMMA tillståndsregel som den skarpa hooken: valet blir
+    // `aktivGenvag`, och toggeln i formen läser det via `aktivtSattAllaVal`.
+    setAktivGenvag(val);
     setRader((tidigare) => sattAllaBelopp(tidigare, val));
   }, []);
 
   /** [TASK-402.8 varv 3] SAMMA rena regel som den skarpa hooken kallar. */
   const aterstallForslagNu = useCallback(() => {
+    setAktivGenvag('forslag');
     setRader((tidigare) => aterstallForslag(tidigare));
   }, []);
 
@@ -185,8 +189,13 @@ export function useBekraftelsesteg(
     );
   }, []);
 
+  /* [varv 4] En handredigering (och en NY markering) släcker toggeln — samma
+     regel och samma skäl som i den skarpa hooken. */
   const sattRadBelopp = useCallback(
-    (nyckel: string, belopp: string) => andraRad(nyckel, { belopp, ejGenomforbar: null }),
+    (nyckel: string, belopp: string) => {
+      setAktivGenvag(null);
+      andraRad(nyckel, { belopp, ejGenomforbar: null });
+    },
     [andraRad],
   );
   const sattRadBetalsatt = useCallback(
@@ -202,7 +211,10 @@ export function useBekraftelsesteg(
     [andraRad],
   );
   const sattRadMarkerad = useCallback(
-    (nyckel: string, markerad: boolean) => andraRad(nyckel, { markerad }),
+    (nyckel: string, markerad: boolean) => {
+      if (markerad) setAktivGenvag(null);
+      andraRad(nyckel, { markerad });
+    },
     [andraRad],
   );
   const sattRadNotering = useCallback(
@@ -210,7 +222,10 @@ export function useBekraftelsesteg(
     [andraRad],
   );
   const sattRadVarden = useCallback(
-    (nyckel: string, varden: Radvarden) => andraRad(nyckel, { ...varden, ejGenomforbar: null }),
+    (nyckel: string, varden: Radvarden) => {
+      setAktivGenvag(null);
+      andraRad(nyckel, { ...varden, ejGenomforbar: null });
+    },
     [andraRad],
   );
 

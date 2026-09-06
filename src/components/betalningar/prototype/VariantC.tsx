@@ -6,10 +6,11 @@ import {
   Checkbox,
   SearchField,
 } from 'react-aria-components';
-import { Button } from '@/components/primitives';
+import { Button, ToggleButton, ToggleButtonGroup } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
+  aktivtSattAllaVal,
   antalAterstallning,
   antalSattAlla,
   baraOmkorning as arBaraOmkorning,
@@ -118,6 +119,23 @@ const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
  * Samma skäl `BeloppsgenvagsKnappar` (`radfalt.tsx`) valde vanliga knappar
  * framför en pill-toggel i varianterna A/B.
  */
+/**
+ * SENTINELNYCKELN FÖR "INGET VAL ÄNNU".
+ *
+ * `ToggleButtonGroup` är en ALLTID-ETT-VAL-primitiv — `disallowEmptySelection`
+ * är hårdkodad i den, och dess docblock kallar tömbart val "en annan
+ * mönsterklass". Det är rätt för periodtoggeln och vy-växlaren, där ett läge
+ * alltid gäller. Vår yta har däremot ett äkta tomt läge: innan Lotta tryckt,
+ * efter "Återställ förslagen", och när hon handredigerat en rad.
+ *
+ * En kontrollerad nyckel som INGEN pill bär uttrycker exakt det, utan att
+ * röra en förseglad primitiv: ingen pill får `data-selected`, och eftersom
+ * `disallowEmptySelection` står kvar kan ett tryck på den redan valda pillen
+ * ändå inte släcka den. Precis den delningen uppdraget bad om — avmarkering
+ * bara via Återställ eller redigering.
+ */
+const INGET_VAL = 'inget' as const;
+
 const SATT_ALLA: { val: SattAllaVal; etikett: string; besked: string }[] = [
   { val: 'avgift', etikett: 'Anmälningsavgift', besked: 'anmälningsavgiften' },
   { val: 'allt', etikett: 'Hela beloppet', besked: 'hela beloppet' },
@@ -281,19 +299,29 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
     () => new Map(SATT_ALLA.map((v) => [v.val, antalSattAlla(kvar, v.val)])),
     [kvar],
   );
-  const sattAlla = (val: SattAllaVal, besked: string) => {
+  const sattAlla = (val: SattAllaVal) => {
     const antal = sattAllaTraffar.get(val) ?? 0;
+    const besked = SATT_ALLA.find((v) => v.val === val)?.besked ?? '';
     modell.sattAllaBelopp(val);
     setSattAllaBesked(`${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`);
   };
+  /* [varv 4] Vilken pill som ska stå intryckt. `aktivGenvag` är modellens
+     tillstånd; `aktivtSattAllaVal` smalnar det till toggelns två poster. */
+  const aktivtVal = aktivtSattAllaVal(modell.aktivGenvag);
   /* Hur många rader som AVVIKER från sitt förslag just nu. Noll ⇒ knappen är
      avstängd: en återställning som inte återställer något ska vara tyst. */
   const aterstallningsTraffar = useMemo(() => antalAterstallning(kvar), [kvar]);
   const aterstallForslagen = () => {
     const antal = aterstallningsTraffar;
     modell.aterstallForslag();
+    /* NOLL RÖRDA RADER ÄR ETT EGET BESKED, inte "0 belopp återställda".
+       Läget uppstår när en pill är intryckt men varje rad redan bär sitt
+       förslag — då är knappens enda jobb att släcka valet, och beskedet ska
+       säga det som faktiskt hände. */
     setSattAllaBesked(
-      `${plural(antal, 'belopp återställt', 'belopp återställda')} till förslaget.`,
+      antal === 0
+        ? 'Alla belopp stod redan på förslaget.'
+        : `${plural(antal, 'belopp återställt', 'belopp återställda')} till förslaget.`,
     );
   };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
@@ -546,19 +574,40 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
             {/* `flex-wrap`: på iPad 820 ryms båda knapparna på en rad, men
                 formen får inte bero på det. Vänsterställda i båda fallen. */}
             <div className="flex flex-wrap items-center gap-2">
-              {SATT_ALLA.map((v) => (
-                <Button
-                  key={v.val}
-                  size="sm"
-                  intent="secondary"
-                  emphasis="outline"
-                  aria-label={`Sätt alla belopp till ${v.besked}`}
-                  isDisabled={registrerar || (sattAllaTraffar.get(v.val) ?? 0) === 0}
-                  onPress={() => sattAlla(v.val, v.besked)}
-                >
-                  {v.etikett}
-                </Button>
-              ))}
+              {/* HUSETS PILL-TOGGEL (varv 4, Marcus: *"när man trycker på
+                  'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte
+                  visa att knappen är aktiv? Hur gör vi detta i appen
+                  idag?"*). Svaret på hans andra fråga är `ToggleButtonGroup`
+                  — periodtoggeln, vy-växlaren i `EventsList`/`PersonsList`,
+                  Förberedelseskärmen. Inline-formen (ingen `spread`), `sm`
+                  som knapparna bar förut.
+
+                  DET TILLGÄNGLIGA NAMNET FLYTTAR från varje knapp till
+                  GRUPPEN. Primitiven ger `role="radiogroup"` + `role="radio"`
+                  med `aria-checked`, så skärmläsaren säger "Sätt alla belopp,
+                  Anmälningsavgift, 1 av 2" — sammanhanget kommer ur gruppen i
+                  stället för ur en upprepad `aria-label` per knapp. Pilarna
+                  flyttar fokus inom gruppen, Tab lämnar den. */}
+              <ToggleButtonGroup<SattAllaVal | typeof INGET_VAL>
+                label="Sätt alla belopp"
+                selectedKey={aktivtVal ?? INGET_VAL}
+                onSelectionChange={(key) => {
+                  // `INGET_VAL` kan aldrig komma tillbaka — ingen pill bär
+                  // nyckeln. Grenen finns för typen, inte för ett känt fall.
+                  if (key !== INGET_VAL) sattAlla(key);
+                }}
+              >
+                {SATT_ALLA.map((v) => (
+                  <ToggleButton
+                    key={v.val}
+                    id={v.val}
+                    size="sm"
+                    isDisabled={registrerar || (sattAllaTraffar.get(v.val) ?? 0) === 0}
+                  >
+                    {v.etikett}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
               {/* VÄGEN TILLBAKA (varv 3, Marcus: *"Sedan borde väl det finnas
                   en 'Ångra knapp' också här eller? Om hon vill ändra tillbaka
                   till föreslaget belopp?"*).
@@ -579,7 +628,15 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               <Button
                 size="sm"
                 intent="ghost"
-                isDisabled={registrerar || aterstallningsTraffar === 0}
+                /* AVSTÄNGD BARA NÄR DEN INTE HAR NÅGOT ATT GÖRA — och den har
+                   TVÅ jobb, inte ett. MÄTT UNDER VARV 4: efter ett tryck på
+                   "Anmälningsavgift" bär varje rad sitt förslag igen (förslaget
+                   ÄR avgiften när den finns), så noll rader avvek — men pillen
+                   stod intryckt. Med det gamla villkoret blev knappen avstängd
+                   och valet gick inte att släcka: en återvändsgränd som bara
+                   en omladdning tog sig ur. Knappen lever därför så länge
+                   ANTINGEN en rad avviker ELLER en pill är intryckt. */
+                isDisabled={registrerar || (aterstallningsTraffar === 0 && aktivtVal === null)}
                 onPress={aterstallForslagen}
               >
                 Återställ förslagen
