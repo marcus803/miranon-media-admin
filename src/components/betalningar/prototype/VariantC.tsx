@@ -158,32 +158,41 @@ const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
    det inte. Det är också husets regel (CLAUDE.md § Design-system: inga
    hårdkodade färger, allt via custom properties).
 
-   DET VALDA SEGMENTETS KONTUR ÄR `--mm-text-muted`, och valet av just den
-   tokenen är RÄKNAT, inte smakat. WCAG 1.4.11 kräver 3:1 för det som skiljer
-   ett tillstånd från ett annat, mot ALLA angränsande färger — här både
-   panelen (`--mm-bg-muted`) och segmentets egen fyllning
-   (`--mm-bg-emphasized`). Uppmätt på husets faktiska tokens:
+   DET VALDA SEGMENTET ÄR GULT, och både konturen och fyllningen är räknade
+   snarare än smakade. Marcus, varv 8: *"Den nya färgen blev nog sämre än
+   innan. Kan vi använda en annan färg till konturen helt? Kanske gul/guld?"*
+   Guld är husets primärfärg och används redan som PAR med sin egen ljusa fond
+   i "Registrerat nu"-blocket, så en gul kontur på en gul platta läses som ett
+   sammanhang och inte som en avvikelse.
 
-     `--mm-border-strong`   1,60:1 / 1,50:1   UNDER golvet
-     `--mm-text-muted`      4,88:1 / 4,57:1   ← vald: ljusast som klarar båda
-     `--mm-text-secondary`  7,25:1 / 6,78:1
-     `--mm-text`           14,22:1 / 13,31:1
+   WCAG 1.4.11 kräver 3:1 för tillståndsmarkören mot ALLA angränsande färger.
+   Hela guld-skalan mätt mot panelen (`--mm-bg-muted`) respektive de två
+   tänkbara fyllningarna:
 
-   VARFÖR INTE `--mm-text` (varv 5–6:s val): Marcus, varv 7 — *"jag tycker det
-   är lite för mörk grå färg på konturen i aktivt läge kan vi dämpa den lite,
-   nu har den ju samma färg som registrera knappen."* Och det är rätt
-   iakttagelse: `--mm-text` ÄR primärknappens svärta, och det valda segmentet
-   är fortfarande en SEKUNDÄR knapp. Konturen ska säga "vald", inte "primär".
+                             mot panel   mot bg-emphasized   mot gold-100
+     `--mm-primary-pale`  (300)  1,31:1        1,23:1            1,29:1
+     `--mm-primary-muted` (400)  2,13:1        2,00:1            2,11:1
+     `--mm-primary`       (500)  2,36:1        2,21:1            2,33:1
+     `--mm-primary-hover` (600)  3,14:1        2,94:1            3,10:1  ← vald
+     `--p-gold-700`              4,49:1        4,21:1            4,44:1
 
-   VARFÖR INGEN NY TOKEN: `--mm-text-muted` är ljusast av de semantiska
-   stegen som klarar golvet, så grå-skalans primitiver behövde aldrig
-   plockas in. `--p-neutral-400` är visserligen ljusare men landar på
-   3,20:1 / 3,00:1 — exakt på gränsen, utan marginal, och är dessutom en
-   primitiv utan semantisk mening här.
+   MED DEN GAMLA FYLLNINGEN (`bg-emphasized`) klarade BARA `--p-gold-700`
+   golvet, och det steget är mörkt nog att läsa som brunt — alltså inte det
+   Marcus bad om. Fyllningen byttes därför till `--mm-primary-tint`
+   (`--p-gold-100`), exakt den fond "Registrerat nu"-blocket använder, och då
+   klarar `--mm-primary-hover` båda kanterna med 3,14:1 / 3,10:1.
 
-   En mörk FYLLNING hade också nått golvet men är reserverad för Registrera-
-   knapparna ("en primär, syskonet outline"), så konturen bär tillståndet.
-   Texten klarar sig med marginal i alla lägen (12,52–13,38:1).
+   NAMNET `--mm-primary-hover` FÖR EN STATISK KONTUR ÄR EN SKAVANK, öppet
+   bokförd: det är det enda SEMANTISKA namnet på det ljusaste guldsteg som
+   klarar golvet. Alternativen var en primitiv utan semantisk mening
+   (`--p-gold-600`) eller en ny token, och en ny token är utanför detta varv.
+
+   TVÅ TAL TILL, för fullständighetens skull: texten (`--mm-text`) mot den
+   gula fyllningen ger 14,04:1, långt över 4,5-golvet. Fyllningen SJÄLV mot
+   panelen ger bara 1,01:1 — den bär alltså inget tillstånd på egen hand, och
+   det är konturen som gör hela jobbet. Husets egen guld-kontur i
+   "Registrerat nu" (`--mm-primary-muted`, 2,13:1) skulle inte ha klarat
+   golvet; den skillnaden är avsiktlig och inte en inkonsekvens att jämna ut.
 
    INGENTING I BOXMODELLEN ÄNDRAS MELLAN VALT OCH OVALT (varv 6). Marcus:
    *"när man klickar runt på knapparna så ser de ut att röra sig, eller det
@@ -218,9 +227,9 @@ const SEGMENT_KLASS = [
   'contrast-more:border-border-strong',
   // Valt: intryckt sekundär — tonad platta, mörk kant, dubblerad via en INSET
   // ring. Ingen viktändring, ingen kantbredd-ändring, ingen padding-ändring.
-  'data-[selected]:border-(--mm-text-muted) data-[selected]:bg-bg-emphasized',
+  'data-[selected]:border-(--mm-primary-hover) data-[selected]:bg-(--mm-primary-tint)',
   'data-[selected]:font-medium data-[selected]:text-text',
-  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text-muted)]',
+  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-primary-hover)]',
 ].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
