@@ -3,10 +3,10 @@ id: TASK-416.4
 title: >-
   Skiva: Anmälningar (mer/anmalningar) — header, antalsrad och FilterRad i
   laddläget, räknarens vänsterkant i linje med listkortet
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:20'
-updated_date: '2026-09-06 14:38'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []
@@ -114,4 +114,6 @@ mer-anmalningar acceptance 39/39 · anmalningssidan-promoverings-grind
 (visual-desktop, inkl. axe på fel(4xx)-läget) 10/10.
 
 Ny head-SHA: se PR #2392 — pushad, ej armerad, ej Done.
+
+AC #1 PRECISERAT (S123 stängningsbatch 1, 2026-09-06, orkestreraren på Marcus mandat): antalsraden visar Skeleton ENBART i isPending; i isError renderas header och FilterRad oförändrat men antalsraden är null (ingen shimmer i fel, felbeskedet bär tillståndet). Det är mandat-beslutet ur review-runda 1 på PR #2392 och principen tvärs 416.4/416.8/416.1: skeleton/shimmer bara i pending, aldrig i fel. AC-texten 'skeleton för talet' ska läsas med den avgränsningen.
 <!-- SECTION:NOTES:END -->

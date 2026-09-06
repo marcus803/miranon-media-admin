@@ -3,10 +3,10 @@ id: TASK-416.3
 title: >-
   Skiva: Aktivitetshistorik — FilterRad monterad även i laddläget, kontrollerna
   isDisabled tills datan finns
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:20'
-updated_date: '2026-09-06 14:23'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

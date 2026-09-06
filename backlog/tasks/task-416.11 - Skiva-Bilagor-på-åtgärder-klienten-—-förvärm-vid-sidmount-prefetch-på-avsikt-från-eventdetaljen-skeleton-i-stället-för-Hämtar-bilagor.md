@@ -3,10 +3,10 @@ id: TASK-416.11
 title: >-
   Skiva: Bilagor på åtgärder, klienten — förvärm vid sidmount, prefetch på
   avsikt från eventdetaljen, skeleton i stället för Hämtar bilagor
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:22'
-updated_date: '2026-09-06 14:36'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

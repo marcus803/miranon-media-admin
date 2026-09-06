@@ -3,10 +3,10 @@ id: TASK-416.12
 title: >-
   Skiva: get-event-attachments — eventraden och de gemensamma bilagorna i samma
   Promise.all, chunkarna parallellt; mätt före/efter i staging
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:23'
-updated_date: '2026-09-06 14:45'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

@@ -3,10 +3,10 @@ id: TASK-416.9
 title: >-
   Skiva: Hem — Nästa event får sina två saknade skeleton-rader, aktivitetsradens
   typografi, Maillogg/Väntelista gap-6
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:22'
-updated_date: '2026-09-06 14:26'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

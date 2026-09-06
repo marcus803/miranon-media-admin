@@ -3,10 +3,10 @@ id: TASK-416.17
 title: >-
   Skiva: Maillogg och Väntelista — skeletonradens anatomi lika den laddade raden
   (listRow är tre generiska line-boxar, WaitlistRow bär avatar plus fyra fält)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 14:45'
-updated_date: '2026-09-06 15:53'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

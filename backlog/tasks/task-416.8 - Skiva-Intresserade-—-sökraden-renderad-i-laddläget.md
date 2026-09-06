@@ -1,10 +1,10 @@
 ---
 id: TASK-416.8
 title: 'Skiva: Intresserade — sökraden renderad i laddläget'
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 15:29'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []
