@@ -49,6 +49,30 @@ import { expect, type Page, type Route, test } from '../support/test-bas';
  * kopia). Testet nedan (`kalla=import`) bevisar att headerns TOTALA
  * boundingBox — rubrik + statusrad + Kallrad-raderna tillsammans — inte
  * hoppar när datan landar.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [FIX-RUNDA 3] IMPORT-TESTET FICK BÅDA VIEWPORTS + AXE; EN ÖPPEN KANT
+ * KVARSTÅR I GRUPPRUBRIK-SKELETTET
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Review-runda 2 fångade att import-testet (nedan) var det ENDA test som
+ * övar skelettets `Kallrad`-yta (det manuella testets `importkalla` är alltid
+ * `null`) men körde varken `AxeBuilder` eller `MOBIL` — den nya, riktiga
+ * texten (inte bara `Skeleton`-block) var alltså osvept vid smal bredd.
+ * Samma `for`-loop-mönster som testet ovan täcker nu båda.
+ *
+ * ÖPPEN KANT, BOKFÖRD (INTE ÅTGÄRDAD HÄR — se `Bekraftelsesteget.tsx`s
+ * docblock för `BekraftelsestegetSkelett`, avsnittet om grupprubrikens
+ * `sm:hidden`-rad): den andra skelett-raden för gruppens rubrik villkorar på
+ * VIEWPORT, men riktiga `GruppRubrik` (`VariantC.tsx`, ingen `truncate`/
+ * `whitespace-nowrap`) radbryter efter TEXTLÄNGD. Fixturens första grupp
+ * ("Resor i medvetandet 1, Skövde · 2026-09-20", 29 tecken + datum) råkar
+ * radbryta till två rader vid 390 px, vilket är exakt vad denna svit mäter —
+ * men fixturens ANDRA grupper ("Fjärrskådning, Göteborg", "Psionautics,
+ * Stockholm") är kortare och skulle INTE radbryta vid samma bredd. Ett kort
+ * eventnamn möter samma tvåradiga reservation och hoppar 24,75 px åt motsatt
+ * håll. Detta test-svep prövar bara FÖRSTA gruppens namnlängd (samma fixtur
+ * i alla tre testen) och kan därför STRUKTURELLT inte fånga den kanten —
+ * korrekt fix är ett designval på `GruppRubrik` (Marcus), inte en testfix.
  */
 
 const HAMTA_OPPNA_BETALNINGAR = '**/functions/v1/hamta-oppna-betalningar*';
@@ -187,51 +211,67 @@ test.describe('TASK-416.6 — laddläget (ADR-113 steg 4)', () => {
    * `rader`-fält är giltigt mot `ImportminneSchema` och håller mockens
    * `hamta-oppna-betalningar`-svar (hela fixturen) opåverkat av
    * matchnings-logiken.
+   *
+   * [FIX-RUNDA 3] BÅDA VIEWPORTS + AXE, SAMMA `for`-LOOP-MÖNSTER SOM OVAN —
+   * denna gren är den ENDA som monterar `Kallrad`s RIKTIGA text (filnamn,
+   * bank, radantal, ett per-rad-fel med `TriangleAlert`) i skelettet, så
+   * a11y-svepet måste täcka just den, inte bara det manuella testets rena
+   * `Skeleton`-block.
    */
-  test('import: headerns boundingBox (rubrik + Kallrad) är identisk ladd- och laddat läge', async ({
-    page,
-  }) => {
-    await page.setViewportSize(DESKTOP);
-    const minne = {
-      skapad: new Date().toISOString(),
-      filnamn: 'kontoutdrag-laddlage-matning.csv',
-      bank: 'Handelsbanken',
-      lasta: 5,
-      bortfiltrerade: 2,
-      fel: [{ radnummer: 7, skal: 'Kunde inte tolkas' }],
-      rader: [],
-    };
-    await page.addInitScript((serialiserat) => {
-      window.sessionStorage.setItem('mm.betalningar.import', serialiserat);
-    }, JSON.stringify(minne));
+  for (const [namn, viewport] of [
+    ['desktop', DESKTOP],
+    ['mobil', MOBIL],
+  ] as const) {
+    test(`${namn} — import: headerns boundingBox (rubrik + Kallrad) är identisk ladd- och laddat läge`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      const minne = {
+        skapad: new Date().toISOString(),
+        filnamn: 'kontoutdrag-laddlage-matning.csv',
+        bank: 'Handelsbanken',
+        lasta: 5,
+        bortfiltrerade: 2,
+        fel: [{ radnummer: 7, skal: 'Kunde inte tolkas' }],
+        rader: [],
+      };
+      await page.addInitScript((serialiserat) => {
+        window.sessionStorage.setItem('mm.betalningar.import', serialiserat);
+      }, JSON.stringify(minne));
 
-    const slapp = await mockaHallbar(page);
-    await page.goto('/mer/betalningar/registrera?kalla=import');
+      const slapp = await mockaHallbar(page);
+      await page.goto('/mer/betalningar/registrera?kalla=import');
 
-    // ANKARET FÖR LADD-LÄGET, och BEVIS på att importminnet faktiskt lästes:
-    // `Kallrad`s egen text ("<filnamn> · N rader") ska synas REDAN under
-    // laddning — det är precis vad fyndet krävde.
-    await expect(page.getByText('Hämtar öppna betalningar …')).toBeAttached();
-    const header = page.locator('header');
-    await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
-    await expect(header.getByText('2 rader i filen var inte inbetalningar')).toBeVisible();
-    await expect(header.getByText('Rad 7: Kunde inte tolkas')).toBeVisible();
+      // ANKARET FÖR LADD-LÄGET, och BEVIS på att importminnet faktiskt lästes:
+      // `Kallrad`s egen text ("<filnamn> · N rader") ska synas REDAN under
+      // laddning — det är precis vad fyndet krävde.
+      await expect(page.getByText('Hämtar öppna betalningar …')).toBeAttached();
+      const header = page.locator('header');
+      await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
+      await expect(header.getByText('2 rader i filen var inte inbetalningar')).toBeVisible();
+      await expect(header.getByText('Rad 7: Kunde inte tolkas')).toBeVisible();
 
-    const headerLadd = await header.boundingBox();
-    expect(headerLadd).not.toBeNull();
+      const headerLadd = await header.boundingBox();
+      expect(headerLadd).not.toBeNull();
 
-    slapp();
-    // ANKARET FÖR DET LADDADE LÄGET: `BulkC` monterad (samma testid oavsett
-    // manuell/import-väg).
-    await expect(page.getByTestId('bekraftelsesteget')).toBeVisible({ timeout: 15_000 });
-    // Samma `Kallrad`-rader ska stå kvar, oförändrade, i den RIKTIGA headern.
-    await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
+      // AXE PÅ LADD-LÄGET — den enda gren som monterar `Kallrad`s riktiga
+      // text/ikon i skelettet (fix-runda 3, fynd 3).
+      const laddResultat = await new AxeBuilder({ page }).include('main').analyze();
+      expect(laddResultat.violations).toEqual([]);
 
-    const headerLaddad = await header.boundingBox();
-    expect(headerLaddad).not.toBeNull();
+      slapp();
+      // ANKARET FÖR DET LADDADE LÄGET: `BulkC` monterad (samma testid oavsett
+      // manuell/import-väg).
+      await expect(page.getByTestId('bekraftelsesteget')).toBeVisible({ timeout: 15_000 });
+      // Samma `Kallrad`-rader ska stå kvar, oförändrade, i den RIKTIGA headern.
+      await expect(header.getByText(/kontoutdrag-laddlage-matning\.csv/)).toBeVisible();
 
-    // MÄTNINGEN: headerns TOTALA boundingBox (rubrik + statusrad + de tre
-    // Kallrad-raderna) är BYTE-IDENTISK genom övergången.
-    expect(headerLadd).toEqual(headerLaddad);
-  });
+      const headerLaddad = await header.boundingBox();
+      expect(headerLaddad).not.toBeNull();
+
+      // MÄTNINGEN: headerns TOTALA boundingBox (rubrik + statusrad + de tre
+      // Kallrad-raderna) är BYTE-IDENTISK genom övergången.
+      expect(headerLadd).toEqual(headerLaddad);
+    });
+  }
 });

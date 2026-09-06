@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 17:56'
+updated_date: '2026-09-06 18:35'
 labels:
   - ready-for-agent
 dependencies: []
@@ -99,4 +99,45 @@ Regression (staging, oförändrade filer): bekraftelsesteget-promoverings-grind 
 bekraftelsesteget-formen-fore-stampeln 22/22, bekraftelsesteget.staging.test.ts 7/7,
 betalningar-import-bekraftelsesteget.staging.test.ts alla gröna (47 tester totalt i svepet),
 importminne.test.ts (api-pure) 29/29.
+
+--- FIX-RUNDA 3 (review-runda 2, Marcus mandat) ---
+
+Fynd 1 (warning/ask-user, sm:hidden villkorar på fel variabel — textlängd, inte viewport):
+avgjort som instruerat — behöll raden orört (ingen kodändring i VariantC.tsx utöver den
+befintliga export:en), skrev docblocket i Bekraftelsesteget.tsx ärligt: skelettet speglar
+DET VANLIGASTE utfallet (långt eventnamn+datum bryter till två rader under sm, mätt 49,5 px
+vid 390px för 29-teckensnamnet "Resor i medvetandet 1, Skövde"), korta namn ("Fjärrskådning,
+Göteborg" 23 tecken, "Psionautics, Stockholm" 22 tecken — båda i SAMMA fixtur) ger ett hopp på
+24,75 px åt ANDRA hållet. Bokförd öppen kant tills GruppRubrik får en deterministisk radhöjd —
+Marcus designbeslut, inte kod härifrån. Samma bokföring tillagd i testfilens eget docblock
+(§ [FIX-RUNDA 3]).
+
+Fynd 2 (info/ask-user, live-regionen for bred — Kallrads riktiga text annonserades atomiskt
+med laddningsbeskedet): snävade role="status"/aria-live="polite"/aria-busy="true" + det dolda
+"Hämtar öppna betalningar …"-beskedet till listkroppens EGEN wrapper (den del som faktiskt
+laddar). Header (h1, statusrad-skelett, Kallrad) ligger nu UTANFÖR live-regionen, ingen ARIA-roll
+på roten. Verifierat: BulkC:s laddade form (dess egen <p role="status">) är opåverkad
+(VariantC.tsx orört denna runda) — promoverings-grinden 11/11 grönt bekräftar ingen dubbel
+statusregion uppstår (de två regionerna existerar aldrig samtidigt, skelettet unmountas när
+BulkC monteras). Befintlig testassertion `getByText('Hämtar öppna betalningar …')` hittar
+fortfarande rätt nod (span flyttad, inte borttagen) — verifierat grönt i alla fyra
+laddlage-testerna.
+
+Fynd 3 (info/auto-fix, import-testet saknade axe + mobil): omstrukturerat till samma
+for-loop-mönster som det manuella testet (desktop + mobil), AxeBuilder-svep tillagt på
+laddläget i båda viewports — detta är den ENDA gren som monterar Kallrads RIKTIGA text/ikon i
+skelettet, så a11y-täckningen var en genuin lucka.
+
+MÄTT (staging, Chromium, 2026-09-06, workers enligt playwright.config.ts — 1 worker per fil,
+ingen fullyParallel satt):
+- desktop 1280x720: rubrik {x:372,y:116,w:536,h:36}, första kortet {x:365,y:242.75,w:550,h:62} — identiska.
+- mobil 390x844: rubrik {x:32,y:84,w:326,h:36}, första kortet {x:25,y:235.5,w:340,h:110} — identiska.
+- import desktop: header {x:356,y:116,w:568,h:123} — identisk.
+- import mobil (NY): header {x:16,y:84,w:358,h:141} — identisk.
+- Axe (båda manuella + båda import-varianter, 4 svep totalt): 0 violations vardera.
+
+Grindar (exit-koder): typecheck 0, biome check . 0, check-langa-streck 0, build 0.
+Regression (staging, VariantC.tsx/importminne.ts/useBekraftelsesteg.ts orörda denna runda):
+promoverings-grinden 11/11, bekraftelsesteget.staging.test.ts 7/7, betalningar-import-
+bekraftelsesteget.staging.test.ts 10/10 (alla axe-svep gröna).
 <!-- SECTION:NOTES:END -->

@@ -155,8 +155,9 @@ const SKELETT_RADER = ['a', 'b', 'c'] as const;
  * plats att inte hoppa till.
  *
  * Roselli-kontraktet (`Skeleton.tsx` filhuvud): blocken är `aria-hidden`
- * (dekorativa), och DENNA container äger `aria-busy` + det dolda
- * textbeskedet.
+ * (dekorativa), och LISTKROPPENS EGEN container äger `aria-busy` + det
+ * dolda textbeskedet — se `[FIX-RUNDA 3, FYND 2]` nedan för var den
+ * containern faktiskt sitter sedan importflödets `Kallrad`-rad tillkom.
  *
  * ═══════════════════════════════════════════════════════════════════════════
  * [TASK-416.6 FIX-RUNDA 2, FYND 1] IMPORTFLÖDETS `Kallrad`-RAD ÄR KÄND
@@ -186,35 +187,81 @@ const SKELETT_RADER = ['a', 'b', 'c'] as const;
  * tillsammans med hela headern när "kunde inte läsas"-meddelandet tar över.
  * Bokfört här som en observerad, oadresserad kant — inte tyst, men utanför
  * denna fix-rundans scope (ADR-053: värdefullt, blockerar inte).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * [TASK-416.6 FIX-RUNDA 3, FYND 2] LIVE-REGIONEN ÄR SNÄVAD TILL DEN DEL SOM
+ * FAKTISKT LADDAR — HEADERN (RUBRIK + `Kallrad`) LIGGER UTANFÖR
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Sedan fix-runda 2 renderar headern `Kallrad`s RIKTIGA, meningsbärande text
+ * (filnamn/bank/radantal, "N rader … togs inte med", per-rad-fel med en
+ * `TriangleAlert`-ikon) — inte längre bara dekorativa `Skeleton`-block.
+ * Review-runda 2 fångade att den rådde INUTI samma `role="status"
+ * aria-live="polite" aria-busy="true"`-container som resten av skelettet:
+ * `aria-atomic` är IMPLICIT `true` på `role="status"` (WAI-ARIA), så det
+ * dolda beskedet "Hämtar öppna betalningar …" och `Kallrad`s upp till tre
+ * textrader hade annonserats som EN enda enhet — och `aria-busy="true"`
+ * säger uttryckligen till hjälpmedel att de FÅR skjuta upp exponeringen av
+ * regionens innehåll, korrekt för Skeleton-block men fel för text som redan
+ * är SLUTGILTIG och aldrig kommer att ändras.
+ *
+ * Roten (`<div className="flex flex-col gap-6">` nedan) bär därför INGEN
+ * ARIA-roll längre. `role="status"`/`aria-live`/`aria-busy` och det dolda
+ * beskedet flyttade till listkroppens EGEN wrapper — den delen som
+ * FAKTISKT laddar (grupprubrik-skelettet + de tre kortplatshållarna).
+ * Rubriken, statusrad-skelettet och `Kallrad` står OVANFÖR, utanför
+ * live-regionen, exakt som `BulkC`s egen laddade header (dess `<p
+ * role="status">` är EN egen, smal region — se `VariantC.tsx`). Ingen
+ * dubbel statusregion uppstår: skelettets region unmountas helt när
+ * `BulkC` monterar sin, de två existerar aldrig samtidigt i DOM:en.
+ *
+ * `boundingBox()`-paritetsmätningen (AC #3) berörs INTE: `sr-only` (Tailwinds
+ * `position: absolute`-utility) deltar aldrig i en flex-förälders layout,
+ * flyttar den mellan flex-syskon ändrar därför ingen `gap`-beräkning eller
+ * någon boundingBox — mätt om efter flytten, samma tal som innan.
  */
 function BekraftelsestegetSkelett({ minne }: { minne: Importminne | null }) {
   const importkalla = importoversiktFranMinne(minne);
   return (
-    <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-6">
-      <span className="sr-only">Hämtar öppna betalningar …</span>
+    <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-1 px-4">
         <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
         <Skeleton variant="text" className="w-48 text-small" />
         {importkalla !== null && <Kallrad kalla={importkalla} />}
       </header>
-      <div className="flex flex-col gap-4 px-4">
+      <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-4 px-4">
+        <span className="sr-only">Hämtar öppna betalningar …</span>
         <div className="flex flex-col gap-2">
-          {/* [FIX-RUNDA 2, FYND 2] GRUPPRUBRIKENS SKELETT REDOVISAR TVÅ
-              RADER UNDER `sm` — MÄTT, INTE GISSAT.
+          {/* [FIX-RUNDA 2, FYND 2 — KALIBRERING RÄTTAD FIX-RUNDA 3, FYND 1]
+              GRUPPRUBRIKENS SKELETT REDOVISAR TVÅ RADER UNDER `sm` — EN
+              APPROXIMATION AV DET VANLIGASTE UTFALLET, INTE EN GARANTI.
               `GruppRubrik` (`VariantC.tsx`) bär VARKEN `truncate` eller
               `whitespace-nowrap` — till skillnad från `KortHuvud`s namnrad —
-              och radbryter alltså när eventnamn + datum inte får plats.
-              `<main>`s `max-w-[600px]` gör att bredden ÖVER `sm` (640 px)
-              alltid är kapad till samma 536 px oavsett hur bred viewporten
-              är, gott om plats för ETT ord-par som "Resor i medvetandet 1,
-              Skövde · 2026-09-20" (mätt: 1280 px → EN rad, 61 px header).
-              UNDER 640 px krymper bredden med SJÄLVA viewporten (326 px vid
-              390) och samma rubrik radbryter till TVÅ (mätt: 49,5 px — en
-              första skelett-rad ensam gav 24,75 px för lite och fällde
-              boundingBox-paritetstestet i mobilläget). `sm:hidden` på den
-              andra raden är samma brytpunkt som redan styr kortets EGEN
-              `sm:flex-row`-omslag två steg ned — inte en ny, godtycklig
-              gräns. */}
+              så radantalet styrs av TEXTLÄNGD × tillgänglig bredd, inte av
+              viewporten ensam. Denna rad villkorar ändå på `sm:hidden`
+              (viewport), vilket review-runda 2 fångade som fel variabel:
+              rätt fix (`whitespace-nowrap`/`truncate` på `GruppRubrik`) hade
+              ÄNDRAT den facit-låsta filens rendering och är Marcus
+              designbeslut, inte agentens.
+              MÄTT MOT DET VANLIGASTE FALLET: `<main>`s `max-w-[600px]`
+              kapar bredden ÖVER `sm` (640 px) till samma 536 px oavsett
+              viewport, gott om plats för "Resor i medvetandet 1, Skövde ·
+              2026-09-20" (29 tecken + datum, mätt: 1280 px → EN rad, 61 px
+              header). UNDER 640 px krymper bredden med SJÄLVA viewporten
+              (326 px vid 390) och SAMMA rubrik radbryter till TVÅ (mätt:
+              49,5 px — en enradig platshållare gav 24,75 px för lite och
+              fällde boundingBox-paritetstestet i mobilläget).
+              DEN ÖPPNA KANTEN (bokförd, inte gömd): fixturen bär TVÅ
+              KORTARE gruppnamn i samma fil — "Fjärrskådning, Göteborg"
+              (23 tecken) och "Psionautics, Stockholm" (22) — och
+              produktionens eventnamn är inte längdgaranterade. Ett namn
+              som ryms på EN rad även under `sm` möter denna tvåradiga
+              reservation och hoppar 24,75 px åt det MOTSATTA hållet mot
+              defekten fixen skulle eliminera — samma hopp-klass AC #1 och
+              ADR-113 steg 4 förbjuder, nu villkorad på fel variabel för de
+              KORTA namnen. Detta test-svep kan strukturellt inte fånga den
+              kanten: båda viewport-fallen delar samma fixtur, alltså samma
+              namnlängd. Kvarstår tills `GruppRubrik` får en deterministisk
+              radhöjd — ett designval hos Marcus, inte en kodfix härifrån. */}
           <div className="flex flex-col">
             <Skeleton variant="text" className="w-40 text-lg" />
             <Skeleton variant="text" className="w-24 text-lg sm:hidden" />
