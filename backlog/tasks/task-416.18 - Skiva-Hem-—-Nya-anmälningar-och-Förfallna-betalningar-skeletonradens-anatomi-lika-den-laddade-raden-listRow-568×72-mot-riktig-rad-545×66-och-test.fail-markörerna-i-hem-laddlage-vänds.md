@@ -4,9 +4,10 @@ title: >-
   Skiva: Hem — Nya anmälningar och Förfallna betalningar: skeletonradens anatomi
   lika den laddade raden (listRow 568×72 mot riktig rad 545×66), och
   test.fail-markörerna i hem-laddlage vänds
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 15:44'
+updated_date: '2026-09-06 18:51'
 labels:
   - ready-for-agent
 dependencies: []
@@ -34,3 +35,9 @@ Källa: TASK-416.13:s mätning (PR #2412, S123, 2026-09-06): Nya anmälningars o
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+REVIEW-RUNDA 3 (PR #2419, Opus, 2026-09-06, på mandat): konvergerad, 4 info. Omslagsformen (span shrink-0 pl-2 + Skeleton w-14) browser-mätt av granskaren: målad rektangel 56 px förskjuten exakt 8 px, yttre 64 px, radhöjd 66 px i båda formerna — runda 2:s härledning bekräftad. Två prosa-rester ej rättade i kod (bokförs här): docblockets radhänvisning 'rad ~168/179' till relTid-spannen är stale (faktiskt 189/200 vid ce22eff6; skriv symbolisk hänvisning nästa gång filen rörs), och testkommentaren 'vid övriga tre viewports är förskjutningen ett annat tal' är obevisad per bredd (ska lyda 'kan vara ett annat tal, ej mätt per bredd'). Landad eb58c07b.
+<!-- SECTION:NOTES:END -->

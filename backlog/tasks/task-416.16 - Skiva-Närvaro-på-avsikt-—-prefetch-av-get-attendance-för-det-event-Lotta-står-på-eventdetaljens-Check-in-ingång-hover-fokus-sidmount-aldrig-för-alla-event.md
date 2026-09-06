@@ -4,9 +4,10 @@ title: >-
   Skiva: Närvaro på avsikt — prefetch av get-attendance för det event Lotta står
   på (eventdetaljens Check-in-ingång, hover/fokus + sidmount), aldrig för alla
   event
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:27'
+updated_date: '2026-09-06 18:29'
 labels:
   - ready-for-agent
 dependencies: []
@@ -35,3 +36,9 @@ Källa: research-passet docs/research/forvarma-allt-branschmonster-2026-09-06.md
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+REVIEW-RUNDA 2 (PR #2403, Opus, 2026-09-06): punkt 1 ovan om hover/fokus är inaktuell sedan runda 2-fixen 730c6f74 — bindningen sker inte längre via onMouseEnter/onFocusCapture på en wrapper-div i EventDetail.tsx utan via HandlingsLank:s onIntent-prop (CheckInKort → HandlingsLank → Link onMouseEnter/onFocus, Atgarder.tsx), samma väg som AtgarderKort/TASK-416.11; wrapper, biome-ignore och den felaktiga kommentaren togs bort. Mätdatan i punkt 2–4 gäller oförändrat (sidmount-prefetch + dedup). Regressionstest för hover-prefetchen hör till TASK-416.20 (granskarens dom, bokförd). Landad 7396d823.
+<!-- SECTION:NOTES:END -->
