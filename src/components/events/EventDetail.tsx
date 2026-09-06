@@ -136,6 +136,40 @@ export function EventDetail({ eventId }: { eventId: string }) {
     [eventId, varmDetalj],
   );
 
+  /**
+   * Närvaro på avsikt (TASK-416.16, ADR-078 beslut 3): `get-attendance` är
+   * den enda av eventsidans queries som varken värms av delade
+   * `useForberedEventDetalj` (event+registrations, EventCard.tsx/TabBar.tsx-
+   * mönstret) eller av startvärmningen (`startvarmningen.ts`, ADR-112
+   * beslut 6 undantar uttryckligen per-event-data) — Check-in
+   * (`EventCheckin.tsx`s `useDorrData`/dörrlistan) visade därför laddläget
+   * vid VARJE besök (`docs/research/forvarma-allt-branschmonster-2026-09-06.md`
+   * § 5 (b) punkt 2–3). Samma nyckel OCH queryFn som EventCheckin.tsx
+   * (`queryKeys.events.attendance`, `dataSource.fetchAttendance`) — cache-
+   * träffen blir exakt. `prefetchQuery`, ALDRIG `ensureQueryData` (ADR-078
+   * beslut 1: navigeringen blockeras aldrig av detta). Ovillkorligt på
+   * eventets status med avsikt: check-in sker vid dörren MEDAN eventet
+   * pågår, dvs. sannolikt medan Status fortfarande är "Planerat" (fältet är
+   * ett manuellt planeringstillstånd, `ORDLISTA.md` §Period — det flippas
+   * inte automatiskt vid eventets start) — att villkora prefetchen
+   * på "Genomfört" (som läsregistret `Narvaro.tsx` gör) hade gjort den
+   * verkningslös för just det ögonblick funktionen finns till för.
+   */
+  const varmNarvaro = useCallback(() => {
+    queryClient.prefetchQuery({
+      queryKey: queryKeys.events.attendance(eventId),
+      queryFn: () => dataSource.fetchAttendance({ eventId }),
+    });
+  }, [dataSource, queryClient, eventId]);
+
+  // AC #2: sidmount värmer attendance för DET event Lotta redan står på —
+  // kostnaden är ETT EF-anrop. Effekten beror bara på `eventId` (denna sidas
+  // eget, aldrig ett annat) och körs om vid eventbyte (väljaren, task-18.19)
+  // precis som `varmDetalj`/`varmBytesmal` ovan gör för sina egna queries.
+  useEffect(() => {
+    varmNarvaro();
+  }, [varmNarvaro]);
+
   // Sid-chromen står ALLTID i slutgeometri — bara innehållsytan växlar mellan
   // ladd/fel/laddat (Lugnt laddläge). Chevronen i rubrikstorlek (44 px-knapp,
   // touch-target-golvet) är sidans enda navigations-krom upptill.
@@ -273,7 +307,28 @@ export function EventDetail({ eventId }: { eventId: string }) {
           railen som stod nedan är rivna (ADR-103 B2 steg 4, efter Marcus
           godkännande) — registret i Deltagare.tsx behåller sin promoverade
           form oförändrad. */}
-      <CheckInKort eventId={eventId} />
+      {/* TASK-416.16, AC #1: hover/fokus på Check-in-ingången är den
+          tidigaste ärliga avsiktssignalen (ADR-078 beslut 3) — samma mönster
+          som EventCard.tsx/TabBar.tsx. `CheckInKort`s eget DOM-skal
+          (Atgarder.tsx, 416.11s arbetsyta) rörs INTE: den länken sitter
+          nästlad i `HandlingsLank` och kan inte bära egna hover/fokus-props
+          härifrån. Wrappern lägger ingen stil och ingen extra höjd (auto-block
+          runt ett enda barn i `flex-col gap-6`-föräldern) — samma teknik som
+          EventCard.tsx:s `<li onMouseEnter/onFocusCapture>` (som av samma
+          skäl inte kan sätta lyssnaren direkt på länken, men slipper regeln
+          nedan eftersom `<li>` inte räknas som "statiskt"; en `<li>` utan
+          `<ul>`-förälder hade varit ogiltig HTML här). Provade `role="group"`/
+          `"presentation"` — båda triggade NYA biome-regler i sin tur
+          (`useSemanticElements` ville ha `<fieldset>`; `presentation`
+          betyder uttryckligen "aldrig interaktiv" och är självmotsägande med
+          en händelselyssnare). Ren `biome-ignore` är den ärligaste formen:
+          wrappern bär inget eget semantiskt innehåll — den observerar bara
+          avsikt hos barnet, som behåller sin egen länk-roll och sitt eget
+          accessibla namn helt oförändrat. */}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: ren avsiktslyssnare (hover/fokus, ADR-078 beslut 3) på en semantikfri wrapper — barnets länk behåller sin egen roll/sitt namn; se docblocket ovan för varför role="group"/"presentation" avvisades. */}
+      <div onMouseEnter={varmNarvaro} onFocusCapture={varmNarvaro}>
+        <CheckInKort eventId={eventId} />
+      </div>
       <AtgarderKort eventId={eventId} />
       <SkrivUtKort />
 

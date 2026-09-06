@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista } from './helpers/valjar-lista';
 
@@ -188,6 +189,9 @@ async function mockSidan(
   // stubbas tom via delade sömmen (TASK-47, tidigare TASK-205/TASK-212) så
   // eventsidans övriga sviter förblir deterministiska.
   await mockTommaAnteckningar(page);
+  // TASK-416.16: eventsidan prefetchar nu get-attendance ovillkorligt
+  // (sidmount + Check-in-hover) — se helpers/tom-narvaro.ts.
+  await mockTomNarvaro(page);
 }
 
 /** Resolva en tokens computed-färg (probe-mönstret — token-kedjan, ej hårdkod). */

@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, type Route, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista, type ValjarRad, valjarRad } from './helpers/valjar-lista';
 
@@ -124,6 +125,9 @@ async function mockEvent(
     },
   );
   await mockTommaAnteckningar(page);
+  // TASK-416.16: sidan prefetchar nu get-attendance ovillkorligt (sidmount +
+  // Check-in-hover) — se helpers/tom-narvaro.ts för hela motivet.
+  await mockTomNarvaro(page);
   await mockValjarLista(page, VALJAR_LISTA);
   return release;
 }
