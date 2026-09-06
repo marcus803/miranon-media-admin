@@ -660,9 +660,21 @@ export function AnmalningarSida({
   // `headerBlock`/`filterRadBlock` är DELAD JSX — SAMMA objekt i alla tre
   // return-grenar nedan. h1:s och FilterRads klasser/DOM-position är därmed
   // BYTE-IDENTISKA oavsett query-läge, så `boundingBox()` på dem rör sig
-  // aldrig när datat landar (AC #3). Endast ANTALSRADENS INNEHÅLL växlar:
-  // skeleton när `dataOkand` (isPending ELLER isError — ingen pålitlig
-  // siffra finns i något av lägena) mot den riktiga räknartexten (laddat).
+  // aldrig när datat landar (AC #3).
+  //
+  // ANTALSRADEN OCH FILTERRAD SKILJER PÅ isPending OCH isError (review-
+  // grinden runda 1, TASK-416.4, Marcus mandat 2026-09-06): en tidigare
+  // version matade BÅDA lägena in i FilterRads `isPending`-prop och i en
+  // delad skeleton-vakt, vilket i felläget renderade ett evigt animerat
+  // laddskelett fast källan definitivt fallerat — vilseledande status
+  // ("laddar fortfarande" när sanningen är "gav upp"). Syskonytan
+  // `EventsList.tsx` (isPending-grenen, ~rad 279–292) skickar bara
+  // `isPending={isPending}` till sin FilterRad — samma form här. I isError
+  // visas INGEN skeleton: kromet står kvar (h1 + FilterRads tomma, disabled
+  // kontroller per primitivens eget beteende), och `MessageBox`-felbeskedet
+  // längre ner bär tillståndet. `dataOkand` lever kvar ENDAST för "Visa alla
+  // anmälningar"-länken (se dess docblock nedan) — den är inte samma fråga
+  // som "har jag en pålitlig siffra att visa i en skeleton".
   const dataOkand = isPending || isError;
 
   const headerBlock = (
@@ -670,9 +682,9 @@ export function AnmalningarSida({
       <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-2xl">
         Anmälningar
       </h1>
-      {dataOkand ? (
+      {isPending ? (
         <Skeleton variant="text" className="w-40 text-small" />
-      ) : (
+      ) : isError ? null : (
         <p className="text-small text-text-muted">
           {visaAtgardskon
             ? atgardskoText(visasRader.length)
@@ -683,9 +695,12 @@ export function AnmalningarSida({
         för varför den står här trots att facit-bilden saknar den.
         `search={{ visa: undefined }}` NOLLSTÄLLER parametern explicit,
         aldrig implicit bevarande (formen är oförändrad ur
-        `AnmalningarList.tsx`, TASK-284.4). Utelämnad medan `dataOkand`:
-        länken syftar på en räknare (`atgardskoText`) som inte finns förrän
-        datat landat, ladd-/fellägets skeleton bär ingen sådan siffra. */}
+        `AnmalningarList.tsx`, TASK-284.4). Utelämnad medan `dataOkand`
+        (isPending ELLER isError): länken syftar på en räknare
+        (`atgardskoText`) som inte finns förrän datat landat — i isPending
+        finns ingen siffra alls än, i isError gav källan upp och raden ovan
+        visar ingenting (aldrig ett evigt skelett), så länken hade stått
+        utan sitt sammanhang i båda lägena. */}
       {visaAtgardskon && !dataOkand && (
         <Link
           to="/mer/anmalningar"
@@ -731,10 +746,17 @@ export function AnmalningarSida({
       totalt={rader.length}
       enhet={ANMALNINGS_ENHET}
       triggerRef={filterKnappRef}
-      // `dataOkand`: panelens dropdown-skelett + räknarskelett tills en
-      // riktig källa svarat — LYCKAD eller MISSLYCKAD (samma "ingen
-      // pålitlig siffra"-motiv som antalsraden ovan).
-      isPending={dataOkand}
+      // ENDAST `isPending` (review-grinden runda 1, se docblocket ovan) —
+      // ALDRIG `dataOkand`. FilterRad tolkar sin egen `isPending`-prop som
+      // "visa panelens dropdown-/räknarskelett", och det skelettet ska
+      // sluta animeras när källan svarat — LYCKAD ELLER MISSLYCKAD. Matar
+      // man in `isError` här också fryser skelettet kvar för evigt i
+      // felläget: en shimrande platshållare som påstår "laddar" fast
+      // anropet definitivt gett upp. I isError degraderar FilterRad i
+      // stället till sitt eget, ärliga beteende för tomma/okända
+      // dimensioner (samma form `EventsList.tsx` använder, ~rad 279–292:
+      // `isPending={isPending}`, aldrig en bredare "har jag data"-vakt).
+      isPending={isPending}
       /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
          *"hela listan är för smal, det ska vara lika bred som menybaren.
          Även filtreringskomponenten … även på anmälnings-sidan"*).

@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:20'
-updated_date: '2026-09-06 14:13'
+updated_date: '2026-09-06 14:38'
 labels:
   - ready-for-agent
 dependencies: []
@@ -87,4 +87,31 @@ GRINDAR (exitkoder mätta, ej antagna):
     10/10 passed — ariaSnapshot-låset på det LADDADE läget opåverkat, axe 0
     violations i alla fyra tillstånd (lista/filtrerat/tomt/fel) inklusive
     fellägets nya header+FilterRad.
+
+RUNDA 2 (review-grinden runda 1, orkestrerare på Marcus mandat 2026-09-06):
+fynd — dataOkand (isPending||isError) matades in i FilterRads isPending-prop
+och i antalsradens skeleton-vakt, vilket i isError renderade ett EVIGT
+animerat laddskelett fast källan definitivt fallerat (vilseledande status).
+Fix: FilterRad får isPending={isPending} rakt av (matchar EventsList.tsx
+~rad 279-292). Antalsraden visar Skeleton ENBART i isPending; i isError
+renderas ingen platshållare alls (null) — kromet (h1 + FilterRads ärligt
+tomma/degraderade kontroller) plus MessageBox-felbeskedet bär tillståndet.
+dataOkand behålls, men ENDAST för att styra "Visa alla anmälningar"-länken
+(döljs i både isPending och isError, av samma skäl som tidigare — länken
+syftar på en räknare som inte finns i något av lägena).
+
+Info-fynd bokförda, EJ åtgärdade (enligt orkestrerarens instruktion):
+- 1 px-avvikelsen (70 mot 69) på första radens boundingBox mellan pending
+  och laddat kvarstår (sub-pixel-avrundning, se mätningen ovan).
+- isPending-grenen saknar egen axe-täckning — repo-bred, medveten
+  konvention (samma undantag som tests/visual/anmalningssidan-promoverings-
+  grind.spec.ts docblock bokför för ariaSnapshot: "laddningsläget ... är
+  tidsberoende och hade gjort referensen spröd").
+
+Grindar efter fix (exitkoder mätta): typecheck 0 · biome check (filen) 0 ·
+check-langa-streck.mjs 0 (323 filer, 0 fynd) · mer-anmalningar-form +
+mer-anmalningar acceptance 39/39 · anmalningssidan-promoverings-grind
+(visual-desktop, inkl. axe på fel(4xx)-läget) 10/10.
+
+Ny head-SHA: se PR #2392 — pushad, ej armerad, ej Done.
 <!-- SECTION:NOTES:END -->
