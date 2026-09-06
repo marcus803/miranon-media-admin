@@ -33,9 +33,17 @@ import {
 export function DatumFalt({
   value,
   onChange,
+  isDisabled,
 }: {
   value: { start: CalendarDate; end: CalendarDate } | null;
   onChange: (v: { start: CalendarDate; end: CalendarDate } | null) => void;
+  /** TASK-416.3 — laddläges-golvet: fältet inert (ingen popover, inga
+   * segment nåbara) tills konsumentens data finns. RAC:s `DateRangePicker`
+   * propagerar `isDisabled` till `Group`/`DateInput`/knappen internt (samma
+   * mekanik som `Select`/`ToggleButtonGroup`); `data-[disabled]`-stilarna
+   * nedan speglar Input/Select/TextArea-primitivens golv. Default `false` —
+   * OmEventet/CreateEventForm är opåverkade av tillägget. */
+  isDisabled?: boolean;
 }) {
   const segKlass =
     'rounded tabular-nums outline-none data-[focused]:bg-bg-emphasized data-[placeholder]:text-(color:--mm-input-text-placeholder)';
@@ -44,9 +52,10 @@ export function DatumFalt({
       aria-label="Datum"
       value={value}
       onChange={onChange}
+      isDisabled={isDisabled}
       className="flex w-full flex-col gap-1"
     >
-      <Group className="flex min-h-8 w-full items-center justify-between gap-1 rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-2 text-small">
+      <Group className="flex min-h-8 w-full items-center justify-between gap-1 rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-2 text-small data-[disabled]:cursor-not-allowed data-[disabled]:bg-(--mm-input-bg-disabled)">
         <div className="flex items-center gap-1">
           <DateInput slot="start" className="flex">
             {(seg) => <DateSegment segment={seg} className={segKlass} />}
