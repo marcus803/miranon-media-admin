@@ -133,6 +133,25 @@ function faltForBlock(id: BlockId): EventinnehallFalt | undefined {
   return EVENTINNEHALL_BLOCK.find((b) => b.def.id === id)?.falt;
 }
 
+/** Skeletonets radbredder (TASK-416.7) — EXAKT SJU, samma längd som listan
+ *  `useEventinnehallList` hämtar: de sju Event×Typ-kombinationerna
+ *  (`useEventinnehallList.ts`s docstring; data-model.md § Bilagornas
+ *  datamodell; `SJU_KOMBINATIONER`, scripts/seed-eventinnehall-modell.mjs)
+ *  — INTE `EVENTINNEHALL_BLOCK` ovan, som är ett annat begrepp (de fjorton
+ *  redigerbara fälten på ETT valt Eventinnehåll-objekt). Ytan listar alltid
+ *  precis sju rader, aldrig fler eller färre. Bredderna varieras
+ *  deterministiskt, aldrig slumpat (PersonsList.tsx-mönstret) så laddläget
+ *  läses som en namnlista, inte en streckkod. */
+const EVENTINNEHALL_SKELETON_BREDD = [
+  'w-1/3',
+  'w-2/5',
+  'w-1/2',
+  'w-1/3',
+  'w-2/5',
+  'w-1/2',
+  'w-1/3',
+];
+
 export function EventinnehallYta() {
   const [valdId, setValdId] = useQueryState('id');
   const { data, isPending, isError, error } = useEventinnehallList();
@@ -201,11 +220,34 @@ export function EventinnehallYta() {
             </ul>
           </>
         ) : isPending ? (
+          // TASK-416.7 (ADR-113 laddtrappan, greppet ur AktivitetsHistorik.tsx:436–447
+          // / PersonsList.tsx:852–878): skeletonet ritas INUTI samma kortcontainer
+          // (`divide-y rounded-xl border-transparent bg-surface px-3`) med samma
+          // radhöjd (`py-3`) som `eventinnehall-lista` nedan — tidigare stod tre
+          // fristående textrader (~24 px) utanför containern medan laddat läge är
+          // ~48 px-rader i ett kort, så innehållet landade förskjutet när datan kom.
+          // Antalet rader är EXAKT SJU (fast, aldrig gissat): ytan listar alltid de
+          // sju Event × Eventtyp-kombinationerna (filhuvudet), aldrig fler eller
+          // färre — till skillnad från Platser-ytans okända, växande listlängd.
           <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-2">
             <span className="sr-only">Laddar eventinnehåll…</span>
-            <Skeleton variant="text" className="w-2/5" />
-            <Skeleton variant="text" className="w-3/5" />
-            <Skeleton variant="text" className="w-2/5" />
+            <div className="divide-y divide-border rounded-xl border border-transparent bg-surface px-3 contrast-more:border-border-strong">
+              {EVENTINNEHALL_SKELETON_BREDD.map((bredd, i) => (
+                <div
+                  // biome-ignore lint/suspicious/noArrayIndexKey: fast skeleton-rad, ingen identitet
+                  key={i}
+                  className="flex items-center gap-3 py-3"
+                >
+                  <div className="min-w-0 flex-1">
+                    <Skeleton variant="text" className={`${bredd} text-body`} />
+                  </div>
+                  {/* Chevronens plats reserveras (16 px, ChevronRight size={16}
+                      nedan) utan att rita en affordans till en rad som ännu inte
+                      finns (PersonsList.tsx-mönstret). */}
+                  <span aria-hidden="true" className="size-4 shrink-0" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : isError ? (
           <MessageBox intent="error" title="Kunde inte hämta eventinnehåll">
