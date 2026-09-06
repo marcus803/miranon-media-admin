@@ -8,13 +8,18 @@ import {
 import { useForhandsgranskaAllaKvitton, useForhandsgranskaKvitto } from '@/data/mutations/kvitton';
 import type { OppenBetalning } from '@/domain/schemas';
 import { skrivLaddningssida } from '@/lib/skriv-laddningssida';
+import { arDubblettfel } from './bankimport-rader';
+import { bokforImporterade } from './bankmappning-minne';
 import {
   arRegistrerbar,
   type BekraftelseRad,
   type Beloppsgenvag,
   baraOmkorning,
+  byggImportrad,
+  byggImportsteg,
   byggRader,
   genvagsbelopp,
+  type ObestamdImportrad,
   omkorningsUrval,
   type Radvarden,
   summera,
@@ -24,7 +29,14 @@ import type { BekraftelsestegModell } from './bekraftelsesteg-modell';
 import { visaKronor } from './belopp-inmatning';
 import type { Betalsatt } from './betalsatt-minne';
 import { lasSenasteBetalsatt, sparaBetalsatt } from './betalsatt-minne';
-import { jobbDelutfall, tolkaTakfel } from './inkorg-harledningar';
+import type { Importminne } from './importminne';
+import {
+  harledRad,
+  type InkorgsRad,
+  jobbDelutfall,
+  rankaTraffar,
+  tolkaTakfel,
+} from './inkorg-harledningar';
 import type { SessionsRad } from './RegistreratNuBlock';
 
 /**
@@ -117,10 +129,20 @@ function felText(fel: unknown): string {
 export function useBekraftelsesteg(
   oppna: readonly OppenBetalning[],
   idag: string,
+  minne: Importminne | null = null,
 ): BekraftelsestegModell {
   const startBetalsatt = useMemo(() => lasSenasteBetalsatt(), []);
   const [rader, setRader] = useState<BekraftelseRad[]>(() =>
-    byggRader(oppna, idag, startBetalsatt),
+    minne === null
+      ? byggRader(oppna, idag, startBetalsatt)
+      : byggImportsteg(minne.rader, oppna, idag, startBetalsatt).rader,
+  );
+  /**
+   * [TASK-402.4] Importrader utan anmälan, plus dubbletterna. Tom lista i den
+   * manuella och Åtgärds-sidans matare.
+   */
+  const [obestamda, setObestamda] = useState<ObestamdImportrad[]>(() =>
+    minne === null ? [] : byggImportsteg(minne.rader, oppna, idag, startBetalsatt).obestamda,
   );
   const [fas, setFas] = useState<'redigera' | 'registrerar' | 'klart'>('redigera');
   const [korning, setKorning] = useState<{ totalt: number; klara: number } | null>(null);
@@ -142,11 +164,58 @@ export function useBekraftelsesteg(
   const raderRef = useRef(rader);
   raderRef.current = rader;
 
+  /**
+   * OMBYGGNADS-SIGNATUREN — två källor, och de har OLIKA identitet med avsikt.
+   *
+   * MANUELLA MATAREN: urvalet ÄR de öppna betalningarnas ID-mängd, så den
+   * mängden är signaturen (oförändrat sedan `TASK-402.3`).
+   *
+   * [TASK-402.4] IMPORTEN: raderna kommer ur importminnet, och minnets
+   * `skapad`-stämpel är dess identitet. De öppna betalningarna får INTE ingå,
+   * och det är ett mätt krav: importens rader byggs mot HELA den öppna
+   * mängden (en omatchad rads sökfält söker i den), och den mängden krymper
+   * efter varje registrering eftersom `useRegistreraInbetalning` invaliderar
+   * `betalningar.all` och en fullbetald anmälan inte längre är öppen. Med
+   * `oppna` i signaturen hade alltså varje rad som registrerades byggt om
+   * hela listan under körningen.
+   */
   const signaturRef = useRef<string>('');
-  const signatur = `${idag}|${oppna.map((o) => o.anmalanRecordId).join(',')}`;
-  if (signatur !== signaturRef.current) {
+  const signatur =
+    minne === null
+      ? `${idag}|${oppna.map((o) => o.anmalanRecordId).join(',')}`
+      : `${idag}|import:${minne.skapad}`;
+  /**
+   * [TASK-402.4, MÄTT FYND UR DENNA SKIVAS E2E] EN KÖRNING BYGGS ALDRIG OM
+   * UNDER FÖTTERNA.
+   *
+   * Ombyggnaden fanns för att fånga ett BYTT URVAL. Den kunde också fyra mitt
+   * i en körning: `useRegistreraInbetalning` invaliderar `betalningar.all`
+   * efter VARJE rad, refetchen tar bort den nyss betalda anmälan ur de öppna,
+   * och den manuella matarens signatur ändras därmed av sin egen körning.
+   * Följden var att `fas` föll tillbaka till `redigera`, redan skrivna utfall
+   * gick förlorade och den registrerade radens kort försvann ur listan mitt i
+   * spinnern.
+   *
+   * Felet var strukturellt osynligt i `TASK-402.3`:s svit, vars mock svarar
+   * med en STATISK lista och alltså aldrig producerar den krympande mängd
+   * servern faktiskt ger. Denna skivas import-e2e speglar servern (en
+   * registrerad rad lämnar de öppna), och då föll den.
+   *
+   * Vakten är därför inte importens: den skyddar båda matarna. En körning som
+   * pågår eller har lämnat ett utfall efter sig äger sina rader tills Lotta
+   * lämnar sidan.
+   */
+  const korningAger = fas !== 'redigera' || rader.some((rad) => rad.utfall !== null);
+  if (signatur !== signaturRef.current && !korningAger) {
     signaturRef.current = signatur;
-    setRader(byggRader(oppna, idag, startBetalsatt));
+    if (minne === null) {
+      setRader(byggRader(oppna, idag, startBetalsatt));
+      setObestamda([]);
+    } else {
+      const byggt = byggImportsteg(minne.rader, oppna, idag, startBetalsatt);
+      setRader(byggt.rader);
+      setObestamda(byggt.obestamda);
+    }
     setFas('redigera');
     setAktivGenvag('forslag');
     setBatchDatum(idag);
@@ -243,6 +312,52 @@ export function useBekraftelsesteg(
   );
 
   /**
+   * [TASK-402.4 AC #2] Lotta pekar ut anmälan för en osäker eller omatchad
+   * bankrad. Raden lämnar hand-högen och blir en vanlig, MARKERAD stegrad med
+   * bankens belopp och datum.
+   *
+   * VALET OCH BOCKEN HÖR IHOP, oförändrat från den rivna bekräftelselistan
+   * (`SwishImport.tsx` § VALET OCH BOCKEN HÖR IHOP): ett val är ett beslut,
+   * och att kräva ett andra tryck för bocken hade gjort det till två.
+   *
+   * EN OKÄND ANMÄLAN GÖR INGENTING. Uppslaget sker mot den mängd hooken
+   * faktiskt fick, aldrig mot minnets lagrade kandidatlista — den kan vara
+   * äldre än verkligheten (`importminne.ts` § KANDIDATERNA ÄR ID:N).
+   * En dubblett-rad kan strukturellt inte nå hit: formen renderar varken
+   * förslagsknappar eller sökfält för den (`VariantC` § ImportHandKort).
+   */
+  const valjImportanmalan = useCallback(
+    (nyckel: string, anmalanRecordId: string) => {
+      const betalning = oppna.find((b) => b.anmalanRecordId === anmalanRecordId);
+      if (betalning === undefined) return;
+      const bankrad = obestamda.find((rad) => rad.nyckel === nyckel);
+      if (bankrad === undefined || bankrad.klass === 'dubblett') return;
+      // Samma anmälan två gånger i samma import (två swishar på en anmälan)
+      // är ett LEGITIMT fall, men steget bär en rad per anmälan: nyckeln är
+      // anmälans record-ID. Vinner den andra raden hade den första förlorat
+      // sitt belopp tyst, så valet avvisas i stället.
+      if (rader.some((rad) => rad.nyckel === anmalanRecordId)) return;
+      setObestamda((tidigare) => tidigare.filter((rad) => rad.nyckel !== nyckel));
+      setRader((tidigare) => [
+        ...tidigare,
+        byggImportrad(
+          betalning,
+          {
+            nyckel: bankrad.nyckel,
+            belopp: bankrad.belopp,
+            datum: bankrad.datum,
+            bankreferens: bankrad.bankreferens,
+            namn: bankrad.namn,
+          },
+          idag,
+          batchBetalsatt,
+        ),
+      ]);
+    },
+    [batchBetalsatt, idag, obestamda, oppna, rader],
+  );
+
+  /**
    * KÖRNINGEN (AC #2/#3/#5/#6). En rad i taget; en fallerad rad stannar i
    * listan med sitt fel och stoppar aldrig de övriga.
    *
@@ -264,7 +379,16 @@ export function useBekraftelsesteg(
 
       void (async () => {
         const attKoa: string[] = [];
+        /* [TASK-402.4] Bankreferenser att bokföra i den lokala importloggen:
+           både de som REGISTRERADES och de servern avvisade som dubbletter.
+           Exakt samma två vägar den rivna bekräftelselistan bokförde
+           (`SwishImport.tsx` § LOGGAS ÄVEN HÄR), och av samma skäl: en
+           referens databasen känner till men denna webbläsares logg inte gör
+           (annan dator, rensad lagring) ska falla ut som "redan registrerad"
+           vid NÄSTA import, inte som omatchad. */
+        const nyaReferenser: string[] = [];
         for (const rad of attKora) {
+          const referens = rad.import?.bankreferens ?? null;
           try {
             const svar = await registrera.mutateAsync({
               anmalanRecordId: rad.nyckel,
@@ -274,9 +398,16 @@ export function useBekraftelsesteg(
               betalsatt: rad.betalsatt,
               betalningsdatum: rad.datum,
               ...(rad.notering.trim() === '' ? {} : { notering: rad.notering }),
+              // DUBBLETTNYCKELN (AC #4). Skickas ENDAST för importrader, och
+              // utelämnas helt när den saknas: EF:en läser fältet som
+              // "sträng och inte tom" (`registrera-inbetalning/index.ts`), så
+              // ett `undefined` är byte för byte samma anrop som före
+              // importen fanns.
+              ...(referens === null ? {} : { bankreferens: referens }),
             });
             const id = svar.inbetalning.id;
             if (rad.medKvitto && skickaNu) attKoa.push(id);
+            if (referens !== null) nyaReferenser.push(referens);
             andraRad(rad.nyckel, {
               utfall: {
                 klass: 'registrerad',
@@ -286,10 +417,32 @@ export function useBekraftelsesteg(
               kvitto: rad.medKvitto ? (skickaNu ? 'koad' : 'vantar') : 'ingen',
             });
           } catch (fel) {
-            andraRad(rad.nyckel, { utfall: { klass: 'fel', text: felText(fel) } });
+            /* [TASK-402.4 AC #4] SERVERNS 409 ÄR INGET VANLIGT FEL.
+               `registrera-inbetalning` svarar 409 `dubblett_bankreferens` när
+               Postgres partiella unika index avvisar en referens som redan
+               finns — den enda väg som känner HELA databasen, oavsett
+               webbläsare och dator. För Lotta är det inte "gick sönder" utan
+               "den här har du redan tagit", och raden ska därför AVMARKERAS:
+               en omkörning av samma referens kan aldrig lyckas, och att lämna
+               den markerad hade satt den i "Försök igen"-urvalet i en loop som
+               bara producerar fler 409:or. Ordvalet är den rivna listans, ord
+               för ord (`SwishImport.tsx` § `utfallstext`). */
+            if (arDubblettfel(fel)) {
+              if (referens !== null) nyaReferenser.push(referens);
+              andraRad(rad.nyckel, {
+                markerad: false,
+                utfall: {
+                  klass: 'fel',
+                  text: 'Redan registrerad. Ingen ny inbetalning skapades.',
+                },
+              });
+            } else {
+              andraRad(rad.nyckel, { utfall: { klass: 'fel', text: felText(fel) } });
+            }
           }
           setKorning((k) => (k ? { ...k, klara: k.klara + 1 } : k));
         }
+        bokforImporterade(nyaReferenser, idag);
         setKorning(null);
         setFas('klart');
         // Betalsättet som faktiskt användes blir nästa gångs förval — samma
@@ -310,7 +463,7 @@ export function useBekraftelsesteg(
         }
       })();
     },
-    [andraRad, koa, registrera],
+    [andraRad, idag, koa, registrera],
   );
 
   const skickaKvitton = useCallback(() => {
@@ -446,12 +599,49 @@ export function useBekraftelsesteg(
   );
 
   const aterstall = useCallback(() => {
-    setRader(byggRader(oppna, idag, batchBetalsatt));
+    if (minne === null) {
+      setRader(byggRader(oppna, idag, batchBetalsatt));
+      setObestamda([]);
+    } else {
+      // Importen byggs om ur MINNET, inte ur de nu öppna betalningarna
+      // ensamma: en rad som registrerades i den avbrutna körningen är inte
+      // längre öppen, och dess bankreferens ligger nu i importloggen — den
+      // faller därför ut som DUBBLETT, vilket är precis rätt svar.
+      const byggt = byggImportsteg(minne.rader, oppna, idag, batchBetalsatt);
+      setRader(byggt.rader);
+      setObestamda(byggt.obestamda);
+    }
     setKorning(null);
     setFas('redigera');
     setAktivGenvag('forslag');
     setJobbId(undefined);
-  }, [oppna, idag, batchBetalsatt]);
+  }, [oppna, idag, batchBetalsatt, minne]);
+
+  /**
+   * [TASK-402.4] SÖKRYMDEN för en omatchad bankrad, i INKORGENS rankning.
+   *
+   * `rankaTraffar` är samma funktion inkorgens sökfält och den rivna
+   * bekräftelselistan använde (`SwishImport.tsx` § Omatchade rader får
+   * sökfältet). Att bygga en egen sökordning här hade gett Lotta två olika
+   * svar på samma fråga.
+   *
+   * RADER SOM REDAN LIGGER I STEGET FILTRERAS BORT. En anmälan som redan bär
+   * en rad går inte att välja igen (`valjImportanmalan` avvisar det tyst), och
+   * att erbjuda den i en träfflista hade varit en knapp som inte gör något.
+   */
+  const sokrymd = useMemo(() => oppna.map((b) => harledRad(b, idag)), [oppna, idag]);
+  const sokImportanmalan = useCallback(
+    (sokterm: string): InkorgsRad[] => {
+      if (sokterm.trim() === '') return [];
+      const upptagna = new Set(raderRef.current.map((rad) => rad.nyckel));
+      return rankaTraffar(
+        sokrymd.filter((rad) => !upptagna.has(rad.nyckel)),
+        sokterm,
+        idag,
+      ).slice(0, 8);
+    },
+    [idag, sokrymd],
+  );
 
   const summering = useMemo(() => summera(rader), [rader]);
   const jobbstatus = jobb.data;
@@ -479,6 +669,19 @@ export function useBekraftelsesteg(
     skickaKvitton,
     jobbstatus,
     aterstall,
+    importrader: obestamda,
+    valjImportanmalan,
+    sokImportanmalan,
+    importkalla:
+      minne === null
+        ? null
+        : {
+            filnamn: minne.filnamn,
+            bank: minne.bank,
+            lasta: minne.lasta,
+            bortfiltrerade: minne.bortfiltrerade,
+            fel: minne.fel,
+          },
     block: {
       granskningsBlockRef,
       jobbrader: jobbstatus?.rader ?? [],

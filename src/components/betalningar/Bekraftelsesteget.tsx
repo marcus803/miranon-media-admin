@@ -1,5 +1,5 @@
 import { useCanGoBack, useNavigate, useRouter } from '@tanstack/react-router';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { MessageBox } from '@/components/primitives';
 // `SidRamKnapp` nås via modulen, inte via barrel-filen: `primitives/index.ts`
 // exporterar bara `SidRam`. Samma importform som den andra konsumenten redan
@@ -8,6 +8,7 @@ import { SidRamKnapp } from '@/components/primitives/SidRam';
 import { useOppnaBetalningar } from '@/data/betalningar/useBetalningar';
 import type { OppenBetalning } from '@/domain/schemas';
 import { idagIso } from './idag';
+import { type Importminne, lasImport } from './importminne';
 import { rensaMarkering } from './markerings-minne';
 import { VariantC } from './prototype/VariantC';
 import { useBekraftelsesteg } from './useBekraftelsesteg';
@@ -89,7 +90,7 @@ function efterRegistrering(): void {
   rensaMarkering();
 }
 
-export function Bekraftelsesteget({ ids }: { ids?: string }) {
+export function Bekraftelsesteget({ ids, kalla }: { ids?: string; kalla?: 'import' }) {
   const fraga = useOppnaBetalningar();
   const navigate = useNavigate();
   const router = useRouter();
@@ -107,13 +108,29 @@ export function Bekraftelsesteget({ ids }: { ids?: string }) {
     [ids],
   );
 
+  /**
+   * [TASK-402.4] IMPORTMINNET LÄSES EN GÅNG, VID MONTERINGEN.
+   *
+   * `useState`-initieraren och inte `useMemo`: en `useMemo` är en
+   * OPTIMERING som React uttryckligen får kasta och räkna om, och en
+   * omräkning här hade läst `sessionStorage` på nytt mitt i sessionen — efter
+   * att en annan flik hunnit skriva en ny import. Raderna Lotta ser ska vara
+   * de hon kom hit med. Ett nytt minne kräver en ny navigering, alltså en ny
+   * montering, vilket är exakt vad importen gör.
+   */
+  const [minne] = useState(() => (kalla === 'import' ? lasImport() : null));
+
   const oppna = useMemo<OppenBetalning[]>(() => {
+    const alla = fraga.data?.betalningar ?? [];
+    // IMPORTEN FÅR HELA MÄNGDEN. En omatchad rads sökfält söker i samma rymd
+    // som inkorgens sökning gör (`rankaTraffar` över alla öppna), och en
+    // kandidat måste gå att slå upp oavsett urval. Den manuella mataren får
+    // sitt urval, oförändrat sedan TASK-402.3.
+    if (kalla === 'import') return alla;
     if (valdaIds.length === 0) return [];
     const valda = new Set(valdaIds);
-    return (fraga.data?.betalningar ?? []).filter((b) => valda.has(b.anmalanRecordId));
-  }, [fraga.data, valdaIds]);
-
-  const modell = useBekraftelsesteg(oppna, idag);
+    return alla.filter((b) => valda.has(b.anmalanRecordId));
+  }, [fraga.data, kalla, valdaIds]);
 
   const tillbaka = () => {
     if (kanGaTillbaka) {
@@ -134,6 +151,26 @@ export function Bekraftelsesteget({ ids }: { ids?: string }) {
             {fraga.error instanceof Error ? fraga.error.message : 'Okänt fel'}
           </MessageBox>
         </div>
+      ) : kalla === 'import' ? (
+        /* [TASK-402.4] IMPORTVÄGEN HAR SITT EGET TOMLÄGE, och det säger något
+           ANNAT än den manuella vägens. Kommer hon hit med `kalla=import` men
+           utan minne har överlämningen gått förlorad (fliken stängdes,
+           `sessionStorage` blockerad, adressen delad till en annan
+           webbläsare) — och rätt handling är att läsa in filen igen, inte att
+           markera rader. Att visa den manuella textens "markera raderna i
+           betalningsinkorgen" hade skickat henne åt fel håll.
+
+           NOLL RADER I MINNET ÄR INTE TOMT. En import där varje bankrad är en
+           dubblett har noll registrerbara rader men allt att visa, så
+           mängdvillkoret läser MINNET och inte de öppna betalningarna. */
+        minne === null ? (
+          <p className="px-4 py-8 text-body text-text-secondary">
+            Importen kunde inte läsas. Öppna Importera kontoutdrag i betalningsinkorgen och välj
+            filen igen.
+          </p>
+        ) : (
+          <StegMedKrok oppna={oppna} idag={idag} minne={minne} />
+        )
       ) : oppna.length === 0 ? (
         /* TOMLÄGET — INGEN FACIT-BILD FINNS, och det är bokfört som amendering
            i facit-katalogen i stället för att göras tyst. Två vägar hit, EN
@@ -147,7 +184,7 @@ export function Bekraftelsesteget({ ids }: { ids?: string }) {
           Registrera.
         </p>
       ) : (
-        <StegMedKrok modell={modell} />
+        <StegMedKrok oppna={oppna} idag={idag} minne={null} />
       )}
     </section>
   );
@@ -157,8 +194,31 @@ export function Bekraftelsesteget({ ids }: { ids?: string }) {
  * Formen plus krokpunkten. Egen komponent enbart för att `useEffect`-anropet
  * ska monteras med formen — inte köra i lägena "hämtar"/"fel"/"tomt", där
  * ingen körning kan ha skett.
+ *
+ * [TASK-402.4] MODELLEN BYGGS HÄR, INTE I FÖRÄLDERN — och det är en rättelse,
+ * inte en omflyttning. Hooken låg tidigare i `Bekraftelsesteget` och kördes
+ * därmed också medan hämtningen pågick, alltså med en TOM mängd öppna
+ * betalningar; raderna byggdes om först när svaret kom, via
+ * ombyggnads-signaturen. För den manuella mataren var det osynligt (samma
+ * rader byggdes två gånger), men importens klassning läser mängden och hade
+ * stämplat varje rad `omatchad` i det första varvet. Att montera formen —
+ * och därmed hooken — först när datat finns tar bort hela tillståndet i
+ * stället för att kompensera för det.
  */
-function StegMedKrok({ modell }: { modell: ReturnType<typeof useBekraftelsesteg> }) {
+function StegMedKrok({
+  oppna,
+  idag,
+  minne,
+}: {
+  oppna: readonly OppenBetalning[];
+  idag: string;
+  minne: Importminne | null;
+}) {
+  const modell = useBekraftelsesteg(oppna, idag, minne);
+  return <FormenMedKrok modell={modell} />;
+}
+
+function FormenMedKrok({ modell }: { modell: ReturnType<typeof useBekraftelsesteg> }) {
   const harRegistrerat = modell.rader.some((r) => r.utfall?.klass === 'registrerad');
   const klart = modell.fas === 'klart';
   // `useEffect` och INTE `useMemo`: kroken är en SIDOEFFEKT, och React kör

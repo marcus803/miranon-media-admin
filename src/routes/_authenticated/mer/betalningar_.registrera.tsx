@@ -58,6 +58,22 @@ const searchSchema = z.object({
   data: z.enum(['fixtur', 'staging']).optional().catch(undefined),
   /** Matarens urval: anmälnings-record-ID:n, kommaseparerade. */
   ids: z.string().optional().catch(undefined),
+  /**
+   * [TASK-402.4] VILKEN MATARE som fyllde steget, när det inte är den
+   * manuella. `import` betyder att raderna ligger i importminnet
+   * (`importminne.ts`) i stället för i `ids`.
+   *
+   * PARAMETERN BÄR ETT LÄGE, ALDRIG DATA. Bankradernas belopp, datum,
+   * referenser, namn och telefonnummer får inte hamna i webbläsarens
+   * historik, i en delad länk eller i en serverlogg — hela resonemanget står
+   * i `importminne.ts` § VARFÖR ETT MINNE OCH INTE EN URL-PARAMETER.
+   *
+   * `enum` med ETT värde och inte en `boolean`: Åtgärds-sidan (`TASK-402.5`)
+   * och framtida matare får sina egna namn i samma parameter utan att formen
+   * behöver ändras, och en okänd sträng faller till `undefined` (`catch`) —
+   * alltså till den manuella vägen, som alltid går att lita på.
+   */
+  kalla: z.enum(['import']).optional().catch(undefined),
 });
 
 export const Route = createFileRoute('/_authenticated/mer/betalningar_/registrera')({
@@ -70,7 +86,7 @@ export const Route = createFileRoute('/_authenticated/mer/betalningar_/registrer
 });
 
 function BekraftelsestegSida() {
-  const { variant, data, ids } = Route.useSearch();
+  const { variant, data, ids, kalla } = Route.useSearch();
   /* DEV-GRENEN, RIVS I TASK-402.6. Villkoret är AVSIKTLIGT snävt: bara en
      URL som uttryckligen ber om en divergens-variant ELLER om en prototyp-
      datakälla når prototypen. `?variant=c` ensamt går till den promoverade
@@ -79,5 +95,5 @@ function BekraftelsestegSida() {
   if (import.meta.env.DEV && (variant === 'a' || variant === 'b' || data !== undefined)) {
     return <BekraftelsestegPrototype variant={variant ?? 'c'} data={data ?? 'fixtur'} ids={ids} />;
   }
-  return <Bekraftelsesteget ids={ids} />;
+  return <Bekraftelsesteget ids={ids} kalla={kalla} />;
 }

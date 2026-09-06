@@ -1009,26 +1009,21 @@ export function BetalningsInkorg() {
   }
 
   /**
-   * [TASK-346.10 AC #4] Importens registrerade rader lyfts in i SAMMA
-   * väntande-lista som formulärets, så att "Skicka N kvitton" nedan blir en
-   * enda knapp för hela lördagen - oavsett om raden kom ur banken eller ur
-   * Lottas huvud. Fokus går till importknappen när ytan stängs; den nod
-   * fokus stod på rivs annars ur DOM och fokus faller till `document.body`
-   * (samma felklass som radens `skaAterfaFokus` bär).
+   * [TASK-402.4] `vidImporterade` ÄR RIVEN, och det är en följd av
+   * överlämningen, inte en egen ändring.
+   *
+   * Funktionen lyfte importens registrerade rader in i inkorgens
+   * väntande-lista och granskningsblock (`TASK-346.10` AC #4), eftersom
+   * importen registrerade i sin egen bekräftelselista här inne. Den listan är
+   * riven (`SwishImport.tsx` § VAD SOM RÖRDES): importen registrerar
+   * ingenting längre — den lämnar över raderna till bekräftelsesteget, som
+   * registrerar dem och visar dem i SITT "Registrerat nu"-block.
+   *
+   * Kvar i inkorgen är därför bara att öppna och stänga panelen. Fokus går
+   * till importknappen när ytan stängs; den nod fokus stod på rivs annars ur
+   * DOM och fokus faller till `document.body` (samma felklass som radens
+   * `skaAterfaFokus` bär).
    */
-  function vidImporterade(kvitton: VantandeKvitto[]) {
-    setVantande((tidigare) => [...tidigare, ...kvitton]);
-    /* Importerade rader hör hemma i SAMMA granskningsblock som de handskrivna
-       — knappen under blocket är redan en enda för båda (se `vidImporterade`s
-       docblock). Betalsättet är det `SwishImport` fick som prop och registrerade
-       med, alltså detta värde; importen bär inget eget. Kvitto per definition:
-       raderna landar i `vantande`, som bara bär det som ska skickas. */
-    setRegistrerade((tidigare) => [
-      ...tidigare,
-      ...kvitton.map((k) => ({ ...k, betalsatt, medKvitto: true })),
-    ]);
-  }
-
   function stangImport() {
     setVisaImport(false);
     importKnappRef.current?.focus();
@@ -1666,15 +1661,7 @@ export function BetalningsInkorg() {
           kvittona. Triggerknappen bor sedan TASK-346.14 i sidhuvudet
           (designfynd 2c, se `<header>` ovan) — bara panelen själv monteras
           här. */}
-      {visaImport && (
-        <SwishImport
-          oppna={rader}
-          idag={idag}
-          betalsatt={betalsatt}
-          onRegistrerade={vidImporterade}
-          onStang={stangImport}
-        />
-      )}
+      {visaImport && <SwishImport oppna={rader} onStang={stangImport} />}
 
       {/* ═══════════════════════ GRANSKNINGSBLOCKET (C1) ═══════════════════════
           Marcus dom 2026-09-01, ordagrant: *"När man trycker 'Registrera' så

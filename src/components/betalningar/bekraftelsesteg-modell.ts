@@ -3,10 +3,13 @@ import type {
   BekraftelseRad,
   Beloppsgenvag,
   Fas,
+  ObestamdImportrad,
   Radvarden,
   Summering,
 } from './bekraftelsesteg-harledningar';
 import type { Betalsatt } from './betalsatt-minne';
+import type { Importoversikt } from './importminne';
+import type { InkorgsRad } from './inkorg-harledningar';
 import type { RegistreratNuBlockProps } from './RegistreratNuBlock';
 
 /**
@@ -115,4 +118,41 @@ export type BekraftelsestegModell = {
   block: BekraftelseBlockKopplingar;
   /** Återställ till redigeringsläget (ny körning). */
   aterstall: () => void;
+
+  /* ═══ KONTOUTDRAGET SOM MATARE (TASK-402.4) ═════════════════════════════
+     TRE VALFRIA FÄLT, OCH VALFRIHETEN ÄR ETT LAGERBESLUT.
+
+     Modellen uppfylls av TVÅ implementationer (se typens docblock ovan), och
+     den andra är prototypens simulering — substrat som `TASK-402.6` river
+     efter Marcus stämpel och som denna skivas claim-gräns uttryckligen inte
+     rör. Obligatoriska fält hade tvingat fram en ändring där, i kod som är på
+     väg bort.
+
+     Frånvaron är dessutom SANN och inte en bekvämlighet: den manuella mataren
+     och Åtgärds-sidans matare har ingen import, så `undefined` betyder exakt
+     vad det ser ut att betyda. Formen läser dem med `?? []` respektive `??
+     null` och renderar då ingenting nytt — vilket är varför `VariantC`s
+     utgångsläge för säkra rader förblir byte för byte facits (AC #1). */
+
+  /**
+   * Importrader som ännu inte pekar på en anmälan, plus dubbletterna.
+   * `undefined` när mataren inte var kontoutdraget.
+   */
+  importrader?: ObestamdImportrad[];
+  /**
+   * Väljer anmälan för en obestämd importrad. Raden lämnar `importrader` och
+   * blir en vanlig, markerad `BekraftelseRad` i samma tick — bocken och valet
+   * hör ihop, exakt som i den rivna bekräftelselistan (`SwishImport.tsx`
+   * § VALET OCH BOCKEN HÖR IHOP).
+   */
+  valjImportanmalan?: (nyckel: string, anmalanRecordId: string) => void;
+  /**
+   * Sökningen en OMATCHAD bankrad erbjuder, i inkorgens egen rankning
+   * (`rankaTraffar`). Funktionen och inte sökrymden: rankningen behöver
+   * `idag` för sin förfallo-ordning, och det värdet bor i modellen — formen
+   * ska inte behöva känna till det för att kunna rita ett sökfält.
+   */
+  sokImportanmalan?: (sokterm: string) => InkorgsRad[];
+  /** Filen raderna kom ur, plus parserns två räknade högar. */
+  importkalla?: Importoversikt | null;
 };

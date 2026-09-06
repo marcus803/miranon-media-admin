@@ -1,8 +1,14 @@
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, TriangleAlert } from 'lucide-react';
 import { useEffect, useId, useMemo, useState } from 'react';
-import { Button as AriaButton, Checkbox } from 'react-aria-components';
+import {
+  Button as AriaButton,
+  Input as AriaInput,
+  Checkbox,
+  SearchField,
+} from 'react-aria-components';
 import { Button } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
+import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
   baraOmkorning as arBaraOmkorning,
   arRegistrerbar,
@@ -11,12 +17,14 @@ import {
   type Beloppsklass,
   blockrader,
   grupperaRader,
+  type ObestamdImportrad,
   radbelopp,
   summera,
   vantandeKvitton,
 } from '../bekraftelsesteg-harledningar';
 import type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
 import { visaKronor } from '../belopp-inmatning';
+import type { InkorgsRad } from '../inkorg-harledningar';
 import { RegistreraForm } from '../RegistreraForm';
 import { RegistreratNuBlock } from '../RegistreratNuBlock';
 import { RadMarken } from './radfalt';
@@ -183,6 +191,7 @@ export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
 
 function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const handId = useId();
+  const dubblettId = useId();
   const { rader } = modell;
   const registrerar = modell.fas === 'registrerar';
   const [tryckt, setTryckt] = useState<'registrera' | 'skicka' | null>(null);
@@ -211,6 +220,28 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const markerade = kvar.filter((r) => r.markerad);
   const handhogen = markerade.filter(saknarBelopp);
   const klarhogen = kvar.filter((r) => !r.markerad || !saknarBelopp(r));
+
+  /* ═══ KONTOUTDRAGETS RADER (TASK-402.4) ═══════════════════════════════════
+     TVÅ HÖGAR, OCH DE HAR OLIKA HEMVIST I FORMEN.
+
+     Osäkra och omatchade rader hör till "Behöver din hand" — de VÄNTAR på ett
+     beslut, precis som en rad utan belopp gör, och skälet ("vilken anmälan?"
+     kontra "vilket belopp?") ändrar inte att sektionen är samma. Kortets
+     AC #2 säger det ordagrant: båda ligger under "Behöver din hand".
+
+     Dubbletter hör INTE dit. De behöver ingenting — de är redan bokförda, och
+     att lägga dem i hand-högen hade räknat upp ett tal som betyder "det här
+     väntar på dig" med rader som inte gör det. De får en egen sektion,
+     låsta.
+
+     `?? []` OCH INTE ETT KRAV PÅ FÄLTET: modellen delas med prototypens
+     simulering, som aldrig sätter det (se `bekraftelsesteg-modell.ts`). Den
+     manuella mataren renderar därmed exakt samma DOM som före denna skiva. */
+  const importrader = modell.importrader ?? [];
+  const handImport = importrader.filter((rad) => rad.klass !== 'dubblett');
+  const dubbletter = importrader.filter((rad) => rad.klass === 'dubblett');
+  const handTotal = handhogen.length + handImport.length;
+  const importkalla = modell.importkalla ?? null;
   const klaraGrupper = useMemo(() => grupperaRader(klarhogen), [klarhogen]);
   const registrerbara = bas.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
@@ -299,6 +330,19 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
         <p role="status" aria-live="polite" className="text-small text-text-secondary">
           {status}
         </p>
+        {/* [TASK-402.4] KÄLLRADEN — bara i importläget. Inkorgens importpanel
+            är stängd när Lotta står här, så utan denna rad finns ingenting på
+            sidan som säger VILKEN fil raderna kom ur. Parserns två räknade
+            högar (rader som inte var inbetalningar, rader som inte gick att
+            läsa) följer med i samma andetag: "åtta rader i banken måste bli
+            åtta rader i appen" är importens egen invariant
+            (`bankimport-rader.ts` § FYRA HÖGAR), och den överlever bara om de
+            bortsorterade raderna räknas där Lotta ser dem.
+
+            AMENDERING mot facit: raden finns inte i någon låst bild, eftersom
+            facit-fixturen aldrig hade en import. Bokförd i
+            AMENDERING-2026-09-06-importens-radtillstand.md. */}
+        {importkalla !== null && <Kallrad kalla={importkalla} />}
       </header>
 
       <EfterlagetsBlock modell={modell} registrerade={registrerade} />
@@ -324,18 +368,50 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
       )}
 
       {/* ═══ BEHÖVER DIN HAND — bara när något faktiskt behöver henne ═══ */}
-      {handhogen.length > 0 && (
+      {handTotal > 0 && (
         <section
           aria-labelledby={handId}
           aria-busy={registrerar || undefined}
           className={`flex flex-col gap-3 px-4${dimmad}`}
         >
-          <SektionsRubrik id={handId} antal={handhogen.length}>
+          <SektionsRubrik id={handId} antal={handTotal}>
             Behöver din hand
           </SektionsRubrik>
           <ul className={LISTA_KLASS}>
             {handhogen.map((rad) => (
               <HandKort key={rad.nyckel} rad={rad} modell={modell} />
+            ))}
+            {/* Importens rader SIST i högen, efter de belopplösa. Ordningen är
+                inte estetisk: en rad utan belopp har redan sin anmälan och är
+                ett tangenttryck från klar, medan en omatchad bankrad kräver en
+                sökning. Det billiga först. */}
+            {handImport.map((rad) => (
+              <ImportHandKort key={rad.nyckel} rad={rad} modell={modell} frusen={registrerar} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {/* ═══ REDAN REGISTRERADE (TASK-402.4 AC #2) ═══════════════════════════
+          Dubbletterna, LÅSTA UTAN KRYSS. Egen sektion och inte hand-högen: de
+          väntar inte på Lotta, de är färdiga. Att dölja dem helt vore värre än
+          att visa dem — importens invariant är att varje bankrad syns
+          någonstans, och en rad som tyst försvann är det enda utfall Lotta inte
+          kan upptäcka (`bankimport-rader.ts` § FYRA HÖGAR).
+
+          AMENDERING mot facit: sektionen finns i ingen låst bild. */}
+      {dubbletter.length > 0 && (
+        <section
+          aria-labelledby={dubblettId}
+          aria-busy={registrerar || undefined}
+          className={`flex flex-col gap-3 px-4${dimmad}`}
+        >
+          <SektionsRubrik id={dubblettId} antal={dubbletter.length}>
+            Redan registrerade
+          </SektionsRubrik>
+          <ul className={LISTA_KLASS}>
+            {dubbletter.map((rad) => (
+              <DubblettKort key={rad.nyckel} rad={rad} />
             ))}
           </ul>
         </section>
@@ -383,9 +459,16 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
             </div>
           ) : (
             <p className="px-4 text-caption text-text-secondary">
+              {/* TRE TEXTER, EN PLATS. Ordningen är den mest konkreta först:
+                  saknat belopp är en siffra hon skriver, ett obestämt val är
+                  en anmälan hon väljer, och när ingetdera väntar är raden
+                  facits egen tipsrad. Ett `handTotal`-villkor med EN
+                  gemensam text hade tappat VAD hon ska göra. */}
               {handhogen.length > 0
                 ? `${plural(handhogen.length, 'rad saknar', 'rader saknar')} belopp och registreras inte förrän du fyllt i det.`
-                : 'Jämför med kontoutdraget innan du registrerar.'}
+                : handImport.length > 0
+                  ? `${plural(handImport.length, 'bankrad väntar', 'bankrader väntar')} på att du väljer anmälan.`
+                  : 'Jämför med kontoutdraget innan du registrerar.'}
             </p>
           )}
           <div className="flex flex-col gap-2">
@@ -646,6 +729,206 @@ function MarkerbartKort({
           />
         </div>
       )}
+    </li>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KONTOUTDRAGETS RADER (TASK-402.4) — fyra tillstånd inom C:s form
+   ═══════════════════════════════════════════════════════════════════════════
+
+   FORMEN ÄR C:S, INTE EN NY. Tre byggstenar återanvänds rakt av: kortytan
+   (`kortKlass`), hand-högens sektion och `ForslagsKnappar`s knappform. Det
+   enda som tillkommer är ett MÄRKE per rad och bankradens egen kontextrad
+   (belopp · datum · telefon · meddelande) — och båda är bokförda som
+   amendering, eftersom facit-fixturen aldrig hade en importrad att avbilda.
+
+   SÄKRA RADER FÅR INGET MÄRKE, och det är kortets AC #1 som avgör: "identisk
+   med facit ... i läge utgångsläget FÖR SÄKRA RADER". En säker importrad ÄR
+   ett vanligt markerat kort — dess tillstånd syns i att den är förbockad med
+   bankens belopp, precis som AC #2 beskriver det. Ett "Säker"-märke hade
+   brutit identiteten mot facit för att säga något kortet redan säger. */
+
+/** Vilken fil raderna kom ur, plus parserns två räknade högar. */
+function Kallrad({ kalla }: { kalla: NonNullable<BekraftelsestegModell['importkalla']> }) {
+  const kalltext = kalla.bank === '' ? kalla.filnamn : `${kalla.filnamn}, läst som ${kalla.bank}`;
+  return (
+    <div className="flex flex-col gap-0.5 text-caption text-text-muted">
+      <span>{`${kalltext} · ${plural(kalla.lasta, 'rad', 'rader')}`}</span>
+      {kalla.bortfiltrerade > 0 && (
+        <span>
+          {`${plural(kalla.bortfiltrerade, 'rad', 'rader')} i filen var inte inbetalningar och togs inte med.`}
+        </span>
+      )}
+      {kalla.fel.map((post) => (
+        <span key={post.radnummer} className="flex items-center gap-1">
+          <TriangleAlert aria-hidden="true" size={13} className="shrink-0 text-warning" />
+          {`Rad ${post.radnummer}: ${post.skal}`}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** Märket som säger vilket av de fyra tillstånden bankraden bär. */
+function ImportMarke({ klass }: { klass: ObestamdImportrad['klass'] }) {
+  if (klass === 'dubblett') {
+    return (
+      <StatusBadge ton="neutral" storlek="sm">
+        Redan registrerad
+      </StatusBadge>
+    );
+  }
+  return (
+    <StatusBadge ton="warning" storlek="sm">
+      {klass === 'osaker' ? 'Osäker' : 'Omatchad'}
+    </StatusBadge>
+  );
+}
+
+/**
+ * Bankradens huvud — samma anatomi som `KortHuvud`, men namnet är BANKENS.
+ *
+ * Att skriva ut avsändarens namn och inte deltagarens är hela poängen med en
+ * osäker rad: bankens namn är den registrerade Swish-ägarens, inte
+ * nödvändigtvis deltagarens (`bankimport-matchning.ts` § NAMN + BELOPP ÄR
+ * INDICIER). Beloppet står på samma rad som i ett `MarkerbartKort`, platt och
+ * i tabellsiffror, så högarna läses med samma öga.
+ */
+function BankradsHuvud({ rad }: { rad: ObestamdImportrad }) {
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <span className="flex min-w-0 flex-1 items-center gap-3">
+        <InitialAvatar namn={rad.namn} />
+        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
+          <span className="font-medium text-body">{rad.namn}</span>
+          <ImportMarke klass={rad.klass} />
+        </span>
+      </span>
+      <span className="font-medium text-body text-text tabular-nums">
+        {`${visaKronor(rad.belopp)} kr`}
+      </span>
+    </div>
+  );
+}
+
+/** Bankradens egen kontext: datum, telefon och meddelande, i filens ordning. */
+function bankradsKontext(rad: ObestamdImportrad): string {
+  const delar = [rad.datum ?? 'Datum saknas i filen'];
+  if (rad.telefon !== null && rad.telefon !== '') delar.push(rad.telefon);
+  if (rad.meddelande !== null && rad.meddelande !== '') delar.push(rad.meddelande);
+  return delar.join(' · ');
+}
+
+/** Kandidatens knapptext: vem, vilket event, vad som saknas. */
+function kandidatEtikett(kandidat: InkorgsRad): string {
+  const saknas = kandidat.kvar;
+  const belopp = saknas === null ? 'pris saknas' : `${visaKronor(saknas)} kr kvar att betala`;
+  return `${kandidat.namn} · ${kandidat.betalning.eventNamn ?? 'Utan event'} · ${belopp}`;
+}
+
+/**
+ * EN OSÄKER ELLER OMATCHAD BANKRAD i "Behöver din hand" (AC #2).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * KANDIDATERNA ÄR FÖRSLAGSKNAPPAR, INTE EN `Select`
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Den rivna bekräftelselistan bar en `Select` ("Registrera på anmälan ..."),
+ * och kortet säger uttryckligen förslagsKNAPPAR. Skillnaden är inte kosmetisk:
+ * C:s hand-hög har redan en förslagsrad (`ForslagsKnappar`, radens
+ * beloppskandidater), och ett tryck där sätter värdet direkt. Att lägga en
+ * rullgardin bredvid den hade gett två grammatiker för samma handling i samma
+ * kort. Knappformen är därför lånad ord för ord — `size="sm"`, sekundär,
+ * outline, med ledtexten "Förslag" framför.
+ *
+ * SÖKFÄLTET ÄR OMATCHADE RADERS UTVÄG, i inkorgens rankning
+ * (`modell.sokImportanmalan`). Träffarna renderas som samma knappar som
+ * kandidaterna: en yta, en grammatik, oavsett hur raden hittade sin anmälan.
+ */
+function ImportHandKort({
+  rad,
+  modell,
+  frusen = false,
+}: {
+  rad: ObestamdImportrad;
+  modell: BekraftelsestegModell;
+  frusen?: boolean;
+}) {
+  const [sokterm, setSokterm] = useState('');
+  const traffar = rad.klass === 'omatchad' ? (modell.sokImportanmalan?.(sokterm) ?? []) : [];
+  const valbara = rad.klass === 'omatchad' ? traffar : rad.kandidater;
+  const valj = (anmalanRecordId: string) => modell.valjImportanmalan?.(rad.nyckel, anmalanRecordId);
+
+  return (
+    <li className={kortKlass(false)}>
+      <BankradsHuvud rad={rad} />
+      <p className="pt-1 text-caption text-text-muted">{bankradsKontext(rad)}</p>
+      <p className="pt-2 text-small text-text-secondary">{rad.grund}</p>
+
+      {rad.klass === 'omatchad' && (
+        <div className="pt-3">
+          <SearchField
+            aria-label={`Sök anmälan för ${rad.namn}`}
+            value={sokterm}
+            onChange={setSokterm}
+            isDisabled={frusen}
+          >
+            <AriaInput
+              placeholder="Sök på namn, telefon eller belopp"
+              className="mm-fokusring-vid-fokus text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) min-h-10 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 text-body"
+            />
+          </SearchField>
+        </div>
+      )}
+
+      {valbara.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 pt-3">
+          <span className="text-caption text-text-muted">Förslag</span>
+          {valbara.map((kandidat) => (
+            <Button
+              key={kandidat.nyckel}
+              size="sm"
+              intent="secondary"
+              emphasis="outline"
+              isDisabled={frusen}
+              onPress={() => valj(kandidat.betalning.anmalanRecordId)}
+            >
+              {kandidatEtikett(kandidat)}
+            </Button>
+          ))}
+        </div>
+      )}
+
+      {rad.klass === 'omatchad' && sokterm.trim() !== '' && traffar.length === 0 && (
+        <p className="pt-3 text-caption text-text-muted">
+          Ingen kvarvarande betalning matchar sökningen.
+        </p>
+      )}
+    </li>
+  );
+}
+
+/**
+ * EN DUBBLETT — låst, utan kryss, aldrig registrerbar (AC #2 och #4).
+ *
+ * INGEN KRYSSRUTA OCH INGEN KNAPP, med avsikt: kortet är en UTSAGA, inte ett
+ * val. En avstängd kryssruta hade sagt "det här kan du göra, fast inte nu",
+ * och det är fel — raden kan aldrig bockas i, i denna session eller någon
+ * annan. Dubblettskyddet självt ligger i databasen
+ * (`inbetalningar_bankreferens_unik_idx`); detta kort gör det synligt INNAN
+ * hon trycker, vilket är precis vad den lokala importloggen finns för
+ * (`bankmappning-minne.ts` § IMPORTLOGGEN).
+ */
+function DubblettKort({ rad }: { rad: ObestamdImportrad }) {
+  return (
+    <li className={kortKlass(false)}>
+      <BankradsHuvud rad={rad} />
+      <p className="pt-1 text-caption text-text-muted">{bankradsKontext(rad)}</p>
+      <p className="pt-2 text-small text-text-secondary">
+        {rad.tidigareImporterad === null
+          ? rad.grund
+          : `Importerad ${rad.tidigareImporterad}. Ingen ny inbetalning skapas.`}
+      </p>
     </li>
   );
 }
