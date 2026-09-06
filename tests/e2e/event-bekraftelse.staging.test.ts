@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, type Route, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
 
@@ -319,6 +320,9 @@ async function mocka(page: Page, event: Json, deltagare: Json[] = grundData()): 
   // (antecknings-strömmens EGNA beteenden bevisas i
   // `tests/acceptance/event-anteckningar.acceptance.test.ts`).
   await mockTommaAnteckningar(page);
+  // TASK-416.16: eventsidan prefetchar nu get-attendance ovillkorligt
+  // (sidmount + Check-in-hover) — se helpers/tom-narvaro.ts.
+  await mockTomNarvaro(page);
   return mockar;
 }
 

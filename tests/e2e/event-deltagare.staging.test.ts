@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, type Page, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista } from './helpers/valjar-lista';
 
@@ -179,6 +180,9 @@ async function mocka(page: Page, event: Json, registrations: Json[] = DELTAGARE)
   // stubbas tom via delade sömmen (TASK-47, tidigare TASK-205/TASK-212) så
   // eventsidans övriga sviter förblir deterministiska.
   await mockTommaAnteckningar(page);
+  // TASK-416.16: eventsidan prefetchar nu get-attendance ovillkorligt
+  // (sidmount + Check-in-hover) — se helpers/tom-narvaro.ts.
+  await mockTomNarvaro(page);
 }
 
 /** Deltagar-gruppen (rubriken står utanför kortet — sektionen bär båda). */
@@ -548,6 +552,9 @@ test.describe('Anmälda deltagare — arbetsköns skelett (task-18.4)', () => {
     // — detta test kringgår mocka() och behöver därför sin egen stubb (TASK-212),
     // via delade sömmen sedan TASK-47.
     await mockTommaAnteckningar(page);
+    // TASK-416.16: eventsidan prefetchar nu get-attendance ovillkorligt
+    // (sidmount + Check-in-hover) — samma skäl, detta test kringgår mocka().
+    await mockTomNarvaro(page);
 
     // Läge 1 — utanför tvåveckorsfönstret (start om 60 dagar): TOM RESERV.
     await oppnaEventsidan(page);

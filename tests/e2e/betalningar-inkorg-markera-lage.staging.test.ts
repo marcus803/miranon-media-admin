@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
 import type { Locator } from '@playwright/test';
 import { expect, type Page, type Route, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
 
@@ -198,6 +199,10 @@ async function mocka(page: Page, rader: Json[] = RADER): Promise<Mockar> {
     },
   ]);
   await mockTommaAnteckningar(page);
+  // TASK-416.16: eventsidan (förlagan, `EVENT_FORLAGA`) prefetchar nu
+  // get-attendance ovillkorligt (sidmount + Check-in-hover) — se
+  // helpers/tom-narvaro.ts.
+  await mockTomNarvaro(page);
 
   await page.route(HAMTA_OPPNA_BETALNINGAR, async (route: Route) => {
     await route.fulfill({

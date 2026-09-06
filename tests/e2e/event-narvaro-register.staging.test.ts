@@ -21,8 +21,10 @@ import { mockValjarLista } from './helpers/valjar-lista';
  *
  * Täckning: genomfört event → LMS-register (rader × sessioner, bock ⟺ poäng,
  * Total närvaro %), poäng RÅ ur `narvaropoang` OCH status-fallback (deploy-gap),
- * bara sessioner-med-rader, kommande event → lugnt läge UTAN EF-fetch, tom-state,
- * fel (role=alert), läsbart personNamn, axe 0.
+ * bara sessioner-med-rader, kommande event → lugnt läge UTAN att REGISTRET
+ * fetchar (se [ÄNDRAT, TASK-416.16]-noten vid testet: sidan gör sedan den
+ * skivan EN egen get-attendance-begäran vid sidmount, oberoende av registret),
+ * tom-state, fel (role=alert), läsbart personNamn, axe 0.
  */
 
 const GET_EVENT = /\/functions\/v1\/get-event\?/;
@@ -86,8 +88,10 @@ function attRow(overrides: Row = {}): Row {
 }
 
 /**
- * Mockar sidans EF-anrop. get-attendance mockas ALLTID (räknaren bevisar att den
- * INTE anropas för kommande event). Returnerar räknaren för get-attendance-anrop.
+ * Mockar sidans EF-anrop. get-attendance mockas ALLTID (räknaren bevisar VILKEN
+ * konsument som anropar den — sedan TASK-416.16 sidans egen sidmount-prefetch,
+ * inte REGISTRET, för ett kommande event). Returnerar räknaren för
+ * get-attendance-anrop.
  */
 async function setup(
   // biome-ignore lint/suspicious/noExplicitAny: Playwright Page type i test-scope.
@@ -218,9 +222,21 @@ test.describe('Närvaro-registret på eventsidan (task-18.9)', () => {
     await expect(sektion.getByText('100 %')).toBeVisible();
   });
 
-  test('kommande event (Planerat) → lugnt läge, get-attendance anropas ALDRIG', async ({
+  test('kommande event (Planerat) → lugnt läge; REGISTRET fetchar inte (TASK-416.16: EN begäran kommer ändå, från sidmount-prefetchen)', async ({
     page,
   }) => {
+    // [ÄNDRAT, TASK-416.16] Testet hette "...get-attendance anropas ALDRIG"
+    // och asserterade `toBe(0)` — sant fram till denna skiva. `EventDetail.tsx`
+    // prefetchar sedan TASK-416.16 get-attendance OVILLKORLIGT vid sidmount
+    // för Check-in-avsiktens skull (ADR-078 beslut 3): check-in sker vid
+    // dörren MEDAN eventet pågår, dvs. troligen medan Status fortfarande är
+    // "Planerat" — att vänta med prefetchen till Genomfört hade gjort den
+    // verkningslös just när den behövs. Den ursprungliga invarianten denna
+    // rad skyddade (REGISTRET, `NarvaroRegister`, fetchar aldrig av EGEN
+    // kraft för ett kommande event) STÅR ORÖRD — assertionerna ovan
+    // (tomläge synligt, ingen tabell, ingen "Total närvaro") bevisar
+    // fortfarande exakt det. Det som ändrats är att en ANNAN, avsiktlig
+    // konsument (sidans egen prefetch, inte registret) nu gör EN begäran.
     const { attendanceCalls } = await setup(page, eventMock({ status: 'Planerat' }), []);
     await page.goto(`/event/${EVENT_ID}`);
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible();
@@ -233,8 +249,9 @@ test.describe('Närvaro-registret på eventsidan (task-18.9)', () => {
     await expect(tomlage).toHaveCSS('text-align', 'center');
     await expect(sektion.getByText('Total närvaro')).toHaveCount(0);
     await expect(sektion.getByRole('table')).toHaveCount(0);
-    // Kommande event får ALDRIG anropa get-attendance (noll e2e-rippel-motivet).
-    expect(attendanceCalls()).toBe(0);
+    // EN begäran — TASK-416.16s sidmount-prefetch (EventDetail.tsx), INTE
+    // registret (som fortfarande aldrig fetchar av egen kraft här ovan).
+    expect(attendanceCalls()).toBe(1);
   });
 
   test('genomfört men inga deltaganden → vänlig tom-text (ej fel)', async ({ page }) => {
