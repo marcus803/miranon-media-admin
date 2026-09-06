@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 02:37'
+updated_date: '2026-09-06 02:46'
 labels:
   - ready-for-agent
 dependencies:
@@ -120,4 +120,47 @@ grön i omkörning (25,8 s mot 30 s tak, marginell sedan tidigare).
 Staging-sviten kördes lokalt mot egen dev-server på **port 4173** under
 `scripts/staging-semaphore.sh` (5173 hölls av huvudkatalogens dev-server, och en
 worktree-deriverad port saknar CORS-eko från staging-EF:erna — `#2362` § divergens 4).
+
+## Biome-rättning på PR #2365 (CI-rött, TASK-402.4)
+
+CI:s Lint + TypeCheck-jobb (run 34007023244, jobb 101416028236) fällde
+Biome check med "Found 2 errors" trots att detta korts implementation
+notes påstod exit 0. Rättat i commit a9ce3a34 (gren
+task/402.4-kontoutdraget-in-i-steget, tidigare head 455783e4).
+
+**De två felen (rena formatfel, inga lint-regelbrott):**
+- tests/api/importminne.test.ts:106 — minnesrad()-signaturen var 106
+  tecken, över biome.json:s lineWidth 100.
+- tests/e2e/betalningar-import-bekraftelsesteget.staging.test.ts —
+  fem ställen (rad ~412, ~450, ~477, ~542, ~560) där await
+  expect(...)-kedjor överskred bredden.
+
+Fixat med `npx @biomejs/biome check --write` scopat till exakt de två
+filerna. Diffen är ren radbrytning (verifierad manuellt, ingen
+assertion/sträng/logik ändrad).
+
+**Varför lokala 0:an, mätt inte gissat:** git-historiken visar att
+båda filerna bara rördes i EN commit vardera (27c5911a resp.
+0869974d) och aldrig ändrades igen — de två docs-commits som följde
+(0c89e3b0, 455783e4) rörde bara AMENDERING-filen och kortets notes.
+Radlängden 106 > lineWidth 100 är entydig och versions-oberoende:
+min egen körning med samma (stale, 2.5.7 mot lockfilens 2.5.11)
+node_modules som huvudkatalogen delar reproducerade CI:s exakta
+"Found 2 errors" på samma två filer — så versions-mismatchen
+(package.json ^2.5.11 vs installerad 2.5.7) FÖRKLARAR INTE
+divergensen, den ger samma resultat i båda riktningar. Den mest
+sannolika förklaringen är att den lokala körningen som gav 0 skedde
+mot en tidigare version av filernas innehåll och aldrig kördes om
+efter den sista redigeringen — men det går inte att bevisa retroaktivt
+ur git-historiken ensam; ingen omskriven historik (reflog visar en
+enda "update by push").
+
+Grindar efter rättningen (exitkod läst separat): `npx @biomejs/biome
+check .` 0 (18 varningar/83 infos ofärgade, samma som förexisterande) ·
+`npm run typecheck` 0 · `node scripts/check-langa-streck.mjs` 0 (323
+filer, 0 ofångade) · `npm run build` 0. Den formaterade e2e-filen
+kördes INTE om mot staging — diffen är ren radbrytning, ingen
+assertion/text ändrad.
+
+PR:en kvarstår draft, ej armerad.
 <!-- SECTION:NOTES:END -->
