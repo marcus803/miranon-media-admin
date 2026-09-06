@@ -424,8 +424,26 @@ async function oppna(
     // tidpunkt i det förflutna ("Cannot fast-forward to the past", mätt), och
     // en fast literal driver ifrån webbläsarens klocka så fort testet tar
     // några sekunder.
+    //
+    // MARGINALEN ÄR 2 s, INTE 500 ms, OCH DET ÄR EN MÄTT RÄTTELSE (TASK-402.8
+    // slutvarvet). Mellan `evaluate` som läser tiden och `pauseAt` som
+    // konsumerar den ligger två CDP-tur-och-retur; tar de tillsammans mer än
+    // marginalen är målpunkten redan passerad och anropet FÄLLER. 500 ms höll
+    // på en tom maskin och sprack på en belastad — `ipad — körningen pågår`
+    // föll på exakt det 2026-09-06, samma körning där desktop-varianten och
+    // trettio andra fall var gröna. Flaket var DORMANT så länge de här fyra
+    // lägena stod `test.fixme`; att ta bort dem gjorde det levande, och en
+    // grind som faller på maskinens humör bryter mot `CONTRIBUTING.md`
+    // § Rött-först lika säkert som ett riktigt fel.
+    //
+    // ATT FRAMÅTSPOLA 2 s ÄR OFARLIGT HÄR, och det är villkorat: pausen sker
+    // FÖRE klicket på Registrera, alltså innan simuleringens 350 ms-timers
+    // ens skapats, och `data=fixtur` håller `useOppnaBetalningar` avstängd
+    // (`enabled: false`) så ingen refetch-timer finns att spola förbi. Flyttas
+    // pausen någonsin till EFTER klicket måste marginalen omprövas — då
+    // spolar den genom körningen den ska frysa.
     const nu = await page.evaluate(() => Date.now());
-    await page.clock.pauseAt(new Date(nu + 500));
+    await page.clock.pauseAt(new Date(nu + 2_000));
   }
   return form;
 }
