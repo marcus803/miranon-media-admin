@@ -398,7 +398,7 @@ async function importera(page: Page): Promise<Mockar> {
 
   // [TASK-412] Importen är en DIALOG bakom ⋯-menyn (Marcus prod-granskning
   // 2026-09-06) — INTE längre en egen knapp i sidhuvudet med en inline-panel.
-  await page.getByRole('button', { name: 'Fler val' }).click();
+  await page.getByRole('button', { name: 'Fler val för filtreringen' }).click();
   await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
   const panel = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
   await expect(panel).toBeVisible();
@@ -662,7 +662,7 @@ test.describe('TASK-412 — importen som dialog', () => {
       timeout: 15_000,
     });
 
-    const flerVal = page.getByRole('button', { name: 'Fler val' });
+    const flerVal = page.getByRole('button', { name: 'Fler val för filtreringen' });
     await flerVal.click();
     await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
 

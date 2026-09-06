@@ -1616,7 +1616,7 @@ export function BetalningsInkorg() {
               trigger={
                 <AriaButton
                   ref={importKnappRef}
-                  aria-label="Fler val"
+                  aria-label="Fler val för filtreringen"
                   className="relative inline-flex shrink-0 items-center justify-center rounded-full bg-bg-muted p-2.5 hover:bg-bg-emphasized motion-safe:transition-colors"
                 >
                   <Ellipsis aria-hidden="true" size={18} className="shrink-0" />
