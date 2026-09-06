@@ -1,11 +1,12 @@
 import { useQuery } from '@tanstack/react-query';
-import { Link } from '@tanstack/react-router';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { AlertTriangle, CalendarRange, Clock, X } from 'lucide-react';
 import { parseAsString, parseAsStringEnum, useQueryState } from 'nuqs';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Button as AriaButton,
   Input as AriaInput,
+  Checkbox,
   Disclosure,
   DisclosurePanel,
   Heading,
@@ -43,6 +44,16 @@ import {
   sammanfattaBetalningar,
   tolkaTakfel,
 } from './inkorg-harledningar';
+import {
+  allaSynligaMarkerade,
+  arBetalningsfamiljen,
+  lasMarkering,
+  markeraAllaSynliga,
+  rensaMarkering,
+  saneraMarkering,
+  sparaMarkering,
+  vaxlaMarkering,
+} from './markerings-minne';
 import { RegistreraForm, type RegistreringsUtfall } from './RegistreraForm';
 import { RegistreratNuBlock, type SessionsRad, type VantandeKvitto } from './RegistreratNuBlock';
 import { SwishImport } from './SwishImport';
@@ -210,6 +221,273 @@ function tomtText(period: PeriodFilter): string {
   if (period === 'upcoming') return 'Inga kvarvarande betalningar på kommande event.';
   if (period === 'past') return 'Inga kvarvarande betalningar på tidigare event.';
   return 'Inga kvarvarande betalningar.';
+}
+
+/* ═══════════════════════════ MARKERA-LÄGET (TASK-402.1) ═══════════════════════════
+ *
+ * FORMEN ÄR EVENTDETALJENS, INTE EN NY (S121 Del 2 beslut 6, PRD § Markera-
+ * läget i inkorgen): `Deltagare.tsx` § MARKERA/AVBRYT-KNAPPEN, § MARKERA-
+ * LÄGETS TILLSTÅNDSMASKIN, § BATCH-BAREN och § MARKERBART kort är förlagan,
+ * läst i sin helhet innan en rad skrevs här. Marcus mandat, ordagrant om
+ * beslut 6: *"Din rek, A."*
+ *
+ * ═══ VARFÖR FORMEN ÄRVS MEN INTE KODEN ═══
+ * `useMarkeringsLage` och `MarkeringsBatchBar` bor privat i `Deltagare.tsx`
+ * och är BUNDNA till eventsidan på tre punkter som inte går att generalisera
+ * bort utan att röra den promoverade eventytan (`ADR-103` B4:s ariaSnapshot-
+ * grind): primärknappen navigerar till `/event/$eventId/atgarder` med ett
+ * `eventId`, urvalet skickas i history-state, och `markeraAlla` ERSÄTTER
+ * urvalet i stället för att utöka det. Inkorgen har inget event, skickar
+ * urvalet i sök-parametern `ids`, och måste utöka (se `markeraAllaSynliga`s
+ * docblock i `markerings-minne.ts`).
+ *
+ * En utbrytning till en delad primitiv hade alltså krävt att eventsidans
+ * navigation, dess state-kanal och dess "alla"-semantik alla blev
+ * konfigurerbara — tre parametrar för två konsumenter, och en ändring i den
+ * promoverade eventytan i ett pass som äger inkorgen. Formen kopieras därför
+ * MEDVETET, med förlagan namngiven vid varje bit, och AC #1:s DOM-jämförelse
+ * är mekanismen som håller dem i synk. En TREDJE konsument gör utbrytningen
+ * rätt — samma regel som filens egen `PERIOD_FILTER`-kopia redan bär.
+ *
+ * ═══ TVÅ AVSIKTLIGA AVSTEG FRÅN FÖRLAGAN, BÅDA UR KORTETS EGNA AC ═══
+ *  1. ETIKETTEN är "Markera alla synliga", inte "Markera alla" (beslut 6):
+ *     inkorgen har sök och filter, så "alla" vore tvetydigt.
+ *  2. RÄKNAREN säger "N markerade", inte "N av M markerade" (AC #2): M vore
+ *     antalet SYNLIGA kandidater, och när Lottas markerade rader är
+ *     bortfiltrerade hade räknaren läst "3 av 0 markerade". AC #2 finns
+ *     exakt för det fallet. Elementet, rollen, `aria-live`, `aria-atomic`,
+ *     `sr-only` och placeringen i barens högerkant är förlagans, oförändrade.
+ *
+ * ═══ ETT AVSTEG I SEMANTIK, INTE I FORM ═══
+ * Eventdetaljens `stang()` NOLLSTÄLLER urvalet. Inkorgens gör det inte:
+ * PRD § Markera-läget räknar upp de tre tillfällen minnet rensas — "vid
+ * registrering, Rensa och navigation utanför betalningsfamiljen" — och Esc är
+ * inte ett av dem. Att lägga till ett fjärde hade brutit AC #4:s löfte om att
+ * tillbaka-pilen återvänder med markeringen kvar. AC #1 mäter FORM i DOM;
+ * detta är livslängd, som AC #5 äger.
+ */
+
+/**
+ * MARKERA/AVBRYT-KNAPPEN — `Deltagare.tsx` § MARKERA/AVBRYT-KNAPPEN, samma
+ * EMPHASIS-PAR (primary solid ⇄ primary subtle med kryss-glyf) och samma två
+ * `aria-label`. Etiketterna namnger inkorgens objekt ("betalningar") i stället
+ * för eventsidans ("anmälningar"): det tillgängliga namnet ska säga vad som
+ * markeras, och det är inte samma sak på de två ytorna.
+ */
+function MarkeraKnapp({
+  aktivt,
+  onOppna,
+  onStang,
+  buttonRef,
+}: {
+  aktivt: boolean;
+  onOppna: () => void;
+  onStang: () => void;
+  buttonRef: React.RefObject<HTMLButtonElement | null>;
+}) {
+  return aktivt ? (
+    <Button
+      ref={buttonRef}
+      intent="primary"
+      emphasis="subtle"
+      size="sm"
+      aria-label="Avbryt markering"
+      onPress={onStang}
+    >
+      <X aria-hidden="true" size={14} className="shrink-0" />
+      Avbryt
+    </Button>
+  ) : (
+    <Button
+      ref={buttonRef}
+      intent="primary"
+      size="sm"
+      aria-label="Markera betalningar"
+      onPress={onOppna}
+    >
+      Markera
+    </Button>
+  );
+}
+
+/**
+ * ÅTGÄRDSRADEN — `Deltagare.tsx` § BATCH-BAREN, form för form.
+ *
+ * GEOMETRIN ÄR KONSTANT ÖVER LÄGENA (förlagans TASK-145.3 AC #1): raden
+ * renderas ALLTID med Markera-knappen i vänsterkanten, och `aktivt` styr bara
+ * om de tre övriga kontrollerna VÄXER UT åt höger på samma rad. Monterades
+ * hela raden först när läget slogs på skulle listan under hoppa nedåt — en
+ * vertikal förskjutning där förlagan mätte fram en horisontell utvidgning.
+ *
+ * VIKTKLASSERNA ÄR FÖRLAGANS (DESIGN-SYSTEM-SPEC §19): primärhandlingen solid
+ * `primary`, "Markera alla synliga" neutral `secondary`, "Rensa" lågviktad
+ * `ghost` som dyker upp först när det finns något att rensa.
+ *
+ * `data-testid` DELAS MEDVETET med förlagan (`markering-batchbar`,
+ * `markering-live`). De två ytorna kan aldrig renderas samtidigt, så en krock
+ * är omöjlig, och AC #1:s DOM-jämförelse blir en fråga om samma nyckel på två
+ * sidor i stället för två namn som ska hållas i synk för hand.
+ */
+function MarkeringsAtgardsRad({
+  antal,
+  allaSynligaValda,
+  onRegistrera,
+  onMarkeraAllaSynliga,
+  onRensa,
+  markeraKnapp,
+  aktivt,
+}: {
+  antal: number;
+  allaSynligaValda: boolean;
+  onRegistrera: () => void;
+  onMarkeraAllaSynliga: () => void;
+  onRensa: () => void;
+  /** Markera/Avbryt-knappen, förankrad i radens vänsterkant. Renderas i BÅDA
+      lägena — se § GEOMETRIN ovan. */
+  markeraKnapp: React.ReactNode;
+  /** Markera-läget på/av. `false` ⇒ enbart `markeraKnapp` syns. */
+  aktivt: boolean;
+}) {
+  return (
+    <div data-testid="markering-batchbar" className="flex flex-wrap items-center gap-2">
+      {markeraKnapp}
+      {aktivt && (
+        <Button intent="primary" size="sm" isDisabled={antal === 0} onPress={onRegistrera}>
+          {`Registrera ${antal}`}
+        </Button>
+      )}
+      {aktivt && (
+        <Button
+          intent="secondary"
+          size="sm"
+          isDisabled={allaSynligaValda}
+          onPress={onMarkeraAllaSynliga}
+        >
+          Markera alla synliga
+        </Button>
+      )}
+      {aktivt && antal > 0 && (
+        <Button intent="ghost" size="sm" onPress={onRensa}>
+          Rensa
+        </Button>
+      )}
+      {/* RÄKNAREN (AC #2). Seende läser talet i primärknappens egen etikett
+          ("Registrera 3"), skärmläsaren får det här — samma arbetsfördelning
+          som förlagan, där knappen heter "Åtgärder" och räknaren därför är den
+          enda bäraren. `polite`: urvalet är löpande arbete, aldrig ett avbrott
+          värt assertive. Villkorad på `aktivt` av förlagans skäl: en
+          `role="status"` som står och säger "0 markerade" när ingen markerar är
+          brus i skärmläsaren.
+
+          TALET ÄR HELA URVALET, aldrig urvalet-inom-vyn — det är precis det AC
+          #2 mäter: filtrerar Lotta bort sina markerade rader ska räknaren
+          fortfarande säga tre. */}
+      {aktivt && (
+        <span
+          data-testid="markering-live"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          className="sr-only"
+        >
+          {`${antal} markerade`}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/**
+ * MARKERA-LÄGETS TILLSTÅNDSMASKIN — `Deltagare.tsx` § MARKERA-LÄGETS
+ * TILLSTÅNDSMASKIN, med minnet inkopplat.
+ *
+ * ═══ URVALET STARTAR UR MINNET, OCH DET ÄR HELA POÄNGEN ═══
+ * AC #4: tillbaka-pilen från bekräftelsesteget ska återvända till inkorgen
+ * "med markeringen kvar". Steget är en EGEN route (un-nestad med avsikt), så
+ * inkorgen unmountas vid hoppet och monteras om vid returen. Både urvalet OCH
+ * lägets på/av-tillstånd läses därför ur `markerings-minne.ts` vid mount: ett
+ * icke-tomt minne betyder att Lotta står mitt i en markering, och då ska hon
+ * mötas av sina kryss, inte av en knapp som säger "Markera".
+ *
+ * ═══ SANERINGEN KÖRS ALDRIG FÖRE HÄMTNINGEN ═══
+ * Förlagan sanerar mot kandidatmängden vid varje ändring och NOLLSTÄLLER när
+ * mängden är tom. Här vore det fel: mellan mount och EF-svaret är
+ * `markerbaraIds` tom därför att svaret inte kommit än, inte därför att det
+ * inte finns något att markera — en sanering i det fönstret hade raderat
+ * precis det urval `ids`-hoppet just bar tillbaka. `harData` skiljer "inga
+ * öppna betalningar" från "vet inte än", och saneringen väntar på det.
+ *
+ * ═══ MÄNGDEN ÄR ALLA MARKERBARA, ALDRIG DE SYNLIGA ═══
+ * AC #2: markeringen bevaras över sök och filter. Saneras urvalet mot vyn
+ * försvinner precis de rader Lotta plockat från ett annat event i samma stund
+ * hon filtrerar om.
+ */
+function useInkorgsMarkering(markerbaraIds: readonly string[], harData: boolean) {
+  const [aktivt, setAktivt] = useState(() => lasMarkering().length > 0);
+  const [valda, setValda] = useState<ReadonlySet<string>>(() => new Set(lasMarkering()));
+
+  /* Nyckel-strängen och inte arrayen som beroende: `markerbaraIds` är en ny
+     array vid varje render (den härleds med `map`), och effekten ska köra på
+     INNEHÅLLET. Samma idiom, samma skäl, som förlagans `kandidatNyckel`. */
+  const markerbarNyckel = markerbaraIds.join('|');
+  useEffect(() => {
+    if (!harData) return;
+    const kvar = markerbarNyckel === '' ? [] : markerbarNyckel.split('|');
+    setValda((nu) => {
+      if (nu.size === 0) return nu;
+      const sanerat = saneraMarkering(nu, kvar);
+      // Samma identitets-vakt som förlagan: utan den hade varje render skapat
+      // ett nytt `Set` och loopat.
+      return sanerat.length === nu.size ? nu : new Set(sanerat);
+    });
+  }, [harData, markerbarNyckel]);
+
+  // Minnet speglar urvalet, alltid. En egen effekt och inte ett anrop inuti
+  // varje handlare: då finns exakt EN skrivväg, och ett urval som ändras av
+  // saneringen ovan glöms aldrig bort.
+  useEffect(() => {
+    sparaMarkering(valda);
+  }, [valda]);
+
+  const stang = useCallback(() => setAktivt(false), []);
+
+  /* Esc lämnar läget (förlagans byggkrav 7). Dokument-nivå: läget äger hela
+     listan, och fokus kan stå på vilket kort som helst när Lotta vill backa
+     ur. `defaultPrevented`-vakten är inkorgens egen: här kan en `Modal` vara
+     öppen samtidigt (Ångra-dialogen i granskningsblocket), och Esc tillhör då
+     dialogen. URVALET RÖRS INTE — se § ETT AVSTEG I SEMANTIK ovan. */
+  useEffect(() => {
+    if (!aktivt) return;
+    const vidTangent = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) stang();
+    };
+    document.addEventListener('keydown', vidTangent);
+    return () => document.removeEventListener('keydown', vidTangent);
+  }, [aktivt, stang]);
+
+  return {
+    aktivt,
+    valda,
+    antal: valda.size,
+    oppna: useCallback(() => setAktivt(true), []),
+    stang,
+    vaxla: useCallback(
+      (id: string, vald: boolean) => setValda((nu) => vaxlaMarkering(nu, id, vald)),
+      [],
+    ),
+    markeraAllaSynliga: useCallback(
+      (synligaIds: readonly string[]) => setValda((nu) => markeraAllaSynliga(nu, synligaIds)),
+      [],
+    ),
+    /** Rensa-knappen — ett av PRD:ns tre rensningstillfällen (AC #5). Minnet
+        följer med via spegel-effekten ovan; `rensaMarkering()` här är
+        bältet-och-hängslen för det fall lagringen råkar bära en post
+        effekten inte hunnit skriva över. */
+    rensa: useCallback(() => {
+      setValda(new Set());
+      rensaMarkering();
+    }, []),
+  };
 }
 
 export function BetalningsInkorg() {
@@ -527,6 +805,90 @@ export function BetalningsInkorg() {
   // Räkningen är oförändrad - se funktionens docblock för de två talens
   // exakta innebörd.
   const sammanfattning = useMemo(() => sammanfattaBetalningar(rader), [rader]);
+
+  /* ═══════════════════ MARKERA-LÄGETS TVÅ MÄNGDER (TASK-402.1) ═══════════════════
+   *
+   * DE ÄR OLIKA, OCH SKILLNADEN ÄR HELA AC #2. `markerbara` är varje rad som
+   * ÖVERHUVUDTAGET får ligga i urvalet — hela datamängden, ofiltrerad, utan de
+   * klara raderna (AC #3: "klara rader saknar kryss och kan inte markeras").
+   * Den mängden bär saneringen, så en markerad rad överlever att Lotta byter
+   * filter eller söker. `synligaMarkerbara` är de markerbara raderna i den
+   * mängd som faktiskt renderas just nu, och den bär ENBART "Markera alla
+   * synliga" och dess `isDisabled`.
+   *
+   * SÖKLÄGET MÅSTE FILTRERA SJÄLVT. `rankaTraffar` returnerar BÅDE öppna och
+   * klara rader (klara sist, se dess egen sorteringsnyckel) och renderar dem
+   * alla som kort — till skillnad från gruppvyn, där `grupperaPerEvent` redan
+   * delat upp dem i `oppna`/`klara`. Utan `!rad.klar` här hade en fullbetald
+   * rad fått ett kryss så fort Lotta sökte fram den. */
+  const markerbaraIds = useMemo(
+    () => rader.filter((rad) => !rad.klar).map((rad) => rad.nyckel),
+    [rader],
+  );
+  const synligaMarkerbara = useMemo(
+    () =>
+      soker
+        ? traffar.filter((rad) => !rad.klar)
+        : [...vy.kommande, ...vy.tidigare].flatMap((g) => g.oppna),
+    [soker, traffar, vy],
+  );
+  const synligaMarkerbaraIds = useMemo(
+    () => synligaMarkerbara.map((rad) => rad.nyckel),
+    [synligaMarkerbara],
+  );
+
+  /* `oppna !== undefined` OCH INTE `rader.length > 0`: skillnaden är precis
+     den `useInkorgsMarkering` § SANERINGEN beskriver — svaret har kommit och
+     var tomt, kontra svaret har inte kommit än. */
+  const markering = useInkorgsMarkering(markerbaraIds, oppna !== undefined);
+
+  /* Fokus-retur när läget stängs (förlagans § "alla vägar ut"): knappen Lotta
+     tryckte på ersattes av sin motsats i DOM:en, så utan detta faller fokus
+     till `document.body` och en skärmläsaranvändare tappar sin plats. */
+  const markeraKnappRef = useRef<HTMLButtonElement>(null);
+  const varMarkeraLageAktivt = useRef(markering.aktivt);
+  useEffect(() => {
+    if (varMarkeraLageAktivt.current && !markering.aktivt) markeraKnappRef.current?.focus();
+    varMarkeraLageAktivt.current = markering.aktivt;
+  }, [markering.aktivt]);
+
+  /* ═══ NAVIGATION UTANFÖR BETALNINGSFAMILJEN RENSAR MINNET (AC #5) ═══
+   *
+   * Tredje och sista rensningstillfället. Vakten sitter i inkorgens UNMOUNT
+   * och läser sökvägen DÄR, eftersom det är den enda punkt som vet både att
+   * Lotta lämnat inkorgen och vart hon tog vägen: TanStack Router har redan
+   * skrivit `history` när React committar unmounten, så `window.location.
+   * pathname` är MÅLET, inte ursprunget. Går hon till bekräftelsesteget
+   * (`/mer/betalningar/registrera`, samma familj) rensas ingenting — det är
+   * hela AC #4.
+   *
+   * TOM BEROENDELISTA MED AVSIKT: cleanup ska köra vid faktisk unmount, inte
+   * vid varje ändring. I StrictMode körs den dessutom en gång i onödan direkt
+   * efter mount, och då är sökvägen fortfarande inkorgens — vakten gör då
+   * ingenting, vilket är rätt.
+   *
+   * BEVISAS I STAGING-E2E, inte antaget (AC #5): timing-antagandet om
+   * `history` kontra Reacts commit är en egenskap hos routern, och en sådan
+   * ska mätas i en riktig webbläsare. Se
+   * `tests/e2e/betalningar-inkorg-markera-lage.staging.test.ts`. */
+  useEffect(() => {
+    return () => {
+      if (!arBetalningsfamiljen(window.location.pathname)) rensaMarkering();
+    };
+  }, []);
+
+  /* "Registrera N" — den enda utgången ur läget mot en handling.
+     ORDNINGEN ÄR RADERNAS, inte urvalets insättningsordning: `ids` blir
+     deterministisk oavsett i vilken ordning Lotta bockade. Steget sorterar
+     ändå om efter hämtningen (`Bekraftelsesteget.tsx` § ORDNINGEN ÄR
+     HÄMTNINGENS), så detta är för läsbarheten i URL:en och för testbarheten,
+     inte för renderingen. */
+  const navigate = useNavigate();
+  const registreraMarkerade = () => {
+    const ids = rader.filter((rad) => markering.valda.has(rad.nyckel)).map((rad) => rad.nyckel);
+    if (ids.length === 0) return;
+    void navigate({ to: '/mer/betalningar/registrera', search: { ids: ids.join(',') } });
+  };
 
   // ═══ ETT FÄRDIGT JOBB FRÅN EN TIDIGARE SESSION ÄR INTE DAGENS NYHET ═══
   //
@@ -1461,6 +1823,44 @@ export function BetalningsInkorg() {
         </div>
       )}
 
+      {/* ═══ ÅTGÄRDSRADEN, DIREKT OVANFÖR LISTAN (TASK-402.1) ═══
+          Förlagans placering: `Deltagare.tsx` renderar baren omedelbart ovanför
+          registret, inte i sidhuvudet. Samma här — raden hör till listan den
+          verkar på, och står därför under filtreringen och granskningsblocket.
+
+          VILLKORAD PÅ ATT DET FINNS NÅGOT ATT MARKERA. Förlagan löser samma sak
+          i sin hook (`kandidatNyckel === ''` ⇒ läget stänger sig självt "i
+          stället för att stå aktivt mot ingenting"); här är det uttryckt i
+          renderingen i stället, eftersom inkorgens hook aldrig får nollställa
+          på en tom mängd (den kan betyda "vet inte än" — se hookens
+          § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll. */}
+      {markerbaraIds.length > 0 && (
+        <div className="px-4">
+          <MarkeringsAtgardsRad
+            aktivt={markering.aktivt}
+            antal={markering.antal}
+            allaSynligaValda={allaSynligaMarkerade(markering.valda, synligaMarkerbaraIds)}
+            onRegistrera={registreraMarkerade}
+            onMarkeraAllaSynliga={() => markering.markeraAllaSynliga(synligaMarkerbaraIds)}
+            onRensa={markering.rensa}
+            markeraKnapp={
+              <MarkeraKnapp
+                aktivt={markering.aktivt}
+                /* Ett öppet radformulär stängs när läget slås på: i läget
+                   BOCKAR ett tryck på raden (AC #1), så ett formulär som stod
+                   kvar hade varit en yta utan väg ut. */
+                onOppna={() => {
+                  setOppenRad(null);
+                  markering.oppna();
+                }}
+                onStang={markering.stang}
+                buttonRef={markeraKnappRef}
+              />
+            }
+          />
+        </div>
+      )}
+
       {soker ? (
         <div className="flex flex-col gap-4 px-4">
           {/* HUSETS NUMERUS-FORM (Marcus 2026-09-01), samma grammatik som
@@ -1501,6 +1901,19 @@ export function BetalningsInkorg() {
                   onOppna={() => setOppenRad(rad.nyckel)}
                   onAvbryt={() => setOppenRad(null)}
                   onKlar={(resultat) => vidRegistrerad(rad, resultat)}
+                  markeraLage={markering.aktivt}
+                  /* AC #3 i sökläget: `rankaTraffar` blandar klara och öppna
+                     rader, så krysset villkoras på raden själv. En klar rad
+                     renderas i läget som ett inert kort — se kortets
+                     § MARKERA-LÄGETS TRE KORTFORMER. */
+                  kryss={
+                    rad.klar
+                      ? undefined
+                      : {
+                          vald: markering.valda.has(rad.nyckel),
+                          onChange: (vald) => markering.vaxla(rad.nyckel, vald),
+                        }
+                  }
                 />
               ))}
             </ul>
@@ -1589,6 +2002,14 @@ export function BetalningsInkorg() {
                       onOppna={() => setOppenRad(rad.nyckel)}
                       onAvbryt={() => setOppenRad(null)}
                       onKlar={(resultat) => vidRegistrerad(rad, resultat)}
+                      markeraLage={markering.aktivt}
+                      /* Ingen `rad.klar`-vakt behövs här: `grupperaPerEvent`
+                         har redan delat upp raderna, och `grupp.klara`
+                         renderas i sin egen hopfällda lista utan kort. */
+                      kryss={{
+                        vald: markering.valda.has(rad.nyckel),
+                        onChange: (vald) => markering.vaxla(rad.nyckel, vald),
+                      }}
                     />
                   ))}
                 </ul>
@@ -1642,7 +2063,86 @@ type KortProps = {
   onOppna: () => void;
   onAvbryt: () => void;
   onKlar: (resultat: RegistreringsUtfall) => void;
+  /** [TASK-402.1] Markera-läget på/av för HELA listan. */
+  markeraLage?: boolean;
+  /** [TASK-402.1] Radens kryss. `undefined` i markera-läget betyder att raden
+      inte KAN markeras (AC #3) — se § MARKERA-LÄGETS TRE KORTFORMER. Ignoreras
+      helt när `markeraLage` är falskt. */
+  kryss?: { vald: boolean; onChange: (vald: boolean) => void };
 };
+
+/**
+ * Kortets INNEHÅLL — delat av alla tre kortformerna så formen aldrig kan driva
+ * isär (`Deltagare.tsx` § "Kortets INNEHÅLL — delat av båda lägena", samma
+ * skäl och samma konstruktion).
+ *
+ * `visaEvent` är den enda axeln som skiljer sökläget från gruppvyn; allt annat
+ * är identiskt över lägena med avsikt. Ingenting här är interaktivt, vilket är
+ * exakt det som gör hela kortet till en laglig kryssruta i markera-läget:
+ * L303:s "interaktivt bor aldrig i interaktivt" hålls utan ett enda undantag.
+ */
+function RadInnehall({ rad, visaEvent }: { rad: InkorgsRad; visaEvent?: boolean }) {
+  const saknas = rad.kvar ?? rad.betalning.saknas;
+  return (
+    <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+      <InitialAvatar namn={rad.namn} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <span className="font-medium text-body sm:truncate">{rad.namn}</span>
+        <span className="text-caption text-text-muted sm:truncate">
+          {visaEvent && rad.betalning.eventNamn ? `${rad.betalning.eventNamn} · ` : ''}
+          {/* LÖPANDE TEXT ⇒ BELOPPET FÖRST (Marcus 2026-09-01, samma
+              domänterm över alla betalningsytor): "1 500 kr kvar att
+              betala" läser som svenska efter eventnamnet, medan
+              etikett-först hade läst som en tabellrad i en mening.
+              Etikett-formen ("Kvar att betala" + högerställt värde) bär
+              panelen och anmälans detaljvy. */}
+          {saknas === null ? 'Pris saknas i basen' : `${visaKronor(saknas)} kr kvar att betala`}
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* ═══ EN PILL-ANATOMI, TVÅ BETYDELSER (Marcus dom 2026-09-01) ═══
+              Marcus såg "Förfallen" och "Obekräftad" sida vid sida HÄR och
+              kallade dem inkonsekventa. De var det på två sätt samtidigt:
+                • olika ANATOMI — "Förfallen" var en handrullad span med
+                  `rounded` (4 px) och kopparfärgad TEXT, "Obekräftad" en
+                  `StatusBadge` med `rounded-full` och default-text;
+                • TVÅ VARNINGSSIGNALER på samma rad — klocka OCH
+                  varningstriangel, i nästan samma kopparton.
+              Båda pillarna går nu genom `StatusBadge`, och regeln är MAX EN
+              VARNINGSSIGNAL PER RAD: "Förfallen" behåller warning/koppar
+              (en passerad deadline ÄR brådska), "Obekräftad" blir neutral
+              (den har ett eget bekräftelseflöde och är det normala läget
+              för en ny anmälan — inte samma allvar).
+              Se `StatusBadge.tsx` § TON_FORM för hela resonemanget. */}
+          {rad.forfallen && (
+            /* KLOCKAN BEHÅLLS via `ikon`-proppen: det är TIDEN som gått
+               fel, inte ett generellt larm. Tonen är kopparns och inte
+               guldets — `semantic.css` mappar warning till koppar, och den
+               är auktoriteten. Ikonens storlek sätts nu av skalsteget
+               (`sm` ⇒ 13), inte av anropet: samma 13 px som förut, men
+               omöjlig att sätta fel. */
+            <StatusBadge ton="warning" storlek="sm" ikon={Clock}>
+              Förfallen
+            </StatusBadge>
+          )}
+          {rad.obekraftad && (
+            <StatusBadge ton="neutral" storlek="sm">
+              Obekräftad
+            </StatusBadge>
+          )}
+          {rad.spegelSlapar && (
+            <span
+              className="inline-flex items-center gap-1 rounded border border-transparent bg-bg px-2 py-0.5 text-caption text-text-muted"
+              title="Basen har inte hunnit uppdateras än"
+            >
+              <AlertTriangle aria-hidden size={13} />
+              Basen släpar
+            </span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 /**
  * EN rad i inkorgen. Radhöjden hålls generös med avsikt: PRD berättelse 29
@@ -1661,9 +2161,9 @@ function BetalningsradKort({
   onOppna,
   onAvbryt,
   onKlar,
+  markeraLage = false,
+  kryss,
 }: KortProps) {
-  const saknas = rad.kvar ?? rad.betalning.saknas;
-
   /* ═══════════════════════════════════════════════════════════════════════
    * FOKUS-RETUR: ALLA VÄGAR UT UTOM DEN SOM MEDVETET GÅR ÅT ANNAT HÅLL
    * ═══════════════════════════════════════════════════════════════════════
@@ -1698,6 +2198,80 @@ function BetalningsradKort({
   function avbryt() {
     skaAterfaFokus.current = true;
     onAvbryt();
+  }
+
+  /* ═══════════════ MARKERA-LÄGETS TRE KORTFORMER (TASK-402.1) ═══════════════
+   *
+   * Förlagan är `Deltagare.tsx` § MARKERBART kort ("hela kortet ÄR
+   * kryssrutan") — rå RAC `Checkbox` per BorOverRad-precedenten, ingen
+   * `GridList` och ingen ny primitiv: kravet på aria-multiselectable-form
+   * uppfylls av N fristående kryssrutor med var sitt tillgängliga namn, och
+   * namnet kommer ur kortets egen text (namn · belopp · pillar). Det är exakt
+   * vad PRD berättelse 27 lovar skärmläsaranvändaren.
+   *
+   * TRE FORMER, INTE TVÅ:
+   *   1. `markeraLage && kryss`  ⇒ KRYSS-KORT. Hela kortet är kryssrutan; ett
+   *      tryck bockar i stället för att öppna radformuläret (AC #1).
+   *   2. `markeraLage && !kryss` ⇒ INERT KORT. En KLAR rad i sökläget (AC #3:
+   *      "klara rader saknar kryss och kan inte markeras"). Den behåller sin
+   *      plats i träfflistan men bär varken kryss eller knapp: i markera-läget
+   *      är det enda man kan göra att bocka, och en ensam primärknapp mitt i
+   *      ett markera-läge hade varit en annan grammatik på samma yta. I
+   *      GRUPPVYN kan formen aldrig uppstå — `grupperaPerEvent` har redan
+   *      lagt de klara raderna i sin egen hopfällda lista.
+   *   3. annars ⇒ det OFÖRÄNDRADE kortet, med "Registrera betalning" och det
+   *      expanderbara radformuläret.
+   *
+   * ═══ VAD SOM ÄRVS RAKT AV, OCH VAD SOM MEDVETET INTE GÖR DET ═══
+   * ÄRVS: konstruktionen (rå `Checkbox`, hela kortet som klickyta), att kanten
+   * är WCAG 1.4.1-BÄRAREN, och att `contrast-more` bor i VARDERA grenen och
+   * aldrig i basklasserna — en ovillkorad `contrast-more:border-border-strong`
+   * hade vunnit över den gröna kanten och gett markerade kort en NEUTRAL kant i
+   * förhöjd kontrast, alltså hade precis de användare regeln finns för tappat
+   * markerings-signalen (`Deltagare.tsx` § review-fynd 6, samma fälla).
+   *
+   * ÄRVS INTE: den gröna PLATTANS styrka. Eventdetaljen bär `--mm-success-bg`
+   * rakt av; inkorgen bär `--mm-betalningskort-markerad-bg`, som är EXAKT
+   * samma token blandad 50 % mot ytan. Skälet är mätt och står i
+   * `components.css` § "Markerat betalningskort": Marcus dom 2026-09-01
+   * (*"du använder samma grön på markeringen som gröna notis-rutan, så
+   * notisrutan syns inte"*) gav inkorgen en egen, svagare tint där RAMEN bär
+   * signalen. RAMEN ÄR DÄRMED IDENTISK med förlagans:
+   * `--mm-betalningskort-markerad-border` ÄR `var(--mm-success)`, samma
+   * #606b57. Kontrasten mot tinten är uppmätt till 5,46:1 (WCAG 1.4.11 kräver
+   * 3:1), och plattan bär enligt samma mätning "i praktiken INGENTING för den
+   * färgblinde" — signalen som AC #1 handlar om är alltså oförändrad.
+   *
+   * RADIEN är inkorgens `rounded-2xl`, inte eventsidans `rounded-xl`: kortet
+   * är samma kort som raden bredvid, bara kryssbart. Ett kort som bytte radie
+   * när läget slogs på hade fått listan att se ut som två olika listor.
+   */
+  if (markeraLage) {
+    if (!kryss) {
+      return (
+        <li className="rounded-2xl border border-transparent bg-surface p-3 contrast-more:border-border-strong">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+            <RadInnehall rad={rad} visaEvent={visaEvent} />
+          </div>
+        </li>
+      );
+    }
+    return (
+      <li>
+        <Checkbox
+          data-testid="markerbart-betalningskort"
+          isSelected={kryss.vald}
+          onChange={kryss.onChange}
+          className={`flex cursor-pointer flex-col gap-3 rounded-2xl border p-3 sm:flex-row sm:flex-wrap sm:items-center ${
+            kryss.vald
+              ? 'border-(--mm-betalningskort-markerad-border) bg-(--mm-betalningskort-markerad-bg) contrast-more:border-(--mm-betalningskort-markerad-border)'
+              : 'border-transparent bg-surface contrast-more:border-border-strong'
+          }`}
+        >
+          <RadInnehall rad={rad} visaEvent={visaEvent} />
+        </Checkbox>
+      </li>
+    );
   }
 
   return (
@@ -1755,68 +2329,17 @@ function BetalningsradKort({
           återinförs bara där, eftersom bara DÄR delar raden utrymme med
           knappen). `self-start` på knappen förhindrar att `flex-col`s
           default `align-items: stretch` sträcker den till full bredd på
-          mobil — den ska stå på sin egen rad, inte bli en helbredds-yta. */}
+          mobil — den ska stå på sin egen rad, inte bli en helbredds-yta.
+
+          [TASK-402.1] KOMPOSITIONEN ÄR NU DELAD: avatar- och infokolumnen bor
+          i `RadInnehall` ovan, så kryss-kortet och det vanliga kortet aldrig
+          kan driva isär. Wrappern och den trailing knappen står kvar här,
+          eftersom bara denna form har en knapp. */}
       {/* `py-3` BORTTAGEN (pass 11): kortets egen `p-3` bär nu rytmen. Låg den
           kvar blev det 12 px kortpadding PLUS 12 px radpadding i topp och
           botten på varje kort. */}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-        <div className="flex min-w-0 items-center gap-3 sm:flex-1">
-          <InitialAvatar namn={rad.namn} />
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <span className="font-medium text-body sm:truncate">{rad.namn}</span>
-            <span className="text-caption text-text-muted sm:truncate">
-              {visaEvent && rad.betalning.eventNamn ? `${rad.betalning.eventNamn} · ` : ''}
-              {/* LÖPANDE TEXT ⇒ BELOPPET FÖRST (Marcus 2026-09-01, samma
-                  domänterm över alla betalningsytor): "1 500 kr kvar att
-                  betala" läser som svenska efter eventnamnet, medan
-                  etikett-först hade läst som en tabellrad i en mening.
-                  Etikett-formen ("Kvar att betala" + högerställt värde) bär
-                  panelen och anmälans detaljvy. */}
-              {saknas === null ? 'Pris saknas i basen' : `${visaKronor(saknas)} kr kvar att betala`}
-            </span>
-            <div className="flex flex-wrap items-center gap-2">
-              {/* ═══ EN PILL-ANATOMI, TVÅ BETYDELSER (Marcus dom 2026-09-01) ═══
-                  Marcus såg "Förfallen" och "Obekräftad" sida vid sida HÄR och
-                  kallade dem inkonsekventa. De var det på två sätt samtidigt:
-                    • olika ANATOMI — "Förfallen" var en handrullad span med
-                      `rounded` (4 px) och kopparfärgad TEXT, "Obekräftad" en
-                      `StatusBadge` med `rounded-full` och default-text;
-                    • TVÅ VARNINGSSIGNALER på samma rad — klocka OCH
-                      varningstriangel, i nästan samma kopparton.
-                  Båda pillarna går nu genom `StatusBadge`, och regeln är MAX EN
-                  VARNINGSSIGNAL PER RAD: "Förfallen" behåller warning/koppar
-                  (en passerad deadline ÄR brådska), "Obekräftad" blir neutral
-                  (den har ett eget bekräftelseflöde och är det normala läget
-                  för en ny anmälan — inte samma allvar).
-                  Se `StatusBadge.tsx` § TON_FORM för hela resonemanget. */}
-              {rad.forfallen && (
-                /* KLOCKAN BEHÅLLS via `ikon`-proppen: det är TIDEN som gått
-                   fel, inte ett generellt larm. Tonen är kopparns och inte
-                   guldets — `semantic.css` mappar warning till koppar, och den
-                   är auktoriteten. Ikonens storlek sätts nu av skalsteget
-                   (`sm` ⇒ 13), inte av anropet: samma 13 px som förut, men
-                   omöjlig att sätta fel. */
-                <StatusBadge ton="warning" storlek="sm" ikon={Clock}>
-                  Förfallen
-                </StatusBadge>
-              )}
-              {rad.obekraftad && (
-                <StatusBadge ton="neutral" storlek="sm">
-                  Obekräftad
-                </StatusBadge>
-              )}
-              {rad.spegelSlapar && (
-                <span
-                  className="inline-flex items-center gap-1 rounded border border-transparent bg-bg px-2 py-0.5 text-caption text-text-muted"
-                  title="Basen har inte hunnit uppdateras än"
-                >
-                  <AlertTriangle aria-hidden size={13} />
-                  Basen släpar
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
+        <RadInnehall rad={rad} visaEvent={visaEvent} />
         {!oppen && (
           <Button
             ref={triggerRef}
