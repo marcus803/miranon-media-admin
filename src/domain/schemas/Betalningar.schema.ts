@@ -194,8 +194,42 @@ export const OppenBetalningSchema = z.object({
   deadlineSlutbetalning: z.string().nullable(),
   /** Antal kvitton som väntar på att skickas för denna anmälan. */
   kvittonAttSkicka: z.number().int(),
+  /**
+   * [TASK-367] Aktiva inbetalningar för DENNA anmälan som saknar `kvitto_id`
+   * OCH saknar en köad/pågående jobbrad (`vantar`/`pagar`) — härlett i
+   * Postgres, VARJE hämtning, oberoende av flikens minne. Tomt array = inget
+   * kvitto att skicka. `belopp` är DEN ENSKILDA inbetalningens belopp (inte
+   * anmälans `summaInbetalt`), eftersom en anmälan kan bära flera
+   * inbetalningar som var för sig behöver ett eget kvitto.
+   *
+   * SKILD FRÅN `kvittonAttSkicka` OVAN (ETT TAL, redan köat) — namnen är
+   * medvetet olika (singular kontra plural-med-n) för att inte glida ihop:
+   * `kvittonAttSkicka` räknar det Lotta REDAN tryckt på och som jobbmotorn
+   * arbetar av; `oskickadeKvitton` är det som ÅTERSTÅR att köa. Se
+   * `hamta-oppna-betalningar/index.ts` § "KVITTO ATT SKICKA" för
+   * härledningen och S115 Del 2 för fyndet.
+   *
+   * `.default([])` ÄR AVSIKTLIGT, INTE EN GENVÄG: repots
+   * `page.route`-mockade e2e-svit (`betalningar-inkorg-*.staging.test.ts`
+   * m.fl.) bygger sina svar för hand, fält för fält, och känner INTE till
+   * detta nya fält. Utan defaulten fäller `OppnaBetalningarSchema.parse()`
+   * (`betalningsportar.ts`) VARJE sådant test med ett ZodError, trots att
+   * inget av dem testar just detta fält — en bakåtkompatibilitets-brytning
+   * som inte hör hemma i en `TASK-367`-fix. Med defaulten tolkas en saknad
+   * nyckel som "inget att skicka", exakt det EF:en själv svarar för en rad
+   * utan kandidater.
+   */
+  oskickadeKvitton: z
+    .array(
+      z.object({
+        inbetalningId: z.string(),
+        belopp: z.number(),
+      }),
+    )
+    .default([]),
 });
 export type OppenBetalning = z.infer<typeof OppenBetalningSchema>;
+export type OskickatKvitto = OppenBetalning['oskickadeKvitton'][number];
 
 export const OppnaBetalningarSchema = z.object({
   betalningar: z.array(OppenBetalningSchema),
