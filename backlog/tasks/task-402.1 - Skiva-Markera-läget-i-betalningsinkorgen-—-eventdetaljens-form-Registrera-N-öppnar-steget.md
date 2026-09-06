@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 00:53'
+updated_date: '2026-09-06 01:25'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,12 +22,12 @@ Lotta trycker Markera i betalningsinkorgen; varje öppen rad i alla eventgrupper
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Markera-läget i inkorgen är identiskt med eventdetaljens markera-läge i form (Markera-knappen, kryss per öppen rad, åtgärdsraden med 'Registrera N' primär, 'Markera alla synliga', 'Rensa', Esc avbryter, tryck på rad bockar) — mätt med DOM-jämförelse mot eventdetaljen, inte ögonmått
-- [ ] #2 Markeringen bevaras över sök och filter i inkorgen; räknaren 'N markerade' visar rätt tal även när alla markerade rader är bortfiltrerade
-- [ ] #3 Klara rader (inget kvar att betala) saknar kryss och kan inte markeras
-- [ ] #4 'Registrera N' navigerar till /mer/betalningar/registrera med ids satt till de markerade anmälningarnas ID:n; tillbaka-pilen från steget återvänder till inkorgen med markeringen kvar
-- [ ] #5 Markeringsminnet rensas vid registrering, vid Rensa och vid navigation utanför betalningsfamiljen — bevisat i staging-e2e
-- [ ] #6 Staging-e2e (samma skarv som inkorgens utskicksflödes-test) täcker markera, filtrera, räknare, Registrera N, Esc och tillbaka-pilen, med axe-svep utan fel; api-pure täcker markeringsminnets regler som rena funktioner
+- [x] #1 Markera-läget i inkorgen är identiskt med eventdetaljens markera-läge i form (Markera-knappen, kryss per öppen rad, åtgärdsraden med 'Registrera N' primär, 'Markera alla synliga', 'Rensa', Esc avbryter, tryck på rad bockar) — mätt med DOM-jämförelse mot eventdetaljen, inte ögonmått
+- [x] #2 Markeringen bevaras över sök och filter i inkorgen; räknaren 'N markerade' visar rätt tal även när alla markerade rader är bortfiltrerade
+- [x] #3 Klara rader (inget kvar att betala) saknar kryss och kan inte markeras
+- [x] #4 'Registrera N' navigerar till /mer/betalningar/registrera med ids satt till de markerade anmälningarnas ID:n; tillbaka-pilen från steget återvänder till inkorgen med markeringen kvar
+- [x] #5 Markeringsminnet rensas vid registrering, vid Rensa och vid navigation utanför betalningsfamiljen — bevisat i staging-e2e
+- [x] #6 Staging-e2e (samma skarv som inkorgens utskicksflödes-test) täcker markera, filtrera, räknare, Registrera N, Esc och tillbaka-pilen, med axe-svep utan fel; api-pure täcker markeringsminnets regler som rena funktioner
 <!-- AC:END -->
 
 ## Definition of Done
