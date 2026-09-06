@@ -52,9 +52,46 @@ registreraPersonregistretsFarskhet(queryClient);
  * `auth: undefined as unknown as AuthContextValue`-cast är TanStack-etablerat mönster.
  * InnerApp fyller den faktiska auth-context-värdet innan någon route kör.
  * (Alternativet `undefined!` non-null-assertion bryter biome's noNonNullAssertion-regel.)
+ *
+ * ═══ TASK-416.10 — defaultPreload: 'intent' (route-CHUNKEN hämtas på avsikt) ═══
+ *
+ * `@tanstack/router-core` sätter ingen default för `defaultPreload` (typdefaults
+ * `false`, källäst `node_modules/@tanstack/router-core/dist/esm/router.d.ts`;
+ * bekräftat live: `dist/esm/router.js` sätter `defaultPreloadDelay: 50` men
+ * aldrig `defaultPreload` — samma fynd som `src/lib/chunk-laddningsfel.ts`s
+ * docblock bokför). Utan denna rad hämtades route-chunken FÖRST vid klick,
+ * vilket gav två väntesteg i följd (chunk → data) trots att ADR-078 beslut 3
+ * redan värmer DATA på avsikt (`TabBar.tsx`s `varmPersonregister`). TanStack
+ * Routers egen preloading-guide (verifierad 2026-09-06,
+ * https://tanstack.com/router/latest/docs/framework/react/guide/preloading):
+ * *"The simplest way to preload routes for your application is to set the
+ * `defaultPreload` option to `intent` for your entire router."* — hover och
+ * `touchstart` på varje `<Link>` (t.ex. `TabBar.tsx`s fyra flikar) startar nu
+ * chunk-hämtningen, klicket väntar bara om hovern var för kort.
+ *
+ * `defaultPreloadStaleTime: 0` — samma guide: *"To let an external cache make
+ * the freshness decision, set `routerOptions.defaultPreloadStaleTime` ... to
+ * `0`."* Router-corets egen default är 30 s (`router.d.ts`
+ * `defaultPreloadStaleTime`), men den fristen gäller ROUTE-LOADERNS data, inte
+ * chunk-hämtningen (chunken laddas via `loadRouteChunk` oavsett stale-ålder;
+ * källäst `node_modules/@tanstack/router-core/dist/esm/load-client.js`
+ * — `staleAge` styr bara om en cachad LOADER-datamängd anses färsk). Ingen
+ * route har en loader i dag (grep, 2026-09-06) så fältet gör strukturellt
+ * ingenting ännu — men sätts explicit till 0 framåtriktat: dyker en loader
+ * upp senare ska React Querys `staleTime: 5 * 60 * 1000` ovan äga
+ * färskhetsbeslutet, inte routerns egna 30 s-fönster (och beslutet ska INTE
+ * tas via `ensureQueryData` i en loader — ADR-078 beslut 1 förbjuder att
+ * navigeringen väntar på data).
+ *
+ * `defaultPreloadDelay` lämnas OSATT — router-corets 50 ms-default
+ * (`router.d.ts`, verifierat ovan) matchar guidens egen standardvärde och
+ * täcker redan det ärliga hover-avsikts-fönstret; ingen mätning här visar
+ * skäl att avvika.
  */
 export const router = createRouter({
   routeTree,
+  defaultPreload: 'intent',
+  defaultPreloadStaleTime: 0,
   // Branded sektions-fallback för alla router-livscykelfel inkl. root-route-fel
   // (ADR-038; uppgraderad till SectionError i Session 16 K4-konsolideringen).
   // Sentry-capture sker via createRoot onCaughtError (main.tsx) — ingen onError
