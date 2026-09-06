@@ -125,6 +125,29 @@ type PropsGemensamt = {
    * satt ihop — *"Inga fält som ser frikopplade ut under en separatorlinje"*.
    */
   visaAvdelare?: boolean;
+  /**
+   * [TASK-411, RUNDA 2 — granskningsfynd, Marcus 2026-09-06: "Ja, begränsa
+   * till inkorgen."] Success-notisens botten. Default `'standard'` ⇒
+   * `MessageBox`-primitivens EGEN `--mm-messagebox-success-bg` (grön, samma
+   * hex som `--mm-success-bg`) — OFÖRÄNDRAT för de tre andra ytorna som
+   * delar detta formulär via `RegistreraYta` (`AnmalansBetalningar.tsx`,
+   * `PanelBetalningar.tsx`, `PersonBetalningar.tsx`): där ligger notisen
+   * INTE i ett grönt markerat kort, och en vit botten hade tystat signalen
+   * helt utan skäl.
+   *
+   * `'vit'` ger notisen en egen `--mm-surface`-botten i stället — bara
+   * INKORGEN sätter detta (`BetalningsInkorg.tsx`s öppna, gröna kort), där
+   * den 2026-09-01-kollisionen (grön notis mot grön platta) annars
+   * återkommer sedan TASK-411 gav kortet hela `--mm-success-bg` tillbaka.
+   *
+   * RUNDA 1 satte den vita botten OVILLKORAT för alla fyra ytor — ett
+   * granskningsfynd (runda 2) mätte att de tre andra ytorna oavsiktligt
+   * tappade sin gröna success-ton. Bocken/ikonens gröna färg (se `Ikon`
+   * nedan) rörs INTE av denna prop: den var ett rent BUGGFEL (ärvde
+   * kroppens neutrala textfärg oavsett yta) och gäller därför överallt,
+   * inte bara inkorgen.
+   */
+  notisBakgrund?: 'vit' | 'standard';
 };
 
 /**
@@ -259,7 +282,15 @@ export function RegistreraForm(props: Props) {
      kopia gör det inte). `lage` destruktureras ändå HÄR MED ETT DEFAULT-VÄRDE
      för JSX-jämförelser (`lage === 'redigera'`), där bara STRÄNGEN jämförs —
      ingen callback-typ är i spel där. */
-  const { rad, idag, betalsatt, onBetalsatt, onAvbryt, visaAvdelare = true } = props;
+  const {
+    rad,
+    idag,
+    betalsatt,
+    onBetalsatt,
+    onAvbryt,
+    visaAvdelare = true,
+    notisBakgrund = 'standard',
+  } = props;
   const lage = props.lage ?? 'registrera';
   /* ═══════════════════════════════════════════════════════════════════════
    * INGA SNABBVAL — FÄLTET ÄR FÖRIFYLLT MED RESTEN (Marcus dom 2026-09-01)
@@ -756,11 +787,14 @@ export function RegistreraForm(props: Props) {
         (() => {
           const { intent, Ikon } = UTFALL_FORM[utfall.ton];
           // TASK-411 (Marcus prod-fynd 2026-09-06): bara SUCCESS-utfallet
-          // (det öppna kortets gröna platta) får den vita botten och den
-          // gröna ikonen nedan. warning/info-boxarna är ORÖRDA — Marcus bad
-          // uttryckligen bara om success-notisen, och `over`/`delvis`/`okant`
-          // sitter aldrig inuti ett grönmarkerat kort.
+          // får den gröna ikonen (universellt buggfel-fix, se `Ikon` nedan)
+          // och — RUNDA 2, "begränsa till inkorgen" — den vita botten ENDAST
+          // när `notisBakgrund` är satt till `'vit'`. warning/info-boxarna
+          // är ORÖRDA i båda fallen — Marcus bad uttryckligen bara om
+          // success-notisen, och `over`/`delvis`/`okant` sitter aldrig
+          // inuti ett grönmarkerat kort.
           const arSuccess = intent === 'success';
+          const vitBotten = arSuccess && notisBakgrund === 'vit';
           return (
             <MessageBox
               intent={intent}
@@ -785,22 +819,39 @@ export function RegistreraForm(props: Props) {
                  länge den är öppen bor avvikelsen på den ENDA yta han pekade
                  på.
 
-                 FÄRGKROCKEN (fynd 2) ÄR TILLBAKA, LÖST PÅ ANNAT HÅLL
-                 [TASK-411, Marcus prod-fynd 2026-09-06]: rutan ligger inuti
-                 ett grönt markerat kort, och sedan TASK-411 bär kortet ÅTER
-                 hela `--mm-success-bg` (se `components.css` § "Markerat
-                 betalningskort" BESLUT 2). Utan motåtgärd vore rutan
-                 återigen osynlig mot kortet — precis 2026-09-01-kollisionen.
-                 Marcus dom denna gång: *"Vi testar med att success-notisen
-                 får vit bakgrund då, men konturen behåller vi … och bocken
-                 sätter vi samma gröna färg på som konturen."* `bg-(--mm-
-                 surface)` nedan (bara för `success` — `arSuccess` ovan) ger
-                 rutan sin egen vita botten; KANTEN är oförändrad (fortfarande
-                 intent-färgens `border-color` från primitiven, kompletterad
-                 av `border-y border-r` här). Ingen ny token, ingen global
-                 ändring — MessageBox-primitiven och dess ~30 andra
-                 konsumenter är orörda (ADR-103 B2 fortsatt låst). */
-              className={arSuccess ? 'border-y border-r bg-(--mm-surface)' : 'border-y border-r'}
+                 FÄRGKROCKEN (fynd 2) ÄR TILLBAKA I INKORGEN, LÖST PÅ ANNAT
+                 HÅLL [TASK-411, Marcus prod-fynd 2026-09-06]: rutan ligger
+                 inuti ett grönt markerat kort DÄR, och sedan TASK-411 bär
+                 det kortet ÅTER hela `--mm-success-bg` (se `components.css`
+                 § "Markerat betalningskort" BESLUT 2). Utan motåtgärd vore
+                 rutan återigen osynlig mot kortet — precis
+                 2026-09-01-kollisionen. Marcus dom denna gång: *"Vi testar
+                 med att success-notisen får vit bakgrund då, men konturen
+                 behåller vi … och bocken sätter vi samma gröna färg på som
+                 konturen."*
+
+                 [RUNDA 2, GRANSKNINGSFYND — Marcus: "Ja, begränsa till
+                 inkorgen."] Runda 1 satte `bg-(--mm-surface)` OVILLKORAT för
+                 `success`, vilket läckte in i de tre ANDRA ytorna som delar
+                 detta formulär via `RegistreraYta`
+                 (`AnmalansBetalningar.tsx`, `PanelBetalningar.tsx`,
+                 `PersonBetalningar.tsx`) — där notisen INTE ligger i ett
+                 grönt kort, och den vita botten tystade dess gröna
+                 success-signal helt utan skäl. `vitBotten` (ovan,
+                 `arSuccess && notisBakgrund === 'vit'`) gör den vita botten
+                 VILLKORAD på en explicit prop som ENDAST `BetalningsInkorg.
+                 tsx`s öppna kort sätter — se `notisBakgrund`s docblock
+                 (`PropsGemensamt`) för hela resonemanget. De tre andra
+                 ytorna skickar inte propen och behåller därmed
+                 `MessageBox`-primitivens EGNA gröna `success`-botten,
+                 oförändrat sedan innan TASK-411.
+
+                 KANTEN ÄR OFÖRÄNDRAD I BÅDA LÄGENA (fortsatt intent-färgens
+                 `border-color` från primitiven, kompletterad av `border-y
+                 border-r` här). Ingen ny token, ingen global ändring —
+                 MessageBox-primitiven och dess ~30 andra konsumenter är
+                 orörda (ADR-103 B2 fortsatt låst). */
+              className={vitBotten ? 'border-y border-r bg-(--mm-surface)' : 'border-y border-r'}
             >
               <span aria-hidden="true" className="flex items-start gap-2">
                 {/* Bocken får samma gröna som konturen (Marcus, samma dom):
