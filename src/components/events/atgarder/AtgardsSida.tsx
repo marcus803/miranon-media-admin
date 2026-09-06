@@ -140,7 +140,7 @@
  * nätverkssvar (se filens § 4–6 i sitt eget docblock), inte via riggens
  * knappar.
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   Check,
@@ -1750,7 +1750,28 @@ function BilageValjare({
           `<Checkbox>` ersätter `<label>` + `<input>`: RAC:s komponent ÄR sin
           egen etikett-yta, så hela raden förblir klickbar utan en wrapper. */}
       {laddar ? (
-        <p className="px-3 py-2.5 text-small text-text-muted">Hämtar bilagor …</p>
+        /* [TASK-416.11, ADR-113 steg 4] SKELETON I STÄLLET FÖR NAKEN LADDTEXT.
+           Med F1/F2:s förvärmning (sidmontering + hover/fokus-avsikt, se
+           `AtgardsSida` § FÖRVÄRMNING och `useForberedAtgardsBilagor`) är
+           `laddar` (`attachments.isLoading`) sant bara vid en genuint kall
+           cache — restposten ADR-078 beslut 4 bokför öppet för listor av
+           okänd längd: exakt radantal går inte att veta INNAN datan landat,
+           så två rader är en representativ approximation, inte ett löfte om
+           pixel-exakt slutgeometri för varje event. RADHÖJDEN ÄR DÄREMOT
+           EXAKT: `h-11` (44 px) = `py-2.5` (2×10 px) + `text-body`s 1lh
+           (24 px), samma uträkning som `KRYSSRUTA_KLASS`-raden nedan — så
+           SKELETONETS EGEN höjd matchar en verklig rad px för px, till
+           skillnad från `Skeleton`s `listRow`-default (3lh, DokumentYta.tsx
+           § dess kort-rader, en annan radform än denna enradiga kryssruta).
+           `role="status" aria-busy="true"` + `sr-only`-besked är samma
+           mönster som `DokumentYta.tsx` (samma hook, samma data) — Roselli-
+           mönstret `Skeleton`s eget docblock beskriver: blocket är dekorativt,
+           konsumenten äger busy-beskedet. */
+        <div role="status" aria-busy="true" className="flex flex-col gap-2">
+          <span className="sr-only">Hämtar bilagor…</span>
+          <Skeleton variant="listRow" className="h-11" />
+          <Skeleton variant="listRow" className="h-11" />
+        </div>
       ) : fel ? (
         <MessageBox intent="warning" title="Bilagorna kunde inte hämtas">
           Prova att öppna åtgärden igen. Går det inte skickas mailet ändå, utan bilaga.
@@ -2932,6 +2953,7 @@ function anmalningsIdsCsv(mottagare: readonly Registration[]): string {
  * ================================================================== */
 export function AtgardsSida({ eventId }: { eventId?: string }) {
   const dataSource = useDataSource();
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   /* MARKERINGEN hon kom hit med (TASK-228, SKARP sedan denna skiva). Kommer
      hon från registret (eventdetaljens markera-läge → Åtgärder) levereras
@@ -2978,6 +3000,26 @@ export function AtgardsSida({ eventId }: { eventId?: string }) {
     queryFn: () => dataSource.fetchRegistrations({ eventId }),
     enabled: eventId != null,
   });
+
+  /* [TASK-416.11] FÖRVÄRMNING VID SIDMOUNT — rapport E (S123): bilagorna
+     hämtades annars först när `ArbetsYta` monterade (åtgärdsraden fälldes
+     ut, längre ned i denna fil), mätt 1,0–1,6 s varm / 10,3 s kall EF mot
+     staging. `prefetchQuery`, ALDRIG `ensureQueryData` (ADR-078 beslut 1 —
+     navigeringen får aldrig blockeras; `ensureQueryData` fryser sidan tills
+     svaret landar). Ingen `staleTime`-överskuggning här: den globala
+     5-minuters-defaulten (`router.ts`) avgör om anropet ens går — redan
+     varm cache (ADR-072: 5 min staleTime + 24 h persist) no-opar. Samma
+     nyckel som `ArbetsYta` och `GranskningsSida` läser
+     (`queryKeys.attachments.byEvent`), så React Query dedupar oavsett om
+     Lotta redan hann hovra/fokusera in via `AtgarderKort`/
+     `MarkeringsBatchBar` (`useForberedAtgardsBilagor`, ADR-078 beslut 3). */
+  useEffect(() => {
+    if (eventId == null) return;
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.attachments.byEvent(eventId),
+      queryFn: () => dataSource.fetchEventAttachments(eventId),
+    });
+  }, [eventId, queryClient, dataSource]);
 
   const valtEvent: Event | undefined = events.data?.find((e) => e.id === eventId);
 

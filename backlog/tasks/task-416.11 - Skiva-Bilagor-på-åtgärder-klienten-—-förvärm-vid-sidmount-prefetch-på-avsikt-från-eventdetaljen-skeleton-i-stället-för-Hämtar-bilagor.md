@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:22'
+updated_date: '2026-09-06 14:36'
 labels:
   - ready-for-agent
 dependencies: []
@@ -22,15 +23,15 @@ Källa: rapport E §1–2, §6 F1–F3, §7 B (S123). Bilagorna hämtas av useQu
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Bilagorna ligger i cache innan åtgärdsraden fälls ut vid normal navigering (mätt: utfällning efter sidmount + 1,5 s visar bilagor utan laddläge)
-- [ ] #2 Hover/fokus på Gå till åtgärder i eventdetaljen prefetchar bilagorna (nätverksanrop syns före klick)
-- [ ] #3 Ingen naken laddtext; skeleton i bilageväljarens slutgeometri när cachen är kall
-- [ ] #4 Befintliga åtgärds-e2e gröna, axe-svep grönt, ADR-078 beslut 1 respekterat (navigeringen blockeras aldrig)
+- [x] #1 Bilagorna ligger i cache innan åtgärdsraden fälls ut vid normal navigering (mätt: utfällning efter sidmount + 1,5 s visar bilagor utan laddläge)
+- [x] #2 Hover/fokus på Gå till åtgärder i eventdetaljen prefetchar bilagorna (nätverksanrop syns före klick)
+- [x] #3 Ingen naken laddtext; skeleton i bilageväljarens slutgeometri när cachen är kall
+- [x] #4 Befintliga åtgärds-e2e gröna, axe-svep grönt, ADR-078 beslut 1 respekterat (navigeringen blockeras aldrig)
 <!-- AC:END -->
 
 ## Definition of Done
 <!-- DOD:BEGIN -->
-- [ ] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
-- [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
-- [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
+- [x] #1 Alla acceptanskriterier avbockade (task edit --check-ac)
+- [x] #2 Rörd fil-klass lokala grindar gröna (L147)
+- [x] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
