@@ -69,6 +69,15 @@ import { expect, test } from './acceptance-bas';
  * "ingen vald pill" strukturellt ouppnåeligt via primitiven), och EXAKT en
  * pill markeras när eventet landar — aldrig en synlig övergång mellan två
  * olika val, eftersom inget val fanns att byta FRÅN.
+ *
+ * FEMTE TESTET (review-runda 3, FYND 1+2) — "eventet självt parkerat —
+ * felvariant": `get-event` SVARAR 500 (i stället för att hållas obesvarat),
+ * så `eventIsError` blir sant efter appens globala `retry: 3`. Bevisar att
+ * eventnamnraden inte skimrar oändligt på ett genuint fel (statisk
+ * platshållare, ingen `Skeleton`) och att `FramstegskortD`s `isError`-gren
+ * bär ett sr-only-besked i stället för att låta "Framsteg"-landmärket
+ * annonseras tomt — samma "isPending ≠ isError"-princip som review-runda 2
+ * FYND 3 redan gav listkroppens framstegskort, nu även dess namnrad.
  */
 
 const EVENT_ID = VISUAL_EVENT_ID;
@@ -522,5 +531,56 @@ test.describe('Check-in — Lugnt laddläge (TASK-416.1)', () => {
     );
     const sessionsradBoxEfter = await sessionsrad.boundingBox();
     expect(sessionsradBoxEfter).toEqual(sessionsradBoxInnan);
+  });
+
+  test('eventet självt parkerat — felvariant (get-event svarar 500): statisk platshållare utan shimmer, Framsteg bär sr-only-besked, ingen aria-busy', async ({
+    page,
+    network,
+  }) => {
+    // Review-runda 3, FYND 1+2. Samma "medvetet frånvarande ur
+    // EVENTS_RESPONSE.events"-form som "eventet självt parkerat" ovan, men
+    // `get-event` SVARAR (500) i stället för att hållas — `eventIsPending`
+    // slocknar efter appens globala `retry: 3` (`router.ts`), och `event`
+    // förblir `undefined` med `eventIsError: true`. Prövar EXAKT den gren
+    // "eventet självt parkerat"-testet aldrig når (den släpper alltid ett
+    // GILTIGT event, aldrig ett fel).
+    const EVENT_ID_FEL = 'recLaddlageEventFel01';
+
+    network.use(
+      http.get(EF('get-event'), ({ request }) => {
+        const id = new URL(request.url).searchParams.get('id');
+        if (id !== EVENT_ID_FEL) return json(EVENT_DETAIL_RESPONSE);
+        return json({ error: 'Internt fel' }, 500);
+      }),
+      http.get(EF('get-registrations'), () => json({ registrations: [] })),
+      http.get(EF('get-attendance'), () => json({ attendance: [] })),
+    );
+
+    await page.goto(`/event/${EVENT_ID_FEL}/narvaro`);
+
+    const h1 = page.getByRole('heading', { level: 1, name: 'Check-in' });
+    await expect(h1).toBeVisible();
+
+    // FYND 1 — eventnamnraden: STATISK platshållare, aldrig ett `Skeleton`-
+    // block (ingen shimmer-klass går att hitta på den, till skillnad från
+    // riktiga laddlägen — se `dorrlista-skelettrad` i det första testet ovan).
+    const namnrad = page.locator('h1 + p');
+    await expect(namnrad).toHaveText('—');
+    await expect(namnrad).not.toHaveClass(/animate-skeleton-shimmer/);
+
+    // FYND 2 — Framsteg-regionen: INGEN aria-busy (felet väntar inte längre
+    // på något) och ETT sr-only-besked så regionen inte annonseras tom för
+    // en skärmläsare som navigerar hit direkt via landmärket. Aldrig
+    // pending-beskedet SAMTIDIGT (ömsesidigt uteslutande grenar).
+    const framsteg = page.getByRole('region', { name: 'Framsteg' });
+    await expect(framsteg).toBeVisible();
+    await expect(framsteg).toHaveAttribute('aria-busy', 'false');
+    await expect(framsteg).toContainText('Framsteg kunde inte hämtas');
+    await expect(framsteg).not.toContainText('Laddar framsteg…');
+
+    // Det FAKTISKA felbeskedet bärs av listkroppen (samma `isListError`),
+    // inte upprepat i sidkromet — samma delning av ansvar som review-runda
+    // 1 FYND 1 etablerade.
+    await expect(page.getByRole('alert')).toContainText('kunde inte hämtas');
   });
 });

@@ -481,6 +481,15 @@ function FramstegskortD({
       className={`flex flex-col gap-2 rounded-2xl border border-transparent bg-primary-tint p-4 contrast-more:border-border-strong print:border-border-strong ${klass ?? ''}`}
     >
       {isPending && <span className="sr-only">Laddar framsteg…</span>}
+      {/* Review-runda 3, FYND 2: `isError`-grenens tankstreck är
+          `aria-hidden` (dekorativt, precis som `Skeleton`-blocken), så utan
+          ett eget besked här hade en skärmläsare som navigerar in i
+          "Framsteg"-landmärket under ett ihållande fel hört en TOM region —
+          samma "annonseras som tom"-brist review-runda 1 FYND 1 redan
+          fångade för pending-läget. `aria-busy` förblir MEDVETET kopplad
+          till `isPending` ENSAM (inte hit) — regionen väntar inte längre på
+          något, den har bara inget att visa. */}
+      {isError && <span className="sr-only">Framsteg kunde inte hämtas</span>}
       <div className="flex items-baseline justify-between gap-3">
         {/* Breddlåset: osynlig maxform i samma grid-cell som det verkliga talet. */}
         <span className="grid font-semibold text-xl">
@@ -1142,16 +1151,31 @@ function VariantD({
         <h1 className="font-semibold text-3xl">Check-in</h1>
         {/* Review-runda 1, FYND 2: `event` kan vara `undefined` (eventet
             självt ännu opending/felat, ovanligt men inte längre en egen
-            gren utan krom — se `VariantD`s docblock). Skeletonen står i
-            EXAKT samma slot/klass (`text-body`) som den riktiga paragrafen
-            skulle ha använt, så h1:ens position aldrig flyttar sig. */}
+            gren utan krom — se `VariantD`s docblock). Skeletonen/
+            platshållaren står i EXAKT samma slot/klass (`text-body`) som den
+            riktiga paragrafen skulle ha använt, så h1:ens position aldrig
+            flyttar sig.
+            `eventIsPending` GRENAT FRÅN `eventIsError` (review-runda 3,
+            FYND 1) — samma "isPending ≠ isError"-princip som
+            `FramstegskortD` redan bär (review-runda 2, FYND 3): en animerad
+            `Skeleton` hade skimrat OÄNDLIGT på ett GENUINT fel (en
+            TanStack-query i `'error'`-status blir aldrig `isPending` igen).
+            Fel-grenen är ÄKTA text (tankstreck), aldrig ett `Skeleton`-block
+            — ingen animation uppstår per definition. Ingen egen sr-only-
+            annonsering här: `isListError` (som väver in `eventIsError`)
+            visar redan `MessageBox intent="error"` (`role="alert"`) i
+            listkroppen — samma fel skulle annonserats två gånger. */}
         {event ? (
           <p className="text-body">
             <span className="font-medium">{event.eventNamn ?? event.eventlabel ?? 'Eventet'}</span>
             {datumtext && <span className="text-text-muted">{` · ${datumtext}`}</span>}
           </p>
-        ) : (
+        ) : eventIsPending ? (
           <Skeleton variant="text" className="w-2/5 text-body" />
+        ) : (
+          <p aria-hidden="true" className="text-body text-text-muted">
+            —
+          </p>
         )}
       </div>
 
