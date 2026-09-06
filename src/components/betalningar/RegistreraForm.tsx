@@ -165,6 +165,24 @@ type Props =
       onKlar?: never;
       /** Anropas när Lotta trycker Klar (submit eller Enter i beloppsfältet). */
       onRedigeringKlar: (varden: RedigeringsVarden) => void;
+      /**
+       * [TASK-402.3] RADENS NUVARANDE VÄRDEN, när konsumenten redan har egna.
+       *
+       * BAKÅTKOMPATIBELT TILLÄGG: utelämnad beter sig formuläret EXAKT som
+       * före (belopp = `forifyllt`, datum = `idag`, kvitto i, tom notering),
+       * så `registrera`-läget och DEV-konsumenten `/dev/registrera-form-
+       * redigera` är orörda.
+       *
+       * VARFÖR DEN BEHÖVS: bekräftelsesteget bär ett FÖRVAL PER RAD
+       * (`forslagsbelopp` — avgiften för den som inte betalat något, resten
+       * för den som betalat den), medan `forifyllt` alltid är HELA resten
+       * (`rad.kvar`). För Erik Holm i facit-fixturen skiljer de sig: kortet
+       * visar 1 000 kr (avgiften) och `forifyllt` hade gett 2 500 kr (hela
+       * priset). Utan denna prop hade ett tryck på beloppet ändrat radens
+       * belopp bara genom att öppna formuläret — och "Avbryt återställer
+       * radens värden" (AC #7) hade varit omöjligt att uppfylla.
+       */
+      startvarden?: RedigeringsVarden;
     });
 
 /**
@@ -268,13 +286,19 @@ export function RegistreraForm(props: Props) {
    * skulle bort, inte uttryckligen om en förifyllnad. Bokfört som eget
    * designval så att det kan rivas utan att chipsen behöver tillbaka.
    */
-  const forifyllt = rad.kvar !== null && rad.kvar > 0 ? visaKronor(rad.kvar) : '';
+  /* [TASK-402.3] `startvarden` VINNER när konsumenten har egna värden — se
+     propens eget docblock. `props.lage === 'redigera'` narrowar unionen på
+     SAMMA objekt (samma skäl som `spara()` gör det), så åtkomsten är typad
+     utan cast. */
+  const startvarden = props.lage === 'redigera' ? props.startvarden : undefined;
+  const forifyllt =
+    startvarden?.belopp ?? (rad.kvar !== null && rad.kvar > 0 ? visaKronor(rad.kvar) : '');
   const [belopp, setBelopp] = useState(forifyllt);
-  const [datum, setDatum] = useState(idag);
-  const [medKvitto, setMedKvitto] = useState(true);
+  const [datum, setDatum] = useState(startvarden?.datum ?? idag);
+  const [medKvitto, setMedKvitto] = useState(startvarden?.medKvitto ?? true);
   const [rort, setRort] = useState(false);
   /** Lottas fria anteckning om DENNA inbetalning. Se filhuvudet § NOTERINGSFÄLTET. */
-  const [notering, setNotering] = useState('');
+  const [notering, setNotering] = useState(startvarden?.notering ?? '');
 
   /* ═══════════════════════════════════════════════════════════════════════
    * AVTALAT PRIS — DEN ANDRA SANNINGEN OM ETT RESTBELOPP (Marcus JA 2026-09-01)

@@ -1,0 +1,31 @@
+- heading "Bulkregistrering" [level=1]
+- status: 9 inbetalningar registrerade, 1 kunde inte registreras
+- region "Registrerat nu":
+  - list:
+    - listitem: /Anna Lindqvist Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Björn Sjöberg Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Cecilia Malm Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /David Ek Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Erik Holm Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Fatima Nouri Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Hanna Wikström Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Ida Ström Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+    - listitem: /Johan Lund Swish · Kvitto skickat · MM-\d+-\d+ 1 \d+ kr/
+  - status:
+    - text: 9 kvitton skickade
+    - button "Stäng bekräftelse"
+- region "Markerade inbetalningar":
+  - heading /Fjärrskådning, Göteborg · \d+-\d+-\d+/ [level=2]
+  - list:
+    - listitem:
+      - checkbox "Gunnar Falk Markerad" [checked]
+      - text: Gunnar Falk Markerad
+      - button "Ändra belopp för Gunnar Falk": /1 \d+ kr/
+      - alert: "/Edge Function \"registrera-inbetalning\" \\d+: Beloppet kunde inte sparas\\. Försök igen\\./"
+- term: 1 anmälningsavgift
+- definition: /1 \d+ kr/
+- term: 1 inbetalning
+- definition: /1 \d+ kr/
+- paragraph: Jämför med kontoutdraget innan du registrerar.
+- button "Försök igen"
+- button "Registrera och skicka 1 kvitto"
