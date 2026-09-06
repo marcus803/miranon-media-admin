@@ -1,16 +1,17 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { Jobbstatus, OppenBetalning } from '@/domain/schemas';
 import {
+  aktivtBeloppslage,
   arRegistrerbar,
-  aterstallForslag,
   type BekraftelseRad,
   type Beloppsgenvag,
+  type Beloppslage,
+  beloppForNyMarkerad,
   byggRader,
   genvagsbelopp,
   type Kvittoläge,
   type Radvarden,
-  type SattAllaVal,
-  sattAllaBelopp,
+  sattBeloppslage,
   summera,
 } from '../bekraftelsesteg-harledningar';
 import type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
@@ -160,17 +161,11 @@ export function useBekraftelsesteg(
    * är granskningsytan Marcus tittar på (`?data=fixtur`), så knapparna måste
    * göra exakt samma sak här som i den skarpa vägen.
    */
-  const sattAllaBeloppNu = useCallback((val: SattAllaVal) => {
-    // [varv 4] SAMMA tillståndsregel som den skarpa hooken: valet blir
-    // `aktivGenvag`, och toggeln i formen läser det via `aktivtSattAllaVal`.
-    setAktivGenvag(val);
-    setRader((tidigare) => sattAllaBelopp(tidigare, val));
-  }, []);
-
-  /** [TASK-402.8 varv 3] SAMMA rena regel som den skarpa hooken kallar. */
-  const aterstallForslagNu = useCallback(() => {
-    setAktivGenvag('forslag');
-    setRader((tidigare) => aterstallForslag(tidigare));
+  const sattBeloppslageNu = useCallback((lage: Beloppslage) => {
+    // [varv 5] LÄGET ÄR TILLSTÅND, inte en engångshandling: det visas i
+    // kapseln OCH styr vad en rad som markeras senare får för belopp.
+    setAktivGenvag(lage);
+    setRader((tidigare) => sattBeloppslage(tidigare, lage));
   }, []);
 
   const sattBetalsattAlla = useCallback((betalsatt: Betalsatt) => {
@@ -192,10 +187,8 @@ export function useBekraftelsesteg(
   /* [varv 4] En handredigering (och en NY markering) släcker toggeln — samma
      regel och samma skäl som i den skarpa hooken. */
   const sattRadBelopp = useCallback(
-    (nyckel: string, belopp: string) => {
-      setAktivGenvag(null);
-      andraRad(nyckel, { belopp, ejGenomforbar: null });
-    },
+    (nyckel: string, belopp: string) =>
+      andraRad(nyckel, { belopp, ejGenomforbar: null, handredigerad: true }),
     [andraRad],
   );
   const sattRadBetalsatt = useCallback(
@@ -210,22 +203,39 @@ export function useBekraftelsesteg(
     (nyckel: string, medKvitto: boolean) => andraRad(nyckel, { medKvitto }),
     [andraRad],
   );
+  /* [varv 5] EN NYMARKERAD RAD FÖLJER DET AKTIVA LÄGET.
+     Läget är en levande regel, inte en engångshandling: markerar Lotta en rad
+     mitt i "Hela beloppet" ska raden komma in med hela beloppet, inte med sitt
+     förslag. Undantaget är raden hon skrivit beloppet på för hand
+     (`handredigerad`) — den behåller sin siffra, annars hade ett bock-klick
+     tyst kastat bort den. En AVmarkering rör ingenting.
+
+     Uppslaget sker inuti uppdateraren, mot raden som den ser ut just nu —
+     `beloppForNyMarkerad` prövar därför inte `markerad` (fältet är fortfarande
+     `false` i det ögonblicket). */
   const sattRadMarkerad = useCallback(
     (nyckel: string, markerad: boolean) => {
-      if (markerad) setAktivGenvag(null);
-      andraRad(nyckel, { markerad });
+      const lage = aktivtBeloppslage(aktivGenvag);
+      setRader((tidigare) =>
+        tidigare.map((rad) => {
+          if (rad.nyckel !== nyckel) return rad;
+          if (!markerad) return { ...rad, markerad: false };
+          const belopp = beloppForNyMarkerad(rad, lage);
+          return belopp === null
+            ? { ...rad, markerad: true }
+            : { ...rad, markerad: true, belopp, ejGenomforbar: null };
+        }),
+      );
     },
-    [andraRad],
+    [aktivGenvag],
   );
   const sattRadNotering = useCallback(
     (nyckel: string, notering: string) => andraRad(nyckel, { notering }),
     [andraRad],
   );
   const sattRadVarden = useCallback(
-    (nyckel: string, varden: Radvarden) => {
-      setAktivGenvag(null);
-      andraRad(nyckel, { ...varden, ejGenomforbar: null });
-    },
+    (nyckel: string, varden: Radvarden) =>
+      andraRad(nyckel, { ...varden, ejGenomforbar: null, handredigerad: true }),
     [andraRad],
   );
 
@@ -385,8 +395,7 @@ export function useBekraftelsesteg(
     batchDatum,
     summering,
     sattGenvag,
-    sattAllaBelopp: sattAllaBeloppNu,
-    aterstallForslag: aterstallForslagNu,
+    sattBeloppslage: sattBeloppslageNu,
     sattBetalsattAlla,
     sattDatumAlla,
     sattRadBelopp,

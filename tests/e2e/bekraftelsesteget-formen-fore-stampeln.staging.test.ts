@@ -179,8 +179,26 @@ async function beloppFor(steget: ReturnType<Page['getByTestId']>, namn: string):
  * GRUPPEN, och varje pill bär bara sin egen etikett — de långa
  * `aria-label`-namnen från varv 1 är borta.
  */
+const FORSLAGSPILL = 'Förslag';
+/**
+ * Växlar ett korts bock med TANGENTBORD, inte med ett klick.
+ *
+ * MÄTT UNDER VARV 5: `getByRole('checkbox').click()` faller med *"<span …>AA</span>
+ * intercepts pointer events"*. React Arias `Checkbox` renderar en visuellt dold
+ * `<input>` inuti en `<label>`, och labelns innehåll (avataren, namnet) ligger
+ * över inputens träffyta. Fokus + mellanslag går rakt på kontrollen och är
+ * dessutom den väg en tangentbordsanvändare faktiskt tar.
+ */
+async function vaxlaBock(page: Page, kort: ReturnType<Page['getByTestId']>) {
+  const kryss = kort.getByRole('checkbox');
+  await kryss.focus();
+  await page.keyboard.press(' ');
+  return kryss;
+}
+
 const AVGIFTSPILL = 'Anmälningsavgift';
 const ALLTPILL = 'Hela beloppet';
+const KAPSEL = 'Belopp för markerade rader';
 
 function pill(steget: ReturnType<Page['getByTestId']>, namn: string) {
   return steget.getByRole('radio', { name: namn });
@@ -340,9 +358,12 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
         'Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand rörs inte.',
       ),
     ).toBeVisible();
-    // Båda knapparna bor i blocket, ingen annanstans på sidan.
+    // Alla tre segmenten bor i blocket, ingen annanstans på sidan.
     await expect(pill(steget, AVGIFTSPILL)).toHaveCount(1);
+    await expect(block.getByRole('radio', { name: FORSLAGSPILL })).toHaveCount(1);
     await expect(block.getByRole('radio', { name: ALLTPILL })).toHaveCount(1);
+    // [VARV 5] Ångra-knappen är RIVEN — att välja Förslag är återställningen.
+    await expect(steget.getByRole('button', { name: 'Återställ förslagen' })).toHaveCount(0);
   });
 
   test('appens förslag står kvar tills en knapp trycks', async ({ page }) => {
@@ -422,114 +443,119 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
   });
 
   /**
-   * [VARV 3] ÅTERSTÄLL FÖRSLAGEN — Marcus: *"Sedan borde väl det finnas en
-   * 'Ångra knapp' också här eller? Om hon vill ändra tillbaka till föreslaget
-   * belopp?"*
+   * [VARV 5] FÖRSLAG ÄR ETT LÄGE, INTE FRÅNVARON AV ETT VAL.
    *
-   * Tre påståenden, i den ordning en användare möter dem: knappen är TYST när
-   * ingenting avviker, den tar tillbaka appens förval när något gör det, och
-   * den rör INTE de rader sätt-alla-knapparna inte heller rör.
+   * Marcus: *"Togglen behöver ju sitta i något. När ingen knapp är vald så ser
+   * ju knapparna inte ut som knappar utan bara en textsträng på grå
+   * bakgrund."* Svaret blev ett tredje läge i stället för en ram: `Förslag`
+   * lyser från start, och att välja det ÄR återställningen. Varv 3:s separata
+   * ångra-knapp är därmed riven.
    */
-  test('Återställ förslagen är avstängd tills något avviker, och tar sedan tillbaka förvalen', async ({
-    page,
-  }) => {
+  test('Förslag lyser från start och är vägen tillbaka', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
-    const aterstall = steget.getByRole('button', { name: 'Återställ förslagen' });
 
-    // TYST FRÅN BÖRJAN: varje rad bär redan sitt förslag.
-    await expect(aterstall).toBeDisabled();
+    await expect(pill(steget, FORSLAGSPILL)).toBeChecked();
+    await expect(pill(steget, AVGIFTSPILL)).not.toBeChecked();
+    await expect(pill(steget, ALLTPILL)).not.toBeChecked();
 
     await pill(steget, ALLTPILL).click();
-    // Anna och det långa namnet avviker nu (1 000 → 2 500). Bos hela rest ÄR
-    // 1 500, alltså samma tal som hans förslag — han räknas inte.
-    await expect(aterstall).toBeEnabled();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('2500kr');
+    await expect(pill(steget, FORSLAGSPILL)).not.toBeChecked();
 
-    await aterstall.click();
+    // TILLBAKA: Förslag återställer varje markerad rad till appens förval.
+    await pill(steget, FORSLAGSPILL).click();
     expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
     expect(await beloppFor(steget, LANGT_NAMN)).toBe('1000kr');
     expect(await beloppFor(steget, 'Bo Restbelopp')).toBe('1500kr');
-    await expect(steget.getByText('2 belopp återställda till förslaget.')).toBeAttached();
-    // Och tyst igen, eftersom ingenting längre avviker.
-    await expect(aterstall).toBeDisabled();
+    await expect(pill(steget, FORSLAGSPILL)).toBeChecked();
+    await expect(steget.getByText('2 belopp satta till förslaget.')).toBeAttached();
 
     // HAND-HÖGEN STÅR STILL genom hela varvet.
     await expect(steget.getByRole('heading', { name: 'Behöver din hand 1' })).toBeVisible();
     await expect(steget.getByText('3 inbetalningar', { exact: true })).toBeVisible();
   });
 
-  test('Återställ förslagen tar tillbaka även ett HANDSKRIVET belopp, och beskedet böjs rätt', async ({
-    page,
-  }) => {
+  test('ett läge som inte flyttar något säger det rakt ut', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
-    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
-
-    await annasKort.getByRole('button', { name: 'Ändra belopp för Anna Avgift' }).click();
-    const beloppfalt = annasKort.getByLabel('Belopp i kronor');
-    await beloppfalt.fill('750');
-    await beloppfalt.blur();
-    await annasKort.getByRole('button', { name: 'Klar' }).click();
-    expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
-
-    const aterstall = steget.getByRole('button', { name: 'Återställ förslagen' });
-    await expect(aterstall).toBeEnabled();
-    await aterstall.click();
-    expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
-    // SINGULAR när det är EN rad. Uppdragets mall sa "N belopp återställda";
-    // sidan böjer i stället som sitt syskonbesked (`plural`) gör, eftersom
-    // "1 belopp återställda" inte är svenska.
-    await expect(steget.getByText('1 belopp återställt till förslaget.')).toBeAttached();
+    // Varje rad bär redan sitt förslag i utgångsläget.
+    await pill(steget, AVGIFTSPILL).click();
+    await pill(steget, FORSLAGSPILL).click();
+    await expect(steget.getByText('Alla belopp stod redan på förslaget.')).toBeAttached();
   });
 
   /**
-   * [VARV 4] TOGGELNS TILLSTÅND — Marcus: *"när man trycker på
-   * 'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte visa att knappen
-   * är aktiv?"*
-   *
-   * Fyra lägen, i den ordning de uppstår: inget val från början, intryckt
-   * efter ett tryck, släckt efter "Återställ förslagen", släckt efter en
-   * handredigering. Mätt på `aria-checked`, alltså på det skärmläsaren hör
-   * och inte på en klass.
+   * [VARV 5] LÄGET ÄR EN LEVANDE REGEL, inte en engångshandling: en rad som
+   * markeras EFTERÅT ska komma in med lägets belopp. Undantaget är raden Lotta
+   * skrivit beloppet på för hand.
    */
-  test('pillen visas intryckt efter tryck, och släcks av Återställ respektive handredigering', async ({
-    page,
-  }) => {
+  test('en rad som markeras efteråt följer det aktiva läget', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
-    const gruppen = steget.getByRole('radiogroup', { name: 'Sätt alla belopp' });
-    await expect(gruppen).toBeVisible();
+    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
 
-    // INGET VAL FRÅN BÖRJAN, trots att varje rad bär sitt förslag.
-    await expect(pill(steget, AVGIFTSPILL)).not.toBeChecked();
-    await expect(pill(steget, ALLTPILL)).not.toBeChecked();
+    const annasKryss = await vaxlaBock(page, annasKort);
+    await expect(annasKryss).not.toBeChecked();
 
-    // INTRYCKT EFTER TRYCK — och bara den ena.
     await pill(steget, ALLTPILL).click();
-    await expect(pill(steget, ALLTPILL)).toBeChecked();
-    await expect(pill(steget, AVGIFTSPILL)).not.toBeChecked();
-
-    // ETT ANDRA TRYCK PÅ SAMMA PILL SLÄCKER INTE (disallowEmptySelection).
-    await pill(steget, ALLTPILL).click();
-    await expect(pill(steget, ALLTPILL)).toBeChecked();
-
-    // BYTE av val flyttar det intryckta läget.
-    await pill(steget, AVGIFTSPILL).click();
-    await expect(pill(steget, AVGIFTSPILL)).toBeChecked();
-    await expect(pill(steget, ALLTPILL)).not.toBeChecked();
-
-    /* ÅTERSTÄLL SLÄCKER BÅDA — OCH LEVER ÄVEN NÄR INGEN RAD AVVIKER.
-       Efter "Anmälningsavgift" bär varje rad sitt förslag igen (förslaget ÄR
-       avgiften när den finns), så knappens enda kvarvarande jobb är att
-       släcka valet. Vore den avstängd här gick pillen inte att släcka. */
-    const aterstall = steget.getByRole('button', { name: 'Återställ förslagen' });
-    await expect(aterstall).toBeEnabled();
-    await aterstall.click();
-    await expect(steget.getByText('Alla belopp stod redan på förslaget.')).toBeAttached();
-    await expect(pill(steget, AVGIFTSPILL)).not.toBeChecked();
-    await expect(pill(steget, ALLTPILL)).not.toBeChecked();
-    // Och NU är den avstängd: inget val, inga avvikande rader.
-    await expect(aterstall).toBeDisabled();
+    // Hon var avmarkerad när läget sattes och rördes därför inte.
+    await vaxlaBock(page, annasKort);
+    await expect(annasKryss).toBeChecked();
+    // NU följer hon regeln: hela beloppet, inte sitt förslag.
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('2500kr');
   });
 
-  test('en handredigering släcker pillen — raderna följer inte längre valet', async ({ page }) => {
+  test('en handredigerad rad behåller sin siffra när den markeras om', async ({ page }) => {
+    const steget = await oppna(page, DESKTOP);
+    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
+
+    await annasKort.getByRole('button', { name: 'Ändra belopp för Anna Avgift' }).click();
+    const beloppfalt = annasKort.getByLabel('Belopp i kronor');
+    await beloppfalt.fill('750');
+    await beloppfalt.blur();
+    await annasKort.getByRole('button', { name: 'Klar' }).click();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
+
+    await vaxlaBock(page, annasKort);
+    await pill(steget, ALLTPILL).click();
+    await vaxlaBock(page, annasKort);
+    // Utan `handredigerad` hade bock-klicket tyst kastat bort hennes siffra.
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
+  });
+
+  /**
+   * [VARV 4, uppdaterat i varv 5] KAPSELNS TILLSTÅND — Marcus: *"när man
+   * trycker på 'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte visa
+   * att knappen är aktiv?"*
+   *
+   * Mätt på `aria-checked`, alltså på det skärmläsaren hör och inte på en
+   * klass. Med tre lägen finns inget tomt tillstånd kvar: exakt ett segment är
+   * alltid valt.
+   */
+  test('exakt ETT läge är valt hela tiden, och ett omtryck släcker det inte', async ({ page }) => {
+    const steget = await oppna(page, DESKTOP);
+    const gruppen = steget.getByRole('radiogroup', { name: KAPSEL });
+    await expect(gruppen).toBeVisible();
+    await expect(gruppen.getByRole('radio')).toHaveCount(3);
+
+    const valda = async () => {
+      const alla = [FORSLAGSPILL, AVGIFTSPILL, ALLTPILL];
+      const lista: string[] = [];
+      for (const namn of alla) {
+        if (await pill(steget, namn).isChecked()) lista.push(namn);
+      }
+      return lista;
+    };
+
+    expect(await valda()).toEqual([FORSLAGSPILL]);
+    await pill(steget, ALLTPILL).click();
+    expect(await valda()).toEqual([ALLTPILL]);
+    // ETT ANDRA TRYCK PÅ SAMMA SEGMENT SLÄCKER INTE (disallowEmptySelection).
+    await pill(steget, ALLTPILL).click();
+    expect(await valda()).toEqual([ALLTPILL]);
+    await pill(steget, AVGIFTSPILL).click();
+    expect(await valda()).toEqual([AVGIFTSPILL]);
+  });
+
+  test('en handredigering släcker INTE läget — den är Lottas undantag', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
     await pill(steget, ALLTPILL).click();
     await expect(pill(steget, ALLTPILL)).toBeChecked();
@@ -542,9 +568,41 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     await annasKort.getByRole('button', { name: 'Klar' }).click();
 
     expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
-    await expect(pill(steget, ALLTPILL)).not.toBeChecked();
-    await expect(pill(steget, AVGIFTSPILL)).not.toBeChecked();
+    // VARV 5 VÄNDE VARV 4:s regel: läget beskriver vad kapseln senast gjorde
+    // och vad nya markeringar får — inte att varje rad följer det just nu.
+    await expect(pill(steget, ALLTPILL)).toBeChecked();
   });
+
+  /**
+   * [VARV 5] LIKBREDA SEGMENT — Marcus: *"anmälningsavgift och Hela beloppet
+   * knapparna måste vara exakt lika breda, annars blir det ingen snygg
+   * toggle."* Bredden sätts av det bredaste ordet, inte av panelen.
+   */
+  for (const [namn, viewport] of [
+    ['desktop', DESKTOP],
+    ['ipad', IPAD],
+  ] as const) {
+    test(`${namn} — alla tre segmenten är exakt lika breda`, async ({ page }) => {
+      const steget = await oppna(page, viewport);
+      const block = steget.getByTestId('satt-alla-block');
+      const bredder: number[] = [];
+      for (const etikett of [FORSLAGSPILL, AVGIFTSPILL, ALLTPILL]) {
+        const box = await pill(steget, etikett).boundingBox();
+        expect(box).not.toBeNull();
+        bredder.push(Math.round(box?.width ?? 0));
+      }
+      expect(bredder[0]).toBeGreaterThan(0);
+      expect(new Set(bredder).size).toBe(1);
+
+      // …OCH KAPSELN SPRÄNGER INTE PANELEN: raden är fit-content, inte w-full.
+      const blockBox = await block.boundingBox();
+      const kapselBox = await steget.getByRole('radiogroup', { name: KAPSEL }).boundingBox();
+      expect(blockBox).not.toBeNull();
+      expect(kapselBox).not.toBeNull();
+      if (!blockBox || !kapselBox) return;
+      expect(kapselBox.width).toBeLessThan(blockBox.width);
+    });
+  }
 
   test('pillerna nås med tangentbord, trycket annonseras, och axe är rent', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
@@ -558,16 +616,15 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     await expect(avgiftspillen).toBeFocused();
     await page.keyboard.press('Enter');
 
-    // BESKEDET: två rader har en avgifts-kandidat (Anna och det långa namnet),
-    // Bo har ingen och David inget pris.
-    await expect(steget.getByText('2 belopp satta till anmälningsavgiften.')).toBeAttached();
+    /* BESKEDET. I utgångsläget bär varje rad redan sitt FÖRSLAG, och förslaget
+       ÄR avgiften för de två rader som har en — så ett avgifts-tryck flyttar
+       ingenting och säger det rakt ut. */
+    await expect(steget.getByText('Alla belopp stod redan på anmälningsavgiften.')).toBeAttached();
 
+    // Härifrån flyttar sig två rader (Anna och det långa namnet); Bos hela
+    // rest är redan 1 500 och David saknar pris.
     await pill(steget, ALLTPILL).click();
-    await expect(steget.getByText('3 belopp satta till hela beloppet.')).toBeAttached();
-
-    // Svepet efter trycket har dessutom "Återställ förslagen" i AKTIVT läge —
-    // avstängd i utgångsläget, alltså en annan nod för axe att pröva.
-    await expect(steget.getByRole('button', { name: 'Återställ förslagen' })).toBeEnabled();
+    await expect(steget.getByText('2 belopp satta till hela beloppet.')).toBeAttached();
 
     const efterTryck = await new AxeBuilder({ page }).include('main').analyze();
     expect(efterTryck.violations).toEqual([]);

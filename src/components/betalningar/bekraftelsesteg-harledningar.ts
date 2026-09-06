@@ -85,6 +85,18 @@ export type BekraftelseRad = {
    * en markering och väntar på hennes hand. Bär vilket val det var.
    */
   ejGenomforbar: Beloppsgenvag | null;
+  /**
+   * [TASK-402.8 varv 5] LOTTA HAR SKRIVIT BELOPPET PÅ RADEN FÖR HAND.
+   *
+   * Fältet finns för EN sak: en handredigerad rad som avmarkeras och markeras
+   * igen ska behålla sin siffra i stället för att tyst få beloppsläget
+   * påtvingat (`beloppForNyMarkerad`). Utan flaggan går hennes undantag
+   * förlorat vid ett bock-klick hon uppfattar som ofarligt.
+   *
+   * SÄTTS av `sattRadBelopp`/`sattRadVarden`, NOLLAS av `sattBeloppslage` —
+   * ett läge skriver över undantaget, precis som blockets egen text lovar.
+   */
+  handredigerad: boolean;
   /** Registreringens utfall, satt efter "Registrera N". */
   utfall: RadUtfall | null;
   /** Inbetalningens id ur serverns svar; `null` tills raden registrerats. */
@@ -219,35 +231,41 @@ export function arRegistrerbar(rad: BekraftelseRad): boolean {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   SÄTT ALLA BELOPP (TASK-402.8) — TVÅ KNAPPAR, RADENS EGNA KANDIDATER
+   BELOPPSLÄGET (TASK-402.8) — EN REGEL FÖR DE MARKERADE RADERNA
    ═══════════════════════════════════════════════════════════════════════════
 
-   Marcus 2026-09-06, prod-granskningen: *"i 8 av 10 fall … betalar dem 1000 kr
-   (anmälningsavgift) först och sedan resterande belopp (1500). Men ibland
-   betalar ju folk allt direkt … Appen ska fortfarande föreslå 'rätt' belopp
-   som den gör nu, men Lotta kan liksom skriva över beloppen med denna knapp."*
+   Fyra varv med Marcus ledde hit, och varje varv rev något av det förra:
 
-   REGELN ÄR REN OCH BOR HÄR, INTE I EN HOOK. Två implementationer av modellen
-   (`useBekraftelsesteg` och prototypens simulering) ska ge exakt samma utfall,
-   och regeln har fyra kanter som är värda ett api-pure-test var — inte en
-   granskning per implementation.
+     varv 1  två fristående knappar som SATTE beloppet en gång
+     varv 3  plus en "Återställ förslagen"-knapp för vägen tillbaka
+     varv 4  knapparna blev en toggel som visade vilket val som gällde
+     varv 5  *"Togglen behöver ju sitta i något. När ingen knapp är vald så
+             ser ju knapparna inte ut som knappar utan bara en textsträng på
+             grå bakgrund."*
 
-   VARFÖR DEN INTE ÄR `sattGenvag`. Genvägarna (`Beloppsgenvag`, varianterna
-   A/B) satte ALLA rader och gav en rad UTAN kandidat en tom siffra plus
-   `ejGenomforbar` — alltså flyttade den raden till "Behöver din hand". Det är
-   raka motsatsen till vad kortets AC #3 kräver: *"rader utan kandidat och
-   Behöver-din-hand-högen rörs inte"*. Formen som Marcus omprövat är SMALARE än
-   genvägarna, och att återanvända deras mekanik hade smugit in en flytt Lotta
-   aldrig bad om. Genvägarna lever kvar orörda tills `TASK-402.6` river A/B. */
+   Svaret på varv 5 är inte en ram runt två knappar utan ett TREDJE LÄGE.
+   `Förslag` är inte längre frånvaron av ett val — det ÄR ett val, förvalt och
+   lysande från start. Därmed finns inget tomt läge att rita, och
+   återställnings-knappen behövs inte: att välja `Förslag` ÄR återställningen.
 
-/** De två sätt-alla-valen. En äkta delmängd av `Beloppsgenvag`, med avsikt. */
-export type SattAllaVal = 'avgift' | 'allt';
+   LÄGET ÄR EN LEVANDE REGEL, INTE EN ENGÅNGSHANDLING. Det beskriver vad
+   kapseln senast gjorde OCH vad en rad som markeras HÄREFTER ska få
+   (`beloppForNyMarkerad`). Utan det hade en nymarkerad rad kommit in med sitt
+   förslag mitt i ett "Hela beloppet"-läge, och Lotta hade fått en avvikelse
+   hon aldrig bad om.
+
+   EN HANDREDIGERING SLÄCKER INTE LÄGET (ändrat i varv 5). Den är hennes
+   medvetna undantag från regeln, och raden bär det i `handredigerad` så en
+   senare markering inte skriver över det hon just skrev. */
+
+/** Kapselns tre lägen. `forslag` är förvalet och den neutrala vägen tillbaka. */
+export type Beloppslage = 'forslag' | 'avgift' | 'allt';
 
 /**
  * Raden saknar ett belopp — den bor i "Behöver din hand".
  *
  * Flyttad hit ur `VariantC.tsx` i `TASK-402.8`: hög-indelningen och
- * sätt-alla-regeln måste läsa SAMMA predikat, annars kan en rad vara i högen
+ * lägesregeln måste läsa SAMMA predikat, annars kan en rad vara i högen
  * enligt formen och utanför den enligt regeln.
  */
 export function saknarBelopp(rad: BekraftelseRad): boolean {
@@ -255,129 +273,102 @@ export function saknarBelopp(rad: BekraftelseRad): boolean {
 }
 
 /**
- * Ändrar ett sätt-alla-tryck denna rad? Fyra villkor, alla ur kortets AC #3.
+ * Radens belopp i ett givet läge, eller `null` när läget inte går ihop för
+ * raden (avgiften redan betald, pris utan fack, pris saknas i basen).
  *
- *   1. MARKERAD. En avmarkerad rad räknas ingenstans och registreras inte —
- *      att ändra dess belopp hade varit en osynlig ändring.
+ * ALL PRISLOGIK LÅNAS, som överallt annars här: `forslagsbelopp` och
+ * `genvagsbelopp` läser radens egna kandidater ur inkorgens
+ * `harledBeloppsknappar`. Det finns inget delat belopp — priset är per event
+ * OCH per person.
+ */
+export function beloppForLage(rad: BekraftelseRad, lage: Beloppslage): number | null {
+  return lage === 'forslag' ? forslagsbelopp(rad.beloppsknappar) : genvagsbelopp(rad, lage);
+}
+
+/**
+ * Rör läget denna rad? Fyra villkor, alla ur kortets AC #3.
+ *
+ *   1. MARKERAD. En avmarkerad rad räknas ingenstans och registreras inte.
  *   2. INTE REDAN REGISTRERAD. Raden är bokförd; dess belopp är historik.
  *      (En rad vars registrering FALLERADE är däremot med — den ska kunna
- *      köras om med ett nytt belopp, samma regel som `arRegistrerbar`.)
- *   3. INTE I "BEHÖVER DIN HAND". Högen väntar på Lottas hand, och ett
- *      bulk-tryck som fyllde den hade tagit ifrån henne just det beslutet.
- *   4. RADEN HAR KANDIDATEN. `genvagsbelopp` ger `null` när valet inte går
- *      ihop (avgiften redan betald, pris utan fack, pris saknas i basen) —
- *      då rörs raden inte alls. Den behåller appens förslag.
+ *      köras om, samma regel som `arRegistrerbar`.)
+ *   3. INTE I "BEHÖVER DIN HAND". Högen väntar på Lottas hand.
+ *   4. RADEN HAR ETT BELOPP I LÄGET. Saknas kandidaten rörs raden inte alls;
+ *      den behåller vad den hade.
  */
-export function berorsAvSattAlla(rad: BekraftelseRad, val: SattAllaVal): boolean {
+export function berorsAvLage(rad: BekraftelseRad, lage: Beloppslage): boolean {
   if (!rad.markerad) return false;
   if (rad.utfall?.klass === 'registrerad') return false;
   if (saknarBelopp(rad)) return false;
-  return genvagsbelopp(rad, val) !== null;
+  return beloppForLage(rad, lage) !== null;
+}
+
+/** Hur många rader läget KAN röra — pillens av/på. */
+export function antalILage(rader: readonly BekraftelseRad[], lage: Beloppslage): number {
+  return rader.filter((rad) => berorsAvLage(rad, lage)).length;
 }
 
 /**
- * [TASK-402.8 varv 4] VILKET SÄTT-ALLA-VAL SOM ÄR AKTIVT, om något.
+ * Hur många rader läget faktiskt ÄNDRAR — beskedets tal.
  *
- * Marcus: *"när man trycker på 'Anmälningsavgift' eller 'Hela beloppet'
- * behöver vi inte visa att knappen är aktiv?"* Toggeln behöver alltså ett
- * TILLSTÅND, och tillståndet finns redan i modellen som `aktivGenvag` —
- * genvägstypen är bara bredare än toggelns två poster (den bär `forslag` och
- * `annat` åt varianterna A/B).
- *
- * FUNKTIONEN ÄR EN SMALNING, INTE EN NY SANNING. Den säger "visa denna pill
- * som intryckt" och ingenting annat; `forslag` (utgångsläget och läget efter
- * en återställning) samt `null` (någon rad är handredigerad) betyder båda att
- * INGEN pill är intryckt.
- *
- * VARFÖR TILLSTÅNDET INTE HÄRLEDS UR RADERNA I STÄLLET — prövat och
- * förkastat: "varje rad bär sin avgifts-kandidat" är SANT redan i
- * utgångsläget, eftersom `forslagsbelopp` väljer avgiften när den finns. En
- * rad-härledd toggel hade därför lyst upp "Anmälningsavgift" innan Lotta rört
- * något, och lyst kvar efter "Återställ förslagen" — raka motsatsen till vad
- * knappen ska betyda.
+ * Skiljer sig från `antalILage` med avsikt: en rad som redan bär lägets
+ * belopp ändras inte, och ett besked som räknade den hade sagt "6 belopp
+ * satta" när noll flyttade sig.
  */
-export function aktivtSattAllaVal(genvag: Beloppsgenvag | null): SattAllaVal | null {
-  return genvag === 'avgift' || genvag === 'allt' ? genvag : null;
-}
-
-/** Hur många rader ett sätt-alla-tryck faktiskt rör — knappens besked. */
-export function antalSattAlla(rader: readonly BekraftelseRad[], val: SattAllaVal): number {
-  return rader.filter((rad) => berorsAvSattAlla(rad, val)).length;
+export function antalAndradeILage(rader: readonly BekraftelseRad[], lage: Beloppslage): number {
+  return rader.filter(
+    (rad) => berorsAvLage(rad, lage) && radbelopp(rad) !== beloppForLage(rad, lage),
+  ).length;
 }
 
 /**
- * Raderna efter ett sätt-alla-tryck. Berörda rader får sin EGEN kandidat
- * (`avgiftKvar` respektive `kvar`, ur inkorgens `harledBeloppsknappar`) — det
- * finns inget delat belopp, eftersom priset är per event och per person.
+ * Raderna efter att ett läge valts. Orörda rader returneras som SAMMA objekt,
+ * så React kan se på referensen att kortet inte ändrats.
  *
- * Orörda rader returneras som SAMMA objekt, inte en kopia: React ska kunna se
- * på referensen att kortet inte ändrats.
+ * `handredigerad` NOLLAS på de rader läget skriver: hennes undantag är
+ * överskrivet, precis som blockets egen text lovar ("Skriver över föreslaget
+ * belopp på alla markerade rader").
  */
-export function sattAllaBelopp(
+export function sattBeloppslage(
   rader: readonly BekraftelseRad[],
-  val: SattAllaVal,
+  lage: Beloppslage,
 ): BekraftelseRad[] {
   return rader.map((rad) => {
-    if (!berorsAvSattAlla(rad, val)) return rad;
-    const belopp = genvagsbelopp(rad, val);
-    return belopp === null ? rad : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null };
+    if (!berorsAvLage(rad, lage)) return rad;
+    const belopp = beloppForLage(rad, lage);
+    return belopp === null
+      ? rad
+      : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null, handredigerad: false };
   });
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
-   ÅTERSTÄLL FÖRSLAGEN (TASK-402.8 varv 3) — VÄGEN TILLBAKA
-   ═══════════════════════════════════════════════════════════════════════════
-
-   Marcus 2026-09-06: *"Sedan borde väl det finnas en 'Ångra knapp' också här
-   eller? Om hon vill ändra tillbaka till föreslaget belopp?"*
-
-   VAD DEN ÅTERSTÄLLER TILL: `forslagsbelopp`, alltså exakt det raden hade när
-   sidan byggdes (`byggRader`). Inte "beloppet före senaste trycket" — en
-   ångra-STACK hade krävt en historik som ingenting annat på sidan har, och
-   den hade dessutom svarat på en annan fråga än Marcus ställde.
-
-   VAD DEN RÖR: varje MARKERAD, ej registrerad rad utanför "Behöver din hand"
-   vars belopp AVVIKER från förslaget — inklusive rader Lotta skrivit för
-   hand. Att bara backa det ett bulk-tryck ändrade hade varit en osynlig
-   skillnad: blockets egen text lovar "alla markerade rader", och en knapp som
-   hemligt undantar de handskrivna raderna är omöjlig att förutsäga.
-
-   VAD DEN INTE RÖR: rader utan förslag (priset saknas i basen), hand-högen,
-   avmarkerade och redan registrerade rader — samma fyra kanter som
-   `sattAllaBelopp`, av samma skäl.
-
-   VARFÖR "AVVIKER" INGÅR I PREDIKATET: en rad som redan bär sitt förslag
-   ÄNDRAS inte av knappen och ska därför inte räknas i beskedet. Är ingen rad
-   avvikande betyder knappen ingenting, och då är den avstängd. */
-
 /**
- * Skulle en återställning ändra denna rad? Fyra kanter som `berorsAvSattAlla`
- * plus en femte: beloppet måste faktiskt AVVIKA från förslaget.
+ * Beloppet en rad ska få NÄR DEN MARKERAS, enligt det aktiva läget — eller
+ * `null` när raden ska lämnas ifred.
+ *
+ * TRE FALL LÄMNAS IFRED, och det tredje är hela poängen med `handredigerad`:
+ * en registrerad rad (historik), en rad utan kandidat i läget, och en rad
+ * Lotta skrivit beloppet på för hand. Utan det sista hade en avmarkering och
+ * en ny markering tyst kastat bort hennes siffra.
+ *
+ * `markerad` PRÖVAS INTE HÄR, till skillnad från `berorsAvLage`: funktionen
+ * anropas i samma ögonblick som raden blir markerad, alltså medan fältet
+ * fortfarande är `false`.
  */
-export function berorsAvAterstallning(rad: BekraftelseRad): boolean {
-  if (!rad.markerad) return false;
-  if (rad.utfall?.klass === 'registrerad') return false;
-  if (saknarBelopp(rad)) return false;
-  const forslag = forslagsbelopp(rad.beloppsknappar);
-  if (forslag === null) return false;
-  return radbelopp(rad) !== forslag;
-}
-
-/** Hur många rader en återställning faktiskt ändrar — knappens besked. */
-export function antalAterstallning(rader: readonly BekraftelseRad[]): number {
-  return rader.filter(berorsAvAterstallning).length;
+export function beloppForNyMarkerad(rad: BekraftelseRad, lage: Beloppslage): string | null {
+  if (rad.utfall?.klass === 'registrerad') return null;
+  if (rad.handredigerad) return null;
+  const belopp = beloppForLage(rad, lage);
+  return belopp === null ? null : visaKronor(belopp);
 }
 
 /**
- * Raderna efter "Återställ förslagen". Orörda rader returneras som SAMMA
- * objekt, precis som i `sattAllaBelopp`.
+ * Vilket läge kapseln ska visa som valt. Modellens `aktivGenvag` är bredare
+ * än de tre lägena — den bär `annat` åt varianterna A/B — och kapseln har
+ * ALLTID ett val, så allt utanför de tre faller till `forslag`.
  */
-export function aterstallForslag(rader: readonly BekraftelseRad[]): BekraftelseRad[] {
-  return rader.map((rad) => {
-    if (!berorsAvAterstallning(rad)) return rad;
-    const forslag = forslagsbelopp(rad.beloppsknappar);
-    return forslag === null ? rad : { ...rad, belopp: visaKronor(forslag), ejGenomforbar: null };
-  });
+export function aktivtBeloppslage(genvag: Beloppsgenvag | null): Beloppslage {
+  return genvag === 'avgift' || genvag === 'allt' ? genvag : 'forslag';
 }
 
 /**
@@ -522,6 +513,7 @@ export function byggRader(
       markerad: true,
       notering: '',
       ejGenomforbar: null,
+      handredigerad: false,
       utfall: null,
       inbetalningId: null,
       kvitto: 'ingen',
@@ -608,6 +600,7 @@ export function byggImportrad(
     markerad: true,
     notering: '',
     ejGenomforbar: null,
+    handredigerad: false,
     utfall: null,
     inbetalningId: null,
     kvitto: 'ingen',

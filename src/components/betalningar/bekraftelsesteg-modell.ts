@@ -2,10 +2,10 @@ import type { Jobbstatus } from '@/domain/schemas';
 import type {
   BekraftelseRad,
   Beloppsgenvag,
+  Beloppslage,
   Fas,
   ObestamdImportrad,
   Radvarden,
-  SattAllaVal,
   Summering,
 } from './bekraftelsesteg-harledningar';
 import type { Betalsatt } from './betalsatt-minne';
@@ -86,23 +86,23 @@ export type BekraftelsestegModell = {
   summering: Summering;
   sattGenvag: (genvag: Beloppsgenvag) => void;
   /**
-   * [TASK-402.8] "Sätt alla belopp": varje MARKERAD rad utanför "Behöver din
-   * hand" får sin egen kandidat för valet, och en rad utan kandidat rörs inte.
-   * Regeln är ren och bor i `sattAllaBelopp` (`bekraftelsesteg-harledningar`);
+   * [TASK-402.8 varv 5] BELOPPSLÄGET för de markerade raderna — kapselns tre
+   * poster (`Förslag` | `Anmälningsavgift` | `Hela beloppet`).
+   *
+   * Anropet gör TVÅ saker: sätter beloppet på varje markerad, registrerbar rad
+   * utanför hand-högen till radens kandidat i läget, och gör läget till
+   * modellens `aktivGenvag` — så kapseln kan visa vilket som gäller OCH så en
+   * rad som markeras senare får samma belopp (`beloppForNyMarkerad`).
+   *
+   * Regeln är ren och bor i `sattBeloppslage` (`bekraftelsesteg-harledningar`);
    * båda modell-implementationerna kallar den, så formen kan inte se skillnad.
    *
    * OBLIGATORISK OCH INTE VALFRI, till skillnad från importfälten nedan:
-   * `VariantC` renderar knapparna ovillkorligt, så en modell utan metoden vore
-   * en yta med två knappar som inte gör något. Prototypens simulering får
-   * därför samma tre rader kod tills `TASK-402.6` river den.
+   * `VariantC` renderar kapseln ovillkorligt, så en modell utan metoden vore
+   * en yta med tre lägen som inte gör något. Prototypens simulering får därför
+   * samma rader kod tills `TASK-402.6` river den.
    */
-  sattAllaBelopp: (val: SattAllaVal) => void;
-  /**
-   * [TASK-402.8 varv 3] "Återställ förslagen" — vägen tillbaka till appens
-   * förval per rad. Samma urvalsregel som `sattAllaBelopp`, plus att raden
-   * måste avvika från sitt förslag. Ren regel i `aterstallForslag`.
-   */
-  aterstallForslag: () => void;
+  sattBeloppslage: (lage: Beloppslage) => void;
   sattBetalsattAlla: (betalsatt: Betalsatt) => void;
   sattDatumAlla: (datum: string) => void;
   sattRadBelopp: (nyckel: string, belopp: string) => void;

@@ -10,19 +10,19 @@ import { Button, ToggleButton, ToggleButtonGroup } from '@/components/primitives
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
-  aktivtSattAllaVal,
-  antalAterstallning,
-  antalSattAlla,
+  aktivtBeloppslage,
+  antalAndradeILage,
+  antalILage,
   baraOmkorning as arBaraOmkorning,
   arRegistrerbar,
   avstamning,
   type BekraftelseRad,
   type Beloppsklass,
+  type Beloppslage,
   blockrader,
   grupperaRader,
   type ObestamdImportrad,
   radbelopp,
-  type SattAllaVal,
   saknarBelopp,
   summera,
   vantandeKvitton,
@@ -120,26 +120,74 @@ const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
  * framför en pill-toggel i varianterna A/B.
  */
 /**
- * SENTINELNYCKELN FÖR "INGET VAL ÄNNU".
+ * [TASK-402.8 varv 5] KAPSELNS TRE LÄGEN — ord, besked och utseende.
  *
- * `ToggleButtonGroup` är en ALLTID-ETT-VAL-primitiv — `disallowEmptySelection`
- * är hårdkodad i den, och dess docblock kallar tömbart val "en annan
- * mönsterklass". Det är rätt för periodtoggeln och vy-växlaren, där ett läge
- * alltid gäller. Vår yta har däremot ett äkta tomt läge: innan Lotta tryckt,
- * efter "Återställ förslagen", och när hon handredigerat en rad.
+ * ORDEN BÄR INGA TAL, med avsikt. "1 000 kr" och "2 500 kr" hade varit en
+ * LÖGN på den här sidan: priset är per event OCH per person, så en rad vars
+ * deltagare redan betalat 2 000 av 2 500 får 500 av samma tryck som ger en
+ * annan rad 2 500. Segmentet namnger VAD beloppet är, aldrig hur mycket —
+ * talet står kvar per rad, där det är sant.
  *
- * En kontrollerad nyckel som INGEN pill bär uttrycker exakt det, utan att
- * röra en förseglad primitiv: ingen pill får `data-selected`, och eftersom
- * `disallowEmptySelection` står kvar kan ett tryck på den redan valda pillen
- * ändå inte släcka den. Precis den delningen uppdraget bad om — avmarkering
- * bara via Återställ eller redigering.
+ * `Förslag` FÖRST OCH FÖRVALT (varv 5): det är appens eget förval per rad och
+ * därmed både utgångsläget och vägen tillbaka. Varv 3:s separata
+ * "Återställ förslagen"-knapp är riven — ett läge som alltid är valbart gör
+ * en egen ångra-knapp överflödig, och kapseln slipper det tomma tillstånd
+ * Marcus såg ("bara en textsträng på grå bakgrund").
  */
-const INGET_VAL = 'inget' as const;
-
-const SATT_ALLA: { val: SattAllaVal; etikett: string; besked: string }[] = [
-  { val: 'avgift', etikett: 'Anmälningsavgift', besked: 'anmälningsavgiften' },
-  { val: 'allt', etikett: 'Hela beloppet', besked: 'hela beloppet' },
+const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
+  { lage: 'forslag', etikett: 'Förslag', besked: 'förslaget' },
+  { lage: 'avgift', etikett: 'Anmälningsavgift', besked: 'anmälningsavgiften' },
+  { lage: 'allt', etikett: 'Hela beloppet', besked: 'hela beloppet' },
 ];
+
+/* ═══ SEGMENTENS UTSEENDE — HUSETS SEKUNDÄRA KNAPP, INTE KAPSELNS PILL ══════
+   Marcus: *"Men samtidigt ska det liksom se ut som 'sekundär' knappar ju.
+   Måste liksom matcha och passa in i Sätt alla belopp-rutan."*
+
+   VÄGEN ÄR `className`, INTE EN NY VARIANT I PRIMITIVEN. Prövat först, och
+   det räckte: `ToggleButtonGroup`/`ToggleButton` slår ihop sina cva-klasser
+   med konsumentens via `cn` (tailwind-merge), så varje utility jag skriver
+   här vinner över primitivens i samma grupp — inklusive `data-[selected]:`-
+   och `not-data-[selected]:data-[hovered]:`-varianterna, så länge samma
+   modifierkedja används. Primitiven är därmed ORÖRD och dess fyra andra
+   konsumenter kan inte påverkas (verifierat med grep).
+
+   FÄRGERNA ÄR SEKUNDÄRKNAPPENS EGNA KOMPONENT-TOKENS, inte en avskrift av
+   dess klasser: `--mm-button-secondary-*`. En avskrift hade varit en andra
+   definition av samma knapp och kunnat glida isär från originalet; tokens kan
+   det inte. Det är också husets regel (CLAUDE.md § Design-system: inga
+   hårdkodade färger, allt via custom properties).
+
+   DET VALDA SEGMENTETS KANT ÄR `--mm-text`, INTE `--mm-border-strong` —
+   AVSTEG FRÅN UPPDRAGET, mätt och motiverat. WCAG 1.4.11 kräver 3:1 för det
+   som skiljer ett tillstånd från ett annat. Uppmätt på husets faktiska
+   tokens: vald fyllning mot panelen 1,07:1 · `border-strong` mot panelen
+   1,60:1 · `border-strong` mot ovald kant 1,35:1 — alla långt under golvet.
+   `--mm-text` mot panelen ger 14,22:1 och mot den valda fyllningen 13,31:1.
+   En mörk FYLLNING hade nått samma tal men är reserverad för Registrera-
+   knapparna ("en primär, syskonet outline"), så kanten bär tillståndet.
+   Texten klarar sig med marginal i alla lägen (12,52–13,38:1).
+
+   BREDDEN: `inline-grid` + `auto-cols-fr` + `w-fit` ger alla tre segmenten
+   exakt det bredaste ordets bredd ("Anmälningsavgift") utan att raden sträcks
+   över hela panelen. Marcus: *"anmälningsavgift och Hela beloppet knapparna
+   måste vara exakt lika breda, annars blir det ingen snygg toggle."* Under
+   `sm` faller raden till en kolumn — fortfarande likbreda, eftersom
+   kolumnbredden är samma fit-content. */
+const KAPSEL_KLASS =
+  'inline-grid w-fit auto-cols-fr grid-flow-row gap-2 rounded-none bg-transparent p-0 sm:grid-flow-col';
+
+const SEGMENT_KLASS = [
+  // Ovalt: husets sekundära knapp, size sm.
+  'min-h-8 rounded-lg border px-3 py-1.5 text-small',
+  'border-(--mm-button-secondary-border) bg-(--mm-button-secondary-bg)',
+  'text-(color:--mm-button-secondary-text)',
+  'not-data-[selected]:data-[hovered]:bg-(--mm-button-secondary-bg-hover)',
+  'contrast-more:border-border-strong',
+  // Valt: intryckt sekundär — tonad platta, mörk kant, tyngre text, ingen skugga.
+  'data-[selected]:border-text data-[selected]:bg-bg-emphasized',
+  'data-[selected]:font-semibold data-[selected]:text-text data-[selected]:shadow-none',
+].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
   return `${antal} ${antal === 1 ? ett : flera}`;
@@ -295,33 +343,26 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const avstamda = useMemo(() => avstamning(markerade), [markerade]);
   /* Hur många rader varje knapp faktiskt rör. Noll ⇒ knappen är avstängd:
      en knapp som inte gör något ska inte gå att trycka. */
-  const sattAllaTraffar = useMemo(
-    () => new Map(SATT_ALLA.map((v) => [v.val, antalSattAlla(kvar, v.val)])),
+  /* Hur många rader varje läge KAN röra. Noll ⇒ segmentet är avstängt: ett
+     läge som inte gör något ska inte gå att välja. `forslag` stängs aldrig av
+     — det är kapselns förval och måste alltid gå att återvända till. */
+  const lagesTraffar = useMemo(
+    () => new Map(LAGEN.map((v) => [v.lage, antalILage(kvar, v.lage)])),
     [kvar],
   );
-  const sattAlla = (val: SattAllaVal) => {
-    const antal = sattAllaTraffar.get(val) ?? 0;
-    const besked = SATT_ALLA.find((v) => v.val === val)?.besked ?? '';
-    modell.sattAllaBelopp(val);
-    setSattAllaBesked(`${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`);
-  };
-  /* [varv 4] Vilken pill som ska stå intryckt. `aktivGenvag` är modellens
-     tillstånd; `aktivtSattAllaVal` smalnar det till toggelns två poster. */
-  const aktivtVal = aktivtSattAllaVal(modell.aktivGenvag);
-  /* Hur många rader som AVVIKER från sitt förslag just nu. Noll ⇒ knappen är
-     avstängd: en återställning som inte återställer något ska vara tyst. */
-  const aterstallningsTraffar = useMemo(() => antalAterstallning(kvar), [kvar]);
-  const aterstallForslagen = () => {
-    const antal = aterstallningsTraffar;
-    modell.aterstallForslag();
-    /* NOLL RÖRDA RADER ÄR ETT EGET BESKED, inte "0 belopp återställda".
-       Läget uppstår när en pill är intryckt men varje rad redan bär sitt
-       förslag — då är knappens enda jobb att släcka valet, och beskedet ska
-       säga det som faktiskt hände. */
+  const aktivtLage = aktivtBeloppslage(modell.aktivGenvag);
+  const valjLage = (lage: Beloppslage) => {
+    /* BESKEDET RÄKNAR DE RADER SOM FAKTISKT ÄNDRAS, inte de läget rör.
+       Väljer hon `Förslag` när varje rad redan bär sitt förslag flyttar sig
+       ingenting, och "0 belopp satta" hade varit ett sämre svar än att säga
+       det rakt ut. */
+    const antal = antalAndradeILage(kvar, lage);
+    const besked = LAGEN.find((v) => v.lage === lage)?.besked ?? '';
+    modell.sattBeloppslage(lage);
     setSattAllaBesked(
       antal === 0
-        ? 'Alla belopp stod redan på förslaget.'
-        : `${plural(antal, 'belopp återställt', 'belopp återställda')} till förslaget.`,
+        ? `Alla belopp stod redan på ${besked}.`
+        : `${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`,
     );
   };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
@@ -574,73 +615,49 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
             {/* `flex-wrap`: på iPad 820 ryms båda knapparna på en rad, men
                 formen får inte bero på det. Vänsterställda i båda fallen. */}
             <div className="flex flex-wrap items-center gap-2">
-              {/* HUSETS PILL-TOGGEL (varv 4, Marcus: *"när man trycker på
+              {/* KAPSELN (varv 4 + 5). Marcus varv 4: *"när man trycker på
                   'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte
-                  visa att knappen är aktiv? Hur gör vi detta i appen
-                  idag?"*). Svaret på hans andra fråga är `ToggleButtonGroup`
-                  — periodtoggeln, vy-växlaren i `EventsList`/`PersonsList`,
-                  Förberedelseskärmen. Inline-formen (ingen `spread`), `sm`
-                  som knapparna bar förut.
+                  visa att knappen är aktiv? Hur gör vi detta i appen idag?"*
+                  Husets svar är `ToggleButtonGroup` — periodtoggeln,
+                  vy-växlaren i `EventsList`/`PersonsList`,
+                  Förberedelseskärmen. Varv 5 lade till det tredje läget och
+                  bytte kapselns UTSEENDE mot husets sekundära knapp; SEMANTIKEN
+                  är primitivens (se `SEGMENT_KLASS` ovan för hela
+                  resonemanget och kontrastmätningen).
 
-                  DET TILLGÄNGLIGA NAMNET FLYTTAR från varje knapp till
-                  GRUPPEN. Primitiven ger `role="radiogroup"` + `role="radio"`
-                  med `aria-checked`, så skärmläsaren säger "Sätt alla belopp,
-                  Anmälningsavgift, 1 av 2" — sammanhanget kommer ur gruppen i
-                  stället för ur en upprepad `aria-label` per knapp. Pilarna
-                  flyttar fokus inom gruppen, Tab lämnar den. */}
-              <ToggleButtonGroup<SattAllaVal | typeof INGET_VAL>
-                label="Sätt alla belopp"
-                selectedKey={aktivtVal ?? INGET_VAL}
-                onSelectionChange={(key) => {
-                  // `INGET_VAL` kan aldrig komma tillbaka — ingen pill bär
-                  // nyckeln. Grenen finns för typen, inte för ett känt fall.
-                  if (key !== INGET_VAL) sattAlla(key);
-                }}
+                  GRUPPNAMNET ÄR "Belopp för markerade rader", inte panelens
+                  synliga rubrik. Med tre poster där en heter `Förslag` hade
+                  "Sätt alla belopp, Förslag" läst som en motsägelse — man
+                  SÄTTER inte ett förslag, man återvänder till det. Namnet
+                  beskriver i stället vad gruppen STYR, och skärmläsaren säger
+                  "Belopp för markerade rader, Förslag, 1 av 3". Den synliga
+                  rubriken står kvar oförändrad; den är inte gruppens
+                  programmatiska etikett, så ingen namn-i-etikett-konflikt
+                  uppstår (WCAG 2.5.3 gäller kontroller vars synliga text ÄR
+                  deras namn). */}
+              <ToggleButtonGroup<Beloppslage>
+                label="Belopp för markerade rader"
+                className={KAPSEL_KLASS}
+                selectedKey={aktivtLage}
+                onSelectionChange={valjLage}
               >
-                {SATT_ALLA.map((v) => (
+                {LAGEN.map((v) => (
                   <ToggleButton
-                    key={v.val}
-                    id={v.val}
+                    key={v.lage}
+                    id={v.lage}
                     size="sm"
-                    isDisabled={registrerar || (sattAllaTraffar.get(v.val) ?? 0) === 0}
+                    className={SEGMENT_KLASS}
+                    /* `forslag` stängs ALDRIG av — det är förvalet och den
+                       enda vägen tillbaka. De två överskrivande lägena stängs
+                       av när ingen markerad rad kan ta dem. */
+                    isDisabled={
+                      registrerar || (v.lage !== 'forslag' && (lagesTraffar.get(v.lage) ?? 0) === 0)
+                    }
                   >
                     {v.etikett}
                   </ToggleButton>
                 ))}
               </ToggleButtonGroup>
-              {/* VÄGEN TILLBAKA (varv 3, Marcus: *"Sedan borde väl det finnas
-                  en 'Ångra knapp' också här eller? Om hon vill ändra tillbaka
-                  till föreslaget belopp?"*).
-
-                  "ÅTERSTÄLL FÖRSLAGEN" OCH INTE "ÅNGRA": knappen backar inte
-                  det senaste trycket utan sätter tillbaka appens förval
-                  (`forslagsbelopp`) på varje markerad rad. "Ångra" hade lovat
-                  en historik som sidan inte har — och som hade svarat på en
-                  annan fråga än den Marcus ställde.
-
-                  `ghost` OCH SIST: de två outline-knapparna är handlingen,
-                  denna är reträtten. Samma viktordning som radformulärets
-                  Klar/Avbryt (`RegistreraForm`).
-
-                  AVSTÄNGD NÄR INGEN RAD AVVIKER från sitt förslag — då
-                  betyder knappen ingenting, och en knapp som inte betyder
-                  något ska inte gå att trycka. */}
-              <Button
-                size="sm"
-                intent="ghost"
-                /* AVSTÄNGD BARA NÄR DEN INTE HAR NÅGOT ATT GÖRA — och den har
-                   TVÅ jobb, inte ett. MÄTT UNDER VARV 4: efter ett tryck på
-                   "Anmälningsavgift" bär varje rad sitt förslag igen (förslaget
-                   ÄR avgiften när den finns), så noll rader avvek — men pillen
-                   stod intryckt. Med det gamla villkoret blev knappen avstängd
-                   och valet gick inte att släcka: en återvändsgränd som bara
-                   en omladdning tog sig ur. Knappen lever därför så länge
-                   ANTINGEN en rad avviker ELLER en pill är intryckt. */
-                isDisabled={registrerar || (aterstallningsTraffar === 0 && aktivtVal === null)}
-                onPress={aterstallForslagen}
-              >
-                Återställ förslagen
-              </Button>
             </div>
             {/* Regionen finns FÖRE sitt innehåll och är tom tills något trycks
                 — en live-region som monteras samtidigt som texten annonseras
