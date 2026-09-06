@@ -8,7 +8,6 @@ import {
   arRegistrerbar,
   avstamning,
   type BekraftelseRad,
-  type BekraftelsestegModell,
   type Beloppsklass,
   blockrader,
   grupperaRader,
@@ -16,6 +15,7 @@ import {
   summera,
   vantandeKvitton,
 } from '../bekraftelsesteg-harledningar';
+import type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
 import { visaKronor } from '../belopp-inmatning';
 import { RegistreraForm } from '../RegistreraForm';
 import { RegistreratNuBlock } from '../RegistreratNuBlock';
@@ -235,22 +235,63 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
     ? ' pointer-events-none opacity-60 motion-safe:transition-opacity'
     : '';
 
+  /* ═══ CTRL/⌘+ENTER = "REGISTRERA OCH SKICKA" (grillningens beslut 4) ══════
+     PÅ `window`, INTE PÅ ETT ELEMENT — och det är två beslut i ett.
+
+     1. STRUKTURELLT. Prototypen hängde hanteraren på sitt yttre `<form>` med
+        motiveringen att formuläret var "ett element som får ha en (a11y-lint)".
+        Det yttre formuläret är rivet (se `<section>` nedan: det delade
+        radformuläret ÄR ett `<form>`, och nästling är ogiltig HTML), och
+        Biomes `a11y/noStaticElementInteractions` fäller — korrekt — en
+        `onKeyDown` på en `<section>` utan roll. En sidgenväg hör hemma på
+        sidan, inte på en godtycklig behållare.
+
+     2. BETEENDEMÄSSIGT ÄR DET EN FÖRBÄTTRING, inte en kompromiss. Genvägen
+        fungerar nu var fokus än står på sidan — vilket är vad Lotta faktiskt
+        gör: hon trycker ⌘+Enter efter att ha läst avstämningen, inte med
+        markören i ett fält.
+
+     `defaultPrevented` ÄR VAKTEN mot dubbelavfyrning. Radformulärets EGEN
+     ⌘+Enter (`RegistreraForm` § `vidTangent`, en synonym till "Klar" i
+     `redigera`-läget) kallar `preventDefault()` på det syntetiska eventet,
+     vilket sätter flaggan på det NATIVA event som därefter bubblar hit. Utan
+     kontrollen hade ett ⌘+Enter i ett öppet kort registrerat HELA sidan. */
+  useEffect(() => {
+    function vidTangent(event: KeyboardEvent) {
+      if (event.defaultPrevented) return;
+      if (event.key !== 'Enter' || !(event.metaKey || event.ctrlKey)) return;
+      if (registrerar || registrerbara.length === 0) return;
+      event.preventDefault();
+      starta(true);
+    }
+    window.addEventListener('keydown', vidTangent);
+    return () => window.removeEventListener('keydown', vidTangent);
+  });
+
   return (
-    <form
-      className="flex flex-col gap-6"
-      // Enter i ett fält får ALDRIG registrera tio betalningar — bara den
-      // uttryckliga genvägen nedan gör det. Formuläret finns för att bära
-      // tangentbordshanteraren på ett element som får ha en (a11y-lint).
-      onSubmit={(e) => e.preventDefault()}
-      onKeyDown={(e) => {
-        // Ctrl/⌘+Enter = "Registrera och skicka" (beslut 4), samma genväg som
-        // radformuläret bär.
-        if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && registrerbara.length > 0) {
-          e.preventDefault();
-          starta(true);
-        }
-      }}
-    >
+    /* ═══ EN `<section>`, INTE ETT `<form>` — RÄTTAT I PROMOVERINGEN ═════════
+       Prototypen bar ett `<form>` här, och dess radformulär var en `<div>`
+       just för att undvika nästling ("ett nästlat `<form>` vore ogiltig
+       HTML", `RadFormular`s gamla kommentar). Promoveringen byter radens
+       `<div>` mot det DELADE `RegistreraForm`, som ÄR ett `<form>` — och
+       därmed hade det yttre `<form>`et blivit dess förälder.
+
+       MÄTT, INTE BEFARAT: med nästlingen på plats stängde inte "Avbryt"
+       kortet (`bekraftelsesteget.staging.test.ts` § radformuläret, första
+       körningen — formuläret stod kvar öppet med det ändrade beloppet).
+       `<section>` bär ingen formulärsemantik alls, så det inre formuläret är
+       sidans enda — och radens Enter/Escape går dit de ska.
+
+       ARIASNAPSHOT-PARET RÖRS INTE av bytet: `toMatchAriaSnapshot` på en
+       lokator beskriver nodens BARN, aldrig noden själv, och referenserna
+       börjar följaktligen på `- heading "Bulkregistrering"`. Specens lokator
+       byter från `main form` till `data-testid` i samma landning.
+
+       `data-testid` OCH INTE en `aria-label`: ett tillgängligt namn hade
+       gjort sektionen till en `region`-landmark, alltså en NY nod i
+       tillgänglighetsträdet på en sida som redan har `main`. Testkroken ska
+       inte kosta a11y-brus. */
+    <section data-testid="bekraftelsesteget" className="flex flex-col gap-6">
       <header className="flex flex-col gap-1 px-4">
         <h1 className="font-semibold text-3xl">Bulkregistrering</h1>
         {/* RÄKNAREN FÖRST — Åtgärds-sidans ordval, live så skärmläsaren hör
@@ -381,7 +422,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
           </div>
         </div>
       )}
-    </form>
+    </section>
   );
 }
 

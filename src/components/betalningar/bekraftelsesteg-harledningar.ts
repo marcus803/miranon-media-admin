@@ -1,4 +1,4 @@
-import type { Jobbstatus, OppenBetalning } from '@/domain/schemas';
+import type { OppenBetalning } from '@/domain/schemas';
 import { normaliseraBeloppKlient, summeraKronorKlient, visaKronor } from './belopp-inmatning';
 import type { Betalsatt } from './betalsatt-minne';
 import {
@@ -7,7 +7,6 @@ import {
   harledRad,
   type InkorgsRad,
 } from './inkorg-harledningar';
-import type { SessionsRad, VantandeKvitto } from './RegistreratNuBlock';
 
 /**
  * [TASK-402.3] Bekräftelsestegets RENA HÄRLEDNINGAR — raden, avstämningen,
@@ -346,14 +345,49 @@ export function byggRader(
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * De registrerade raderna i blockets EGEN radmodell (`SessionsRad`).
+ * Blockets radmodell, DEKLARERAD HÄR I STÄLLET FÖR IMPORTERAD — och det är
+ * inte en dubblett utan ett medvetet lagerval.
+ *
+ * `RegistreratNuBlock.tsx` är en `.tsx`-fil, och `tsconfig.tests.json`
+ * kompilerar api-pure-sviten UTAN `--jsx` (mätt: `error TS6142` på varje
+ * typimport härifrån). En ren härledningsmodul som ska kunna testas som ren
+ * funktion får därför inte peka in i komponentlagret alls — beroendet går EN
+ * väg, och den vägen är nedåt.
+ *
+ * TYPERNA KAN INTE DRIFTA I TYSTHET: `VariantC.tsx` matar `blockrader()`s
+ * resultat rakt in i `RegistreratNuBlock`s `registrerade`-prop, och
+ * TypeScripts strukturella typning fäller call site i samma sekund fälten
+ * skiljer sig. Kontraktet bevakas alltså av kompilatorn, på det ställe där
+ * det faktiskt används.
+ */
+export type Blockrad = {
+  inbetalningId: string;
+  namn: string;
+  belopp: number;
+  betalsatt: Betalsatt;
+  /** Lottas kryss vid registreringen. */
+  medKvitto: boolean;
+  /** Anmälans record-ID — blocket behöver den för Ångras cache-patch. */
+  radNyckel?: string;
+};
+
+/** Ett kvitto i den SESSION-LOKALA kön. Samma lagerskäl som `Blockrad`. */
+export type KoatKvitto = { inbetalningId: string; namn: string; belopp: number };
+
+/**
+ * De registrerade raderna i blockets radmodell.
  *
  * `radNyckel` sätts ALLTID här, till skillnad från importvägen: en rad i
  * steget kommer per definition ur en synlig inkorgsrad, och blocket behöver
  * nyckeln för att Ångra ska kunna skriva serverns omräkning rakt in i cachen
  * (`useRaderaInbetalning` § `skrivHarledningTillOppna`).
+ *
+ * En registrerad rad UTAN `inbetalningId` hoppas över. Den kan inte uppstå i
+ * den skarpa vägen (id:t kommer ur serverns svar), men typen tillåter den —
+ * och en post utan id hade gjort Ångra och kvittokön omöjliga att koppla till
+ * rätt rad.
  */
-export function blockrader(rader: readonly BekraftelseRad[]): SessionsRad[] {
+export function blockrader(rader: readonly BekraftelseRad[]): Blockrad[] {
   return rader
     .filter((r) => r.utfall?.klass === 'registrerad' && r.inbetalningId !== null)
     .map((r) => ({
@@ -367,7 +401,7 @@ export function blockrader(rader: readonly BekraftelseRad[]): SessionsRad[] {
 }
 
 /** Kvittona som ligger i den SESSION-LOKALA kön ("Skicka N kvitton"). */
-export function vantandeKvitton(rader: readonly BekraftelseRad[]): VantandeKvitto[] {
+export function vantandeKvitton(rader: readonly BekraftelseRad[]): KoatKvitto[] {
   return rader
     .filter((r) => r.kvitto === 'vantar' && r.inbetalningId !== null)
     .map((r) => ({
@@ -376,91 +410,6 @@ export function vantandeKvitton(rader: readonly BekraftelseRad[]): VantandeKvitt
       belopp: radbelopp(r) ?? 0,
     }));
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   MODELLEN VARIANT C KONSUMERAR
-   ═══════════════════════════════════════════════════════════════════════════ */
-
-/**
- * Efterlägets kopplingar — allt `RegistreratNuBlock` behöver som INTE går att
- * härleda ur raderna.
- *
- * SEPARATIONEN ÄR AVSIKTLIG. Raderna (`modell.rader`) är samma i båda
- * världarna; det som skiljer den promoverade ytan från DEV-prototypen är
- * VART knapparna leder — och det är exakt denna typ. Formen (`VariantC`) ser
- * bara ett objekt med callbacks och vet aldrig vilken värld den står i.
- */
-export type BekraftelseBlockKopplingar = Pick<
-  import('./RegistreratNuBlock').RegistreratNuBlockProps,
-  | 'granskningsBlockRef'
-  | 'jobbrader'
-  | 'utfall'
-  | 'bekraftelseSynlig'
-  | 'onDoljBekraftelse'
-  | 'koaPending'
-  | 'onSkickaKvitton'
-  | 'forhandsgranskaPagar'
-  | 'forhandsgranskaAllaPagar'
-  | 'onForhandsgranska'
-  | 'onForhandsgranskaAlla'
-  | 'onSkickaIgen'
-  | 'onAngra'
-  | 'angraPending'
-  | 'angraFel'
-  | 'onAngraDialogOppen'
-  | 'forhandsgranskaFel'
->;
-
-/**
- * Modellen `VariantC` renderar. TVÅ implementationer uppfyller den:
- * `useBekraftelsesteg` (skarp — inkorgens registrerings-, kvitto- och
- * ångra-vägar) och `useBekraftelsestegSimulering` (DEV-prototypens in-memory-
- * lager, rivs i `TASK-402.6`). Formen ser ingen skillnad.
- */
-export type BekraftelsestegModell = {
-  rader: BekraftelseRad[];
-  fas: Fas;
-  /** Aktivt bulk-beloppsval (VariantA/B), eller `null`. */
-  aktivGenvag: Beloppsgenvag | null;
-  batchBetalsatt: Betalsatt;
-  batchDatum: string;
-  summering: Summering;
-  sattGenvag: (genvag: Beloppsgenvag) => void;
-  sattBetalsattAlla: (betalsatt: Betalsatt) => void;
-  sattDatumAlla: (datum: string) => void;
-  sattRadBelopp: (nyckel: string, belopp: string) => void;
-  sattRadBetalsatt: (nyckel: string, betalsatt: Betalsatt) => void;
-  sattRadDatum: (nyckel: string, datum: string) => void;
-  sattRadKvitto: (nyckel: string, medKvitto: boolean) => void;
-  sattRadMarkerad: (nyckel: string, markerad: boolean) => void;
-  sattRadNotering: (nyckel: string, notering: string) => void;
-  /**
-   * [TASK-402.3 AC #7] Radformulärets "Klar" i ETT anrop — det delade
-   * `RegistreraForm`s `redigera`-läge lämnar alla fem fälten samlade
-   * (`RedigeringsVarden`), och en uppdatering per fält hade gett fem
-   * omritningar där en räcker.
-   */
-  sattRadVarden: (nyckel: string, varden: Radvarden) => void;
-  /**
-   * Registrerar raderna EN I TAGET. `skickaNu` = "Registrera och skicka":
-   * kvittona köas direkt när alla svarat, exakt som inkorgens `vidRegistrerad`
-   * gör vid `resultat.skickaNu`.
-   */
-  registrera: (skickaNu: boolean) => void;
-  /**
-   * Körningens räkning medan `fas === 'registrerar'`: hur många av batchens
-   * rader som är avgjorda. `null` utanför en körning.
-   */
-  korning: { totalt: number; klara: number } | null;
-  /** Köar alla väntande kvitton ("Skicka N kvitton"). */
-  skickaKvitton: () => void;
-  /** Utskicksjobbet i `Jobbstatus`-form, så `jobbDelutfall` kan läsa det. */
-  jobbstatus: Jobbstatus | undefined;
-  /** Efterlägets kopplingar — se `BekraftelseBlockKopplingar`. */
-  block: BekraftelseBlockKopplingar;
-  /** Återställ till redigeringsläget (ny körning). */
-  aterstall: () => void;
-};
 
 /** De fem fälten radformuläret lämnar tillbaka vid "Klar". */
 export type Radvarden = Pick<

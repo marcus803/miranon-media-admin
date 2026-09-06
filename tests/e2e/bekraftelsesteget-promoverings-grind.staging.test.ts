@@ -372,9 +372,19 @@ const IDS = bekraftelseFixtur()
   .join(',');
 const STEG_URL = `/mer/betalningar/registrera?ids=${IDS}`;
 
-/** Sidans form — `VariantC`s rot, utan DEV-substratets syskonnoder. */
+/**
+ * Sidans form — `VariantC`s rot, utan DEV-substratets syskonnoder.
+ *
+ * `data-testid` SEDAN FLIPPEN, tidigare `main form`. Roten var ett `<form>`
+ * i prototypen och är en `<section>` i den promoverade ytan: det delade
+ * `RegistreraForm` ÄR ett formulär, och ett nästlat sådant är ogiltig HTML
+ * (mätt: "Avbryt" slutade stänga kortet). Bytet rör INTE referenserna —
+ * `toMatchAriaSnapshot` beskriver lokatorns BARN, aldrig noden själv, och
+ * referensfilerna börjar följaktligen på `- heading "Bulkregistrering"`.
+ * Att de tre identiska lägena förblev identiska EFTER bytet är beviset.
+ */
 function steget(page: Page) {
-  return page.locator('main form');
+  return page.getByTestId('bekraftelsesteget');
 }
 
 async function oppna(

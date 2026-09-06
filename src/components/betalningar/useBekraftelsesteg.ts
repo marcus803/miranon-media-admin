@@ -11,7 +11,6 @@ import { skrivLaddningssida } from '@/lib/skriv-laddningssida';
 import {
   arRegistrerbar,
   type BekraftelseRad,
-  type BekraftelsestegModell,
   type Beloppsgenvag,
   baraOmkorning,
   byggRader,
@@ -21,6 +20,7 @@ import {
   summera,
   vantandeKvitton,
 } from './bekraftelsesteg-harledningar';
+import type { BekraftelsestegModell } from './bekraftelsesteg-modell';
 import { visaKronor } from './belopp-inmatning';
 import type { Betalsatt } from './betalsatt-minne';
 import { lasSenasteBetalsatt, sparaBetalsatt } from './betalsatt-minne';

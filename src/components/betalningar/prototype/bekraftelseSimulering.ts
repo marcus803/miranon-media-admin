@@ -3,7 +3,6 @@ import type { Jobbstatus, OppenBetalning } from '@/domain/schemas';
 import {
   arRegistrerbar,
   type BekraftelseRad,
-  type BekraftelsestegModell,
   type Beloppsgenvag,
   byggRader,
   genvagsbelopp,
@@ -11,6 +10,7 @@ import {
   type Radvarden,
   summera,
 } from '../bekraftelsesteg-harledningar';
+import type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
 import { visaKronor } from '../belopp-inmatning';
 import type { Betalsatt } from '../betalsatt-minne';
 import { lasSenasteBetalsatt } from '../betalsatt-minne';
@@ -50,7 +50,6 @@ export {
   avstamning,
   BETALSATT,
   type BekraftelseRad,
-  type BekraftelsestegModell,
   type Beloppsgenvag,
   type Beloppsklass,
   baraOmkorning,
@@ -68,6 +67,10 @@ export {
   type Summering,
   summera,
 } from '../bekraftelsesteg-harledningar';
+/** Modell-typen bor i `bekraftelsesteg-modell.ts` (den `Pick`:ar ur blockets
+    egna props) — re-exporteras här så `VariantA`/`VariantB` behåller sina
+    importrader oförändrade fram till rivningen i `TASK-402.6`. */
+export type { BekraftelsestegModell } from '../bekraftelsesteg-modell';
 
 const FEL_TEXT = 'Beloppet kunde inte sparas. Försök igen.';
 
