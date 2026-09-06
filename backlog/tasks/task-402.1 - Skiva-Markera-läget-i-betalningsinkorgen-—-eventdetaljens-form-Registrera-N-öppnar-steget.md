@@ -3,10 +3,10 @@ id: TASK-402.1
 title: >-
   Skiva: Markera-läget i betalningsinkorgen — eventdetaljens form, Registrera N
   öppnar steget
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 01:25'
+updated_date: '2026-09-06 06:56'
 labels:
   - ready-for-agent
 dependencies: []
@@ -36,3 +36,9 @@ Lotta trycker Markera i betalningsinkorgen; varje öppen rad i alla eventgrupper
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landad som PR #2363 → main b1f0dae6 (2026-09-06 ~05:15 UTC). AFK-proveniens: S121 resume 3 (Marcus mandat vid paus 3), bygg-agent Opus 5 (bokförd tier-avvikelse) i egen worktree, staplad på #2362 och rebasad på dess fix-runda, landad utan rebase efter #2362. Review runda 1 (Sonnet 5): 0 fynd, risk låg, AC #1–#6 håller med förlagan Deltagare.tsx läst i sin helhet; review-loop-beslut exit 0; backstopp grön för b360efd5. Levererat: markerings-minne.ts (sessionStorage, samma modulklass som betalsatt-minne.ts), markera-läget i BetalningsInkorg.tsx med tre kortformer (kryss, inert klar rad, oförändrat), åtgärdsraden i eventdetaljens form (DOM-signaturer byte-identiska mot batch-baren), 'Registrera N' → /mer/betalningar/registrera?ids=…, rensning via efterRegistrering() i steget, Rensa och navigation utanför betalningsfamiljen; 14/14 e2e, 25/25 api-pure, axe 0 i två lägen, regression 40/40. Designval bokförda: formen ärvs, koden inte (ingen extraktion av useMarkeringsLage/MarkeringsBatchBar); 'Markera alla synliga' är union; Esc stänger läget utan att rensa urvalet (PRD:ns tre rensningstillfällen). Fynd utan kort: tests/e2e/helpers/valjar-lista.ts hårdkodar typ Utbildning. Sessionsdok S121 Del 6 §6.6.
+<!-- SECTION:FINAL_SUMMARY:END -->
