@@ -480,6 +480,28 @@ export const EVENT_ATTACHMENTS_RESPONSE = { attachments: [] } as const;
 export const ATTENDANCE_RESPONSE = { attendance: [] } as const;
 
 /**
+ * `hamta-oppna-betalningar`-svaret (TASK-416.14, betalningsinkorgens EF —
+ * `BetalningsInkorg.tsx`, `src/data/betalningar/useBetalningar.ts`). TOM som
+ * NORMALLÄGE, samma resonemang som `ATTENDANCE_RESPONSE` ovan.
+ *
+ * ANVÄNDS INTE ÄNNU AV NÅGOT ACCEPTANCE-TEST I DENNA SKIVA, ÖPPET SAGT: Inkorgens
+ * ROUTE (`/mer/betalningar`) `beforeLoad`-omdirigerar när `betalningarPa()` är
+ * falskt, och den shared acceptance/visual/webblasarbeteende-dev-servern
+ * hårdkodar `VITE_FEATURE_BETALNINGAR: 'av'` (`playwright.config.ts`, kommentaren
+ * vid raden) — verifierat empiriskt (TASK-416.14, spike-navigering landade på
+ * `/mer` i stället för `/mer/betalningar`). Att slå på flaggan där hade öppnat
+ * `JobbLyssnare`s Realtime-WebSocket för VARJE autentiserad acceptance-sida
+ * (samma docblock), och fixturvärlden saknar ännu en riktig WS-mock för den
+ * kanalen (se `tests/support/fixturvarld/websocket-vakt.ts` § MÄTT, EJ ANTAGET,
+ * och den pågående, ej landade `task/409-hermetisk-betalningsvarld`-grenen).
+ * Handlern registreras ändå (AC #2, TASK-416.14) som förberedd infrastruktur åt
+ * den dag flagg-/WS-frågan är löst — kompileringsledet (denna konstants form)
+ * är verifierat mot `OppnaBetalningarSchema` via `npm run typecheck`, RUNTIME-
+ * beteendet är overifierat i denna PR.
+ */
+export const OPPNA_BETALNINGAR_RESPONSE = { betalningar: [], forfallna: 0 } as const;
+
+/**
  * `get-places`-svaret (TASK-309.7, ADR-125 § 7) — den GLOBALA platslistan
  * bakom Mer → Platser OCH, sedan TASK-338.3, bakom räckviddsdialogens
  * Plats-axel. Samma läsväg, en fixtur (PRD TASK-338 berättelse 11: en ny
