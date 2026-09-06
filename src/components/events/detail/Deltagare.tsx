@@ -18,6 +18,7 @@ import { Skeleton } from '@/components/primitives/Skeleton';
 import { displayName, inskickadTid } from '@/components/registrations/registration-display';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import { useSetBorOver } from '@/data/mutations/registrationLodging';
+import { useForberedAtgardsBilagor } from '@/data/queries/useEventAttachments';
 import { useDataSource } from '@/data/useDataSource';
 import type { Event } from '@/domain/models/Event';
 import type { Registration } from '@/domain/models/Registration';
@@ -558,6 +559,14 @@ function MarkeringsBatchBar({
   aktivt: boolean;
 }) {
   const navigate = useNavigate();
+  // [TASK-416.11] Förvärmer Åtgärds-sidans bilagor på avsikt (ADR-078
+  // beslut 3, husets form: `EventCard.tsx` § `useForberedEventDetalj`) —
+  // rapport E (S123) mätte 1,0–10,3 s för hämtningen som annars startar
+  // först när `ArbetsYta` monterar. React Aria-knappens `onHoverStart`
+  // täcker pekare, `onFocus` täcker tangentbord — samma dubbla signal som
+  // `AvsiktVidFokus`/`EventCard.tsx` bygger på för likvärdig avsikt oavsett
+  // styrsätt.
+  const forberedBilagor = useForberedAtgardsBilagor();
 
   return (
     <div data-testid="markering-batchbar" className="flex flex-wrap items-center gap-2 pb-2.5">
@@ -567,6 +576,8 @@ function MarkeringsBatchBar({
           intent="primary"
           size="sm"
           isDisabled={antal === 0}
+          onHoverStart={() => forberedBilagor(eventId)}
+          onFocus={() => forberedBilagor(eventId)}
           onPress={() =>
             navigate({
               to: '/event/$eventId/atgarder',

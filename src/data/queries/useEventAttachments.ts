@@ -1,4 +1,5 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import { useDataSource } from '@/data/useDataSource';
 import type { Attachment } from '@/domain/models/Attachment';
 import { queryKeys } from '@/queries/keys';
@@ -39,4 +40,42 @@ export function useEventAttachments(eventId: string | null) {
     queryFn: () => dataSource.fetchEventAttachments(eventId ?? ''),
     enabled: eventId != null,
   });
+}
+
+/**
+ * PREFETCH PÅ AVSIKT (ADR-078 beslut 3) för eventets bilagor — husets form,
+ * identisk med `useForberedEventDetalj` (`EventCard.tsx`) och
+ * `varmPersonregister` (`TabBar.tsx`): en stabil callback via `useCallback`
+ * (konsumeras som `onMouseEnter`/`onFocus`/`onHoverStart`-handler), samma
+ * nyckel som `useEventAttachments` OVAN och `AtgardsSida.tsx`s egen
+ * `attachments`-`useQuery` — React Query dedupar, så en redan varm eller
+ * pågående hämtning kostar inget extra anrop.
+ *
+ * `staleTime: 30_000` är den LOKALA prefetch-avvägningen (samma tal som
+ * `EventCard.tsx`): den globala 5-minuters-defaulten (`router.ts`) styr
+ * fortfarande hur färsk datan räknas för `ArbetsYta`s/`DokumentYta`s egna
+ * `useQuery`-anrop när de väl monterar och läser cachen — detta värde
+ * påverkar ENDAST om just DENNA prefetch-anrops bedömer cachen så pass
+ * färsk att den kan hoppa över nätverksanropet. Utan överskuggning hade
+ * upprepad hover över flera minuter aldrig triggat en ny bakgrundshämtning
+ * ens när Lotta genuint kommer tillbaka efter en paus.
+ *
+ * TASK-416.11 (rapport E, S123): bilagorna hämtades annars först när
+ * `ArbetsYta` monterade (åtgärdsraden fälldes ut) — ingen förvärmning på
+ * avsikt fanns för de två ingångarna till Åtgärds-sidan
+ * (`AtgarderKort`/`Atgarder.tsx`, `MarkeringsBatchBar`/`Deltagare.tsx`).
+ */
+export function useForberedAtgardsBilagor(): (eventId: string) => void {
+  const dataSource = useDataSource();
+  const queryClient = useQueryClient();
+  return useCallback(
+    (eventId: string) => {
+      queryClient.prefetchQuery({
+        queryKey: queryKeys.attachments.byEvent(eventId),
+        queryFn: () => dataSource.fetchEventAttachments(eventId),
+        staleTime: 30_000,
+      });
+    },
+    [dataSource, queryClient],
+  );
 }

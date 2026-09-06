@@ -6,6 +6,7 @@ import {
   HANDLINGSRAD_OMSLAG_KLASS,
   HandlingsRadInnehall,
 } from '@/components/primitives/HandlingsRad';
+import { useForberedAtgardsBilagor } from '@/data/queries/useEventAttachments';
 
 /**
  * [TASK-147.8, NAMNBYTE] Check-in-ingången + GENVÄGAR-ytan (tidigare kallad
@@ -97,15 +98,31 @@ function HandlingsLank({
   to,
   eventId,
   children,
+  onIntent,
   ...ledande
 }: Ledande & {
   to: '/event/$eventId/ny-anmalan' | '/event/$eventId/narvaro' | '/event/$eventId/atgarder';
   eventId: string;
   children: string;
+  /**
+   * PREFETCH PÅ AVSIKT (ADR-078 beslut 3) — valfri, satt av anroparen när
+   * målsidan har något värt att värma innan klicket (TASK-416.11:
+   * `AtgarderKort` värmer Åtgärds-sidans bilagor här). Hover/fokus är den
+   * tidigaste ärliga signalen om att raden ska öppnas; `Link` är en native
+   * `<a>` (`@tanstack/react-router`), så vanliga DOM-handlers räcker —
+   * samma form som `Deltagare.tsx` § `forberedAnmalan`.
+   */
+  onIntent?: () => void;
 }) {
   return (
     <div className={HANDLINGSRAD_OMSLAG_KLASS}>
-      <Link to={to} params={{ eventId }} className={RAD_KLASS}>
+      <Link
+        to={to}
+        params={{ eventId }}
+        className={RAD_KLASS}
+        onMouseEnter={onIntent}
+        onFocus={onIntent}
+      >
         <HandlingsRadInnehall
           ledande={
             ledande.nummer !== undefined ? (
@@ -188,12 +205,22 @@ export function CheckInKort({ eventId }: { eventId: string }) {
  * (`AtgardsSida.tsx` § `AtgardsSida`, "obekräftade eller obetalda").
  */
 export function AtgarderKort({ eventId }: { eventId: string }) {
+  // [TASK-416.11] Förvärmer Åtgärds-sidans bilagor på avsikt (ADR-078
+  // beslut 3) — rapport E (S123) mätte 1,0–10,3 s för hämtningen som annars
+  // startar först när `ArbetsYta` monterar. Samma nyckel som `AtgardsSida`s
+  // egen sidmonterings-förvärmning; React Query dedupar.
+  const forberedBilagor = useForberedAtgardsBilagor();
   return (
     <div
       data-testid="atgarder-kort"
       className="rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong"
     >
-      <HandlingsLank ikon={Send} to="/event/$eventId/atgarder" eventId={eventId}>
+      <HandlingsLank
+        ikon={Send}
+        to="/event/$eventId/atgarder"
+        eventId={eventId}
+        onIntent={() => forberedBilagor(eventId)}
+      >
         Gå till åtgärder
       </HandlingsLank>
     </div>
