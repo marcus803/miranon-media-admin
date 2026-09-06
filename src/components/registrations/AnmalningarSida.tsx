@@ -649,29 +649,171 @@ export function AnmalningarSida({
   // i listkortets EGEN padding (§ NAMNKOLUMNENS GOLV nedan).
   const sidRam = <SidRam to="/mer" tillbakaEtikett="Tillbaka till Mer" />;
 
+  // SIDKROMET (header + FilterRad) RENDERAS I ALLA TRE QUERY-TILLSTÅND
+  // (TASK-416.4, PRD TASK-416s regel). Före denna fix visade isPending/
+  // isError bara `sidRam` plus (isPending) en enda lös skeleton-rad — ingen
+  // riktig h1, ingen FilterRad. Lotta mötte alltså ett annat krom vid varje
+  // omhämtning av `registrations.all` (warmup-timeout, offline→online, 24h
+  // persist-utgång), och räknar-skelettet stod flush-vänster medan listan
+  // sitter i sitt eget -mx-4-kort — vänsterkanten hoppade.
+  //
+  // `headerBlock`/`filterRadBlock` är DELAD JSX — SAMMA objekt i alla tre
+  // return-grenar nedan. h1:s och FilterRads klasser/DOM-position är därmed
+  // BYTE-IDENTISKA oavsett query-läge, så `boundingBox()` på dem rör sig
+  // aldrig när datat landar (AC #3).
+  //
+  // ANTALSRADEN OCH FILTERRAD SKILJER PÅ isPending OCH isError (review-
+  // grinden runda 1, TASK-416.4, Marcus mandat 2026-09-06): en tidigare
+  // version matade BÅDA lägena in i FilterRads `isPending`-prop och i en
+  // delad skeleton-vakt, vilket i felläget renderade ett evigt animerat
+  // laddskelett fast källan definitivt fallerat — vilseledande status
+  // ("laddar fortfarande" när sanningen är "gav upp"). Syskonytan
+  // `EventsList.tsx` (isPending-grenen, ~rad 279–292) skickar bara
+  // `isPending={isPending}` till sin FilterRad — samma form här. I isError
+  // visas INGEN skeleton: kromet står kvar (h1 + FilterRads tomma, disabled
+  // kontroller per primitivens eget beteende), och `MessageBox`-felbeskedet
+  // längre ner bär tillståndet. `dataOkand` lever kvar ENDAST för "Visa alla
+  // anmälningar"-länken (se dess docblock nedan) — den är inte samma fråga
+  // som "har jag en pålitlig siffra att visa i en skeleton".
+  const dataOkand = isPending || isError;
+
+  const headerBlock = (
+    <header className="flex flex-col gap-1">
+      <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-2xl">
+        Anmälningar
+      </h1>
+      {isPending ? (
+        <Skeleton variant="text" className="w-40 text-small" />
+      ) : isError ? null : (
+        <p className="text-small text-text-muted">
+          {visaAtgardskon
+            ? atgardskoText(visasRader.length)
+            : `${visasRader.length} ${visasRader.length === 1 ? 'anmälan' : 'anmälningar'}`}
+        </p>
+      )}
+      {/* ÅTERVÄGEN UR ÅTGÄRDSKÖ-LÄGET — se § ÅTERVÄGEN i docblocket ovan
+        för varför den står här trots att facit-bilden saknar den.
+        `search={{ visa: undefined }}` NOLLSTÄLLER parametern explicit,
+        aldrig implicit bevarande (formen är oförändrad ur
+        `AnmalningarList.tsx`, TASK-284.4). Utelämnad medan `dataOkand`
+        (isPending ELLER isError): länken syftar på en räknare
+        (`atgardskoText`) som inte finns förrän datat landat — i isPending
+        finns ingen siffra alls än, i isError gav källan upp och raden ovan
+        visar ingenting (aldrig ett evigt skelett), så länken hade stått
+        utan sitt sammanhang i båda lägena. */}
+      {visaAtgardskon && !dataOkand && (
+        <Link
+          to="/mer/anmalningar"
+          search={{ visa: undefined }}
+          className="self-start text-small underline"
+        >
+          Visa alla anmälningar
+        </Link>
+      )}
+    </header>
+  );
+
+  /* Filtret — "en filtreringsgrej högst upp" (Marcus review
+    2026-08-22) + event-dimensionerna (2026-08-23). EventsLists
+    FilterRad-primitiv i sin exakta form: period-pillren till
+    vänster, tratt-ingången till höger, panelen under. Alltid synlig
+    (även vid noll träffar, ÄVEN i ladd-/fellägena sedan TASK-416.4) —
+    kontrollen är sidans egen, aldrig beroende av om urvalet råkar vara
+    tomt eller om källan ännu inte svarat.
+
+    RUBRIKEN ÖVER FILTERRADEN ÄR STRUKEN (Marcus 2026-08-23). Den bar
+    ordet "Event" åt de korta pillren ("Kommande"/"Tidigare") när de
+    inte fick plats med hela ordparet. Utan `spread` får pillren sin
+    naturliga bredd och ordparet ryms utskrivet — då säger pillren
+    själva vad som är kommande respektive tidigare, och en rubrik som
+    upprepar det är brus. Gruppens `label` är "Period" (EventsLists
+    egen, ORDLISTA § Period), inte "Event": panelens EGEN
+    event-dimension heter så, och två olika kontroller med samma namn
+    på samma yta är precis den förväxling etiketterna finns för att
+    förhindra. */
+  const filterRadBlock = (
+    <FilterRad
+      dimensioner={dimensioner}
+      valda={valda}
+      onValj={(nyckel, varde) => {
+        if (nyckel === 'period') setPeriod(varde ? PERIOD_FRAN_ETIKETT[varde] : 'alla');
+        else if (nyckel === 'typ') setTyp(varde);
+        else if (nyckel === 'ort') setOrt(varde);
+        else setEvent(varde);
+      }}
+      onRensa={rensaFilter}
+      visade={visasRader.length}
+      totalt={rader.length}
+      enhet={ANMALNINGS_ENHET}
+      triggerRef={filterKnappRef}
+      // ENDAST `isPending` (review-grinden runda 1, se docblocket ovan) —
+      // ALDRIG `dataOkand`. FilterRad tolkar sin egen `isPending`-prop som
+      // "visa panelens dropdown-/räknarskelett", och det skelettet ska
+      // sluta animeras när källan svarat — LYCKAD ELLER MISSLYCKAD. Matar
+      // man in `isError` här också fryser skelettet kvar för evigt i
+      // felläget: en shimrande platshållare som påstår "laddar" fast
+      // anropet definitivt gett upp. I isError degraderar FilterRad i
+      // stället till sitt eget, ärliga beteende för tomma/okända
+      // dimensioner (samma form `EventsList.tsx` använder, ~rad 279–292:
+      // `isPending={isPending}`, aldrig en bredare "har jag data"-vakt).
+      isPending={isPending}
+      /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
+         *"hela listan är för smal, det ska vara lika bred som menybaren.
+         Även filtreringskomponenten … även på anmälnings-sidan"*).
+
+         MÄTT: `<main>` bär `max-w-[600px] px-4` (AppShell), alltså en inre
+         kolumn på 568 px, och `TabBar` speglar den pixel för pixel med
+         `max-w-[568px]`. Ankaret ovan lägger ett ANDRA `px-4`, så allt
+         inuti det stod på 536 px. Listan flydde redan med `-mx-4` (se
+         `<ul>` nedan); filterraden gjorde det inte, och stod därför 32 px
+         smalare än listan den filtrerar.
+
+         `-mx-4` ÄR HUSETS FLYKTIDIOM och tar bort exakt det andra lagret
+         — inte det första. Bredden blir alltså menybarens vid varje
+         viewport, inte en ny hårdkodad siffra. */
+      className="-mx-4"
+    ></FilterRad>
+  );
+
   if (isPending) {
     return (
       <div className="flex flex-col gap-4">
         {sidRam}
-        <div
-          data-testid={YTANS_ANKARE}
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          className="flex flex-col gap-3 px-4"
-        >
-          <span className="sr-only">Laddar anmälningarna…</span>
-          <Skeleton variant="text" className="w-40 text-small" />
-          <div className="-mx-4 flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4">
-            {['a', 'b', 'c'].map((k) => (
-              <div key={k} className="flex items-center gap-3">
-                <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
-                <div className="flex flex-1 flex-col gap-1">
-                  <Skeleton variant="text" className="w-2/5" />
-                  <Skeleton variant="text" className="w-3/5 text-small" />
+        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
+          {headerBlock}
+          {filterRadBlock}
+          {/* Roselli-anatomin: STATUS-rollen bärs av listkroppen som
+              faktiskt laddar, inte av hela ankaret (EventsLists mönster,
+              `EventsList.tsx` isPending-grenen) — headerBlock/filterRadBlock
+              är redan sitt eget besked (skeleton-antalsrad + FilterRads
+              egen `isPending`), och ska inte läsas upp en andra gång som en
+              del av EN stor busy-region. */}
+          <div role="status" aria-live="polite" aria-busy="true" className="flex flex-col gap-3">
+            <span className="sr-only">Laddar anmälningarna…</span>
+            {/* SAMMA RADGEOMETRI SOM DEN LADDADE LISTAN (TASK-416.4 AC #2/#3,
+                MÄTT — inte antaget). Kortet var tidigare `p-4` (padding på
+                ALLA sidor) medan `<ul>` nedan bara bär `px-4` (raderna får
+                sin höjd av EGEN `py-2.5`, som här) — en engångs-mätning
+                (headless Playwright, hallbar mock av `get-registrations`,
+                1280 px viewport) visade att den skillnaden sköt FÖRSTA
+                radens `boundingBox()` 16 px längre ner i skelettläget än i
+                det laddade läget (y 258 mot y 242). `divide-y` + per-rad
+                `py-2.5` (i stället för kortets egen vertikala padding +
+                `gap-3`) är EXAKT `<ul>`/`<li>`s egen boxmodell — samma
+                mätning EFTER fixen: x 373/373, y 242/242, bredd 534/534,
+                höjd 70/69 (1 px, sub-pixel-avrundning) i pending/laddat.
+                Talen står i PR-kroppen, inte i en kvarlämnad testfil. */}
+            <div className="-mx-4 flex flex-col divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
+              {['a', 'b', 'c'].map((k) => (
+                <div key={k} className="flex items-center gap-3 py-2.5">
+                  <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                  <div className="flex flex-1 flex-col gap-1">
+                    <Skeleton variant="text" className="w-2/5" />
+                    <Skeleton variant="text" className="w-3/5 text-small" />
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -682,7 +824,9 @@ export function AnmalningarSida({
     return (
       <div className="flex flex-col gap-4">
         {sidRam}
-        <div data-testid={YTANS_ANKARE} className="px-4">
+        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-4 px-4">
+          {headerBlock}
+          {filterRadBlock}
           <MessageBox intent="error" title="Kunde inte hämta anmälningarna">
             {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
           </MessageBox>
@@ -699,78 +843,9 @@ export function AnmalningarSida({
           Anmälningarna laddade.
         </p>
 
-        <header className="flex flex-col gap-1">
-          <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-2xl">
-            Anmälningar
-          </h1>
-          <p className="text-small text-text-muted">
-            {visaAtgardskon
-              ? atgardskoText(visasRader.length)
-              : `${visasRader.length} ${visasRader.length === 1 ? 'anmälan' : 'anmälningar'}`}
-          </p>
-          {/* ÅTERVÄGEN UR ÅTGÄRDSKÖ-LÄGET — se § ÅTERVÄGEN i docblocket ovan
-            för varför den står här trots att facit-bilden saknar den.
-            `search={{ visa: undefined }}` NOLLSTÄLLER parametern explicit,
-            aldrig implicit bevarande (formen är oförändrad ur
-            `AnmalningarList.tsx`, TASK-284.4). */}
-          {visaAtgardskon && (
-            <Link
-              to="/mer/anmalningar"
-              search={{ visa: undefined }}
-              className="self-start text-small underline"
-            >
-              Visa alla anmälningar
-            </Link>
-          )}
-        </header>
+        {headerBlock}
 
-        {/* Filtret — "en filtreringsgrej högst upp" (Marcus review
-          2026-08-22) + event-dimensionerna (2026-08-23). EventsLists
-          FilterRad-primitiv i sin exakta form: period-pillren till
-          vänster, tratt-ingången till höger, panelen under. Alltid synlig
-          (även vid noll träffar) — kontrollen är sidans egen, aldrig
-          beroende av om urvalet råkar vara tomt.
-
-          RUBRIKEN ÖVER FILTERRADEN ÄR STRUKEN (Marcus 2026-08-23). Den bar
-          ordet "Event" åt de korta pillren ("Kommande"/"Tidigare") när de
-          inte fick plats med hela ordparet. Utan `spread` får pillren sin
-          naturliga bredd och ordparet ryms utskrivet — då säger pillren
-          själva vad som är kommande respektive tidigare, och en rubrik som
-          upprepar det är brus. Gruppens `label` är "Period" (EventsLists
-          egen, ORDLISTA § Period), inte "Event": panelens EGEN
-          event-dimension heter så, och två olika kontroller med samma namn
-          på samma yta är precis den förväxling etiketterna finns för att
-          förhindra. */}
-        <FilterRad
-          dimensioner={dimensioner}
-          valda={valda}
-          onValj={(nyckel, varde) => {
-            if (nyckel === 'period') setPeriod(varde ? PERIOD_FRAN_ETIKETT[varde] : 'alla');
-            else if (nyckel === 'typ') setTyp(varde);
-            else if (nyckel === 'ort') setOrt(varde);
-            else setEvent(varde);
-          }}
-          onRensa={rensaFilter}
-          visade={visasRader.length}
-          totalt={rader.length}
-          enhet={ANMALNINGS_ENHET}
-          triggerRef={filterKnappRef}
-          /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
-             *"hela listan är för smal, det ska vara lika bred som menybaren.
-             Även filtreringskomponenten … även på anmälnings-sidan"*).
-
-             MÄTT: `<main>` bär `max-w-[600px] px-4` (AppShell), alltså en inre
-             kolumn på 568 px, och `TabBar` speglar den pixel för pixel med
-             `max-w-[568px]`. Ankaret ovan lägger ett ANDRA `px-4`, så allt
-             inuti det stod på 536 px. Listan flydde redan med `-mx-4` (se
-             `<ul>` nedan); filterraden gjorde det inte, och stod därför 32 px
-             smalare än listan den filtrerar.
-
-             `-mx-4` ÄR HUSETS FLYKTIDIOM och tar bort exakt det andra lagret
-             — inte det första. Bredden blir alltså menybarens vid varje
-             viewport, inte en ny hårdkodad siffra. */
-          className="-mx-4"
-        ></FilterRad>
+        {filterRadBlock}
         <p className="sr-only" aria-live="polite">
           {periodAnnouncement}
         </p>
