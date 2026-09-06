@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:21'
+updated_date: '2026-09-06 19:16'
 labels:
   - ready-for-agent
 dependencies: []
@@ -33,3 +34,9 @@ Källa: rapport D §4 #6 (S123). src/components/betalningar/Bekraftelsesteget.ts
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+REVIEW-RUNDA 3 (PR #2420, Opus, 2026-09-06, på mandat): konvergerad, 1 info bokförd här: promoverings-grindens första post-rebase-körning 20:42Z föll på en 15 s timeout i oppna() (data hann inte landa) medan staging bar CI-körning 34052164142; omkörning 20:44Z gav 11/11 grönt på samma träd, övriga sviter 16/16 20:45Z — klassad som staging-latens under delad last (A/B på samma träd), inte regression. ÖPPEN DESIGNFRÅGA MARCUS (bokförd kant, review r2): skelettets extra sm:hidden-rad speglar långa eventnamn (29 tecken bryter till två rader under sm), korta namn (fixturens 23/22 tecken) ger 24,75 px hopp åt andra hållet; lösningen är deterministisk radhöjd på GruppRubrik (whitespace-nowrap/truncate) i den facit-låsta VariantC.tsx = facit-omstämpling. Landad 331a505b.
+<!-- SECTION:NOTES:END -->
