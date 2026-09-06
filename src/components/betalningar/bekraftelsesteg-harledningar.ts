@@ -1,6 +1,7 @@
 import type { OppenBetalning } from '@/domain/schemas';
 import { normaliseraBeloppKlient, summeraKronorKlient, visaKronor } from './belopp-inmatning';
 import type { Betalsatt } from './betalsatt-minne';
+import { type ImportradIMinnet, importradsklass, oppnaKandidater } from './importminne';
 import {
   type Beloppsknapp,
   harledBeloppsknappar,
@@ -95,6 +96,33 @@ export type BekraftelseRad = {
    */
   kvitto: Kvittoläge;
   kvittonummer: string | null;
+  /**
+   * [TASK-402.4] BANKRADEN raden kom ur, när mataren var kontoutdraget.
+   * `undefined` för den manuella och Åtgärds-sidans matare — fältet är
+   * frånvarande, inte tomt, så en rad utan import aldrig kan förväxlas med en
+   * importrad vars referens råkade vara `null`.
+   */
+  import?: Importkoppling;
+};
+
+/**
+ * Vad en importrad bär med sig in i registreringen.
+ *
+ * `bankreferens` ÄR DUBBLETTSKYDDET (AC #4). Den skickas med i
+ * `registrera-inbetalning` exakt som den gamla bekräftelselistan gjorde, så
+ * Postgres partiella unika index (`inbetalningar_bankreferens_unik_idx`) kan
+ * avvisa en referens som redan finns och EF:en översätta det till 409
+ * `dubblett_bankreferens`. Tappas fältet på vägen till servern försvinner
+ * skyddet — därför bor det på RADEN och inte i ett sidoregister som kan glida
+ * isär från den.
+ */
+export type Importkoppling = {
+  /** Radens nyckel i importminnet (`rad-<n>`). */
+  nyckel: string;
+  /** Bankens referens, eller `null` när filen saknar kolumnen. */
+  bankreferens: string | null;
+  /** Betalarens namn i banken. Skiljer sig ofta från deltagarens. */
+  bankNamn: string | null;
 };
 
 /** Beloppet en genväg ger för en rad, eller `null` när valet inte går ihop. */
@@ -338,6 +366,158 @@ export function byggRader(
       kvittonummer: null,
     };
   });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KONTOUTDRAGET SOM MATARE (TASK-402.4)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/**
+ * En importrad som ännu inte pekar på en anmälan — eller som aldrig ska göra
+ * det (dubbletten).
+ *
+ * VARFÖR DEN INTE ÄR EN `BekraftelseRad`: stegets rad ÄR en öppen betalning
+ * med Lottas val ovanpå. `inkorg`, `beloppsknappar` och hela prislogiken
+ * förutsätter en anmälan. En omatchad bankrad har ingen, och en osäker har
+ * flera kandidater där ett val vore en gissning med en bock framför —
+ * precis det `bankimport-rader.ts` § DE TRE DEFAULTVÄRDENA förbjuder.
+ *
+ * Att ge `BekraftelseRad` en nullbar `inkorg` hade spridit den nullbarheten
+ * till varje härledning, varje summering och varje kort i formen, för ett
+ * tillstånd som per definition är ÖVERGÅENDE: så fort Lotta väljer en anmälan
+ * blir raden en fullvärdig `BekraftelseRad` (`byggImportrad`) och lämnar denna
+ * typ för alltid. Dubbletten är undantaget som aldrig konverteras, och det är
+ * hela dess poäng.
+ */
+export type ObestamdImportrad = {
+  nyckel: string;
+  /** `saker` finns inte här — en säker rad är redan en `BekraftelseRad`. */
+  klass: 'osaker' | 'omatchad' | 'dubblett';
+  /** Betalarens namn i banken, eller husets fallback. */
+  namn: string;
+  belopp: number;
+  datum: string | null;
+  telefon: string | null;
+  meddelande: string | null;
+  bankreferens: string | null;
+  /** Matchningens skäl i klartext, eller dubblettens. */
+  grund: string;
+  /** Kandidaterna som fortfarande är öppna, bäst först. Tom för omatchad/dubblett. */
+  kandidater: InkorgsRad[];
+  /** Datum raden importerades tidigare. Satt endast för dubbletter. */
+  tidigareImporterad: string | null;
+};
+
+/**
+ * En bankrad som PEKAR PÅ en anmälan blir en vanlig stegrad — med bankradens
+ * belopp och datum i stället för radens förval.
+ *
+ * BELOPPET ÄR BANKENS, ALLTID (AC #2: "säker rad: förbockad med bankradens
+ * belopp och datum"). Det är hela skillnaden mot den manuella mataren, där
+ * beloppet är appens förslag: banken VET vad som betalades, appen gissar.
+ *
+ * DATUMET FALLER TILL `idag` när filen saknar det, och det är parserns egen
+ * gräns som gör fallet möjligt (`Transaktion.datum` är nullbar med avsikt:
+ * "ett saknat datum är något Lotta behöver se och fylla i"). Hon ser det
+ * genom att öppna radformuläret, där datumet står som vilket annat fält som
+ * helst.
+ */
+export function byggImportrad(
+  betalning: OppenBetalning,
+  bankrad: {
+    nyckel: string;
+    belopp: number;
+    datum: string | null;
+    bankreferens: string | null;
+    namn: string | null;
+  },
+  idag: string,
+  betalsatt: Betalsatt,
+): BekraftelseRad {
+  const inkorg = harledRad(betalning, idag);
+  return {
+    nyckel: inkorg.nyckel,
+    inkorg,
+    beloppsknappar: harledBeloppsknappar(inkorg),
+    belopp: visaKronor(bankrad.belopp),
+    betalsatt,
+    datum: bankrad.datum ?? idag,
+    medKvitto: true,
+    markerad: true,
+    notering: '',
+    ejGenomforbar: null,
+    utfall: null,
+    inbetalningId: null,
+    kvitto: 'ingen',
+    kvittonummer: null,
+    import: {
+      nyckel: bankrad.nyckel,
+      bankreferens: bankrad.bankreferens,
+      bankNamn: bankrad.namn,
+    },
+  };
+}
+
+/**
+ * Delar importens rader i de två högar formen renderar: de som är klara att
+ * registreras och de som väntar på Lottas hand.
+ *
+ * ORDNINGEN ÄR FILENS (`radnummer`), inte hämtningens — och det är ett
+ * medvetet avsteg från den manuella matarens regel (`Bekraftelsesteget.tsx`
+ * § ORDNINGEN ÄR HÄMTNINGENS). Skälet är att Lotta jämför mot kontoutdraget
+ * hon har framför sig: raderna i appen ska ligga i samma ordning som raderna i
+ * filen. Grupperingen per event sker efteråt (`grupperaRader`) och rör bara de
+ * klara raderna.
+ *
+ * `oppna` är HELA mängden öppna betalningar, inte ett urval: en omatchad rads
+ * sökfält söker i samma rymd som inkorgens sökning, och en kandidat måste gå
+ * att slå upp oavsett om den råkade ligga i något urval.
+ */
+export function byggImportsteg(
+  rader: readonly ImportradIMinnet[],
+  oppna: readonly OppenBetalning[],
+  idag: string,
+  betalsatt: Betalsatt,
+): { rader: BekraftelseRad[]; obestamda: ObestamdImportrad[] } {
+  const perId = new Map(oppna.map((b) => [b.anmalanRecordId, b]));
+  const oppnaIds = new Set(perId.keys());
+  const klara: BekraftelseRad[] = [];
+  const obestamda: ObestamdImportrad[] = [];
+
+  for (const rad of [...rader].sort((a, b) => a.radnummer - b.radnummer)) {
+    const klass = importradsklass(rad, oppnaIds);
+    if (klass === 'saker') {
+      // `vald` ÄR satt och öppen — det är vad `saker` betyder (se
+      // `importradsklass`), så uppslaget kan inte missa.
+      klara.push(
+        byggImportrad(perId.get(rad.vald as string) as OppenBetalning, rad, idag, betalsatt),
+      );
+      continue;
+    }
+    obestamda.push({
+      nyckel: rad.nyckel,
+      klass,
+      namn: rad.namn ?? 'Utan namn',
+      belopp: rad.belopp,
+      datum: rad.datum,
+      telefon: rad.telefon,
+      meddelande: rad.meddelande,
+      bankreferens: rad.bankreferens,
+      grund:
+        klass === 'dubblett'
+          ? 'Den här bankraden är redan registrerad. Ingen ny inbetalning skapas.'
+          : rad.grund,
+      kandidater:
+        klass === 'osaker'
+          ? oppnaKandidater(rad, oppnaIds).map((id) =>
+              harledRad(perId.get(id) as OppenBetalning, idag),
+            )
+          : [],
+      tidigareImporterad: rad.tidigareImporterad,
+    });
+  }
+
+  return { rader: klara, obestamda };
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════

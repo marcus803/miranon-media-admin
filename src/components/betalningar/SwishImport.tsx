@@ -1,15 +1,7 @@
-import { AlertTriangle, Check, Upload } from 'lucide-react';
+import { useNavigate } from '@tanstack/react-router';
+import { Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Input as AriaInput, Checkbox, SearchField } from 'react-aria-components';
-import {
-  Button,
-  InitialAvatar,
-  Input,
-  MessageBox,
-  Select,
-  SelectItem,
-} from '@/components/primitives';
-import { useRegistreraInbetalning } from '@/data/mutations/inbetalningar';
+import { Button, Input, MessageBox, Select, SelectItem } from '@/components/primitives';
 import {
   analyseraFil,
   beraknaSignatur,
@@ -20,96 +12,90 @@ import {
   TRANSAKTIONSFALT,
   type Transaktionsfalt,
 } from './bankimport-parser';
-import {
-  arDubblettfel,
-  attHantera,
-  byggImportrader,
-  type Importradstillstand,
-  raderAttRegistrera,
-  radnyckel,
-  redanImporterade,
-  sammanfattaImport,
-} from './bankimport-rader';
-import {
-  bokforImporterade,
-  importloggKarta,
-  lasMappningar,
-  sparaMappning,
-} from './bankmappning-minne';
-import { visaKronor } from './belopp-inmatning';
-import type { Betalsatt } from './betalsatt-minne';
-import { type InkorgsRad, rankaTraffar } from './inkorg-harledningar';
+import { byggImportrader } from './bankimport-rader';
+import { importloggKarta, lasMappningar, sparaMappning } from './bankmappning-minne';
+import { sparaImport, tillImportminne } from './importminne';
+import type { InkorgsRad } from './inkorg-harledningar';
 
 /**
- * [TASK-346.10 AC #1, #3, #4, PRD berättelse 19-22] Swish-importen: från
- * "åtta rader i banken" till "åtta bekräftelser", i SAMMA inkorg.
+ * [TASK-346.10 AC #1, TASK-402.4 AC #3, PRD TASK-402 § Kontoutdraget]
+ * KONTOUTDRAGS-IMPORTEN: filen, kolumnerna, matchningen — och sedan
+ * bekräftelsesteget.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * INGEN NY YTA, OCH INGEN NY EDGE FUNCTION
+ * VAD SOM RÖRDES I TASK-402.4, OCH VAD SOM INTE GJORDE DET
  * ═══════════════════════════════════════════════════════════════════════════
- * Kortets egen rubrik säger "samma inkorg, ingen ny yta". Komponenten
- * renderas därför INUTI `BetalningsInkorg`, ovanför listan - inte som en egen
- * route. Två följder, båda avsiktliga:
+ * PRD § Kontoutdraget: "Filläsning och kolumnmappning står kvar i inkorgen
+ * under 'Importera kontoutdrag'; importens sista steg (bekräftelselistan)
+ * flyttar in i steget."
  *
- *   1. MILJÖFLAGGAN GÄLLER UTAN NY KOD. Inkorgens route bär `betalningarPa()`
- *      i sin `beforeLoad` (`routes/_authenticated/mer/betalningar.tsx`), så
- *      importen är avstängd i prod på exakt samma villkor (PRD berättelse 36,
- *      DoD #7).
- *   2. "SKICKA N KVITTON" ÄR INKORGENS EGEN KNAPP. Registrerade rader lyfts
- *      upp via `onRegistrerade`, hamnar i inkorgens väntande-lista, och Lotta
- *      trycker på knappen hon redan känner. En andra knapp för samma sak hade
- *      gett två köer att hålla reda på.
+ * ORÖRT: filväljaren, mappningsdialogen, signaturen, det sparade
+ * bankminnet, matchningen (`byggImportrader` över `bankimport-matchning.ts`)
+ * och parsern (`bankimport-parser.ts`, kortets AC #3 uttryckligen: "parsern
+ * rörs inte").
  *
- * INGEN Edge Function behövde ändras eller deployas för denna skiva.
- * `registrera-inbetalning` tog redan emot `bankreferens` (dess `index.ts`
- * § "Dubblettnyckeln vid import") och svarade redan 409
- * `dubblett_bankreferens` på ett brott mot det partiella unika indexet.
- * Uppdraget väntade sig en EF-utvidgning; premiss-passet visade att den
- * redan var byggd i TASK-346.4.
+ * RIVET: bekräftelselistan. Raderna, kryssrutorna, kandidat-rullgardinen,
+ * sökfältet för omatchade, den hopfällda "Redan registrerade"-högen,
+ * summeringsraden, `bekrafta()`-körningen och dess utfallstexter. Allt det
+ * bor nu i bekräftelsesteget, inom variant C:s form, med de fyra
+ * radtillstånden som märke på kortet.
+ *
+ * FÖLJDEN FÖR REGISTRERINGEN: komponenten skriver inga inbetalningar längre.
+ * `useRegistreraInbetalning` är borta härifrån, och därmed också
+ * `onRegistrerade`-propen — importerade rader hamnar i STEGETS "Registrerat
+ * nu"-block, inte i inkorgens. Det är en yta mindre som kan säga något annat
+ * än den andra.
  *
  * ═══════════════════════════════════════════════════════════════════════════
- * DUBBLETTERNA - TVÅ VÄGAR, EN SANNING
+ * ÖVERLÄMNINGEN — MINNET FÖRST, NAVIGERINGEN SEDAN
  * ═══════════════════════════════════════════════════════════════════════════
- * AC #3: "bankreferens som redan finns hoppas över och räknas synligt".
+ * `visaRader` skriver importminnet (`importminne.ts`) och navigerar först när
+ * skrivningen lyckats. Ordningen är hela poängen: `sessionStorage` kan vara
+ * blockerad (privat läge, en policy, en full kvot), och en navigering till
+ * ett steg utan minne hade lämnat Lotta på en sida som säger "importen kunde
+ * inte läsas" utan att hon förstår varför. Misslyckas skrivningen stannar hon
+ * kvar här med ett felmeddelande som säger vad som hände och vad hon kan göra.
  *
- *   FÖRE bekräftelsen: den lokala importloggen märker rader denna webbläsare
- *   redan tagit, och de hamnar i en egen hopfälld hög. Det är ett hjälpmedel
- *   för ögat - utan det hade en omimport visat raderna som OMATCHADE, därför
- *   att matchningen söker bland öppna betalningar och en betald anmälan inte
- *   längre är öppen.
+ * MATCHNINGEN SKER HÄR, INTE I STEGET. Kortet säger "när matchningen är gjord
+ * öppnas bekräftelsesteget", och sökrymden är inkorgens egna rader (`oppna`)
+ * som redan är hämtade och härledda. Att flytta matchningen till steget hade
+ * tvingat fram en andra härledning av samma mängd, för ingen vinst.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * INGEN NY YTA, OCH INGEN NY EDGE FUNCTION (oförändrat)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * Komponenten renderas INUTI `BetalningsInkorg`, så inkorgens route-flagga
+ * (`betalningarPa()` i `routes/_authenticated/mer/betalningar.tsx`) gäller
+ * utan ny kod. Bekräftelsesteget bär SAMMA flagga i sin egen `beforeLoad`, så
+ * hoppet dit kan inte leda till en yta som skulle varit avstängd.
+ *
+ * `registrera-inbetalning` tar emot `bankreferens` sedan TASK-346.4 och
+ * svarar 409 `dubblett_bankreferens` på ett brott mot det partiella unika
+ * indexet. Ingen EF ändrades i TASK-346.10 och ingen ändras här — steget
+ * skickar samma fält på samma väg (`useBekraftelsesteg.ts` § DUBBLETTNYCKELN).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * DUBBLETTERNA - TVÅ VÄGAR, EN SANNING (oförändrat, men de bor i steget nu)
+ * ═══════════════════════════════════════════════════════════════════════════
+ *   FÖRE bekräftelsen: den lokala importloggen (`bankmappning-minne.ts`)
+ *   märker rader denna webbläsare redan tagit. Märkningen görs HÄR, i
+ *   `byggImportrader`, och följer med i minnet som `tidigareImporterad` —
+ *   steget klassar raden som DUBBLETT och visar den låst, utan kryss.
  *
  *   UNDER bekräftelsen: servern avvisar med 409 om referensen finns i
  *   databasen. Det är den enda källa som vet sanningen om alla enheter och
  *   alla användare, och den gäller även när loggen är tom eller rensad.
  *
- * Båda räknas i SAMMA tal ("N rader redan registrerade"), eftersom det för
- * Lotta är ett och samma faktum.
- *
- * ═══════════════════════════════════════════════════════════════════════════
- * REGISTRERINGEN ÄR SEKVENTIELL, MED AVSIKT
- * ═══════════════════════════════════════════════════════════════════════════
- * Raderna skickas en i taget, inte som ett `Promise.all`. Skälet är inte
- * försiktighet utan RIKTIGHET: varje registrering räknar om anmälans
- * härledning ur HELA inbetalningsmängden och skriver om spegeln
- * (`registrera-inbetalning` § Steg 2-3). Två parallella anrop mot SAMMA
- * anmälan - vilket händer så fort någon swishat två gånger, PRD berättelse 5
- * - hade läst samma utgångsläge och skrivit två spegelvärden där det senare
- * skriver över det tidigare med ett för lågt tal.
- *
- * Ett fel på en rad stoppar inte de andra. Åtta rader ger åtta utfall.
+ * Loggen avgör ingenting. Den räknar och märker.
  */
 
 type Props = {
   /** Inkorgens öppna betalningar - matchningens sökrymd. */
   oppna: readonly InkorgsRad[];
-  idag: string;
-  betalsatt: Betalsatt;
-  /** Lyfter registrerade rader till inkorgens "Skicka N kvitton". */
-  onRegistrerade: (kvitton: { inbetalningId: string; namn: string; belopp: number }[]) => void;
   onStang: () => void;
 };
 
-type Steg = 'val' | 'mappning' | 'lista';
+type Steg = 'val' | 'mappning';
 
 const FALTETIKETT: Record<Transaktionsfalt, string> = {
   datum: 'Betalningsdatum',
@@ -157,28 +143,20 @@ function utkastFor(analys: Filanalys): Kolumnmappning {
   };
 }
 
-export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }: Props) {
+export function SwishImport({ oppna, onStang }: Props) {
   const [steg, setSteg] = useState<Steg>('val');
   const [filnamn, setFilnamn] = useState('');
   const [innehall, setInnehall] = useState('');
   const [analys, setAnalys] = useState<Filanalys | null>(null);
   const [utkast, setUtkast] = useState<Kolumnmappning | null>(null);
-  const [mappning, setMappning] = useState<Kolumnmappning | null>(null);
-  const [rader, setRader] = useState<Importradstillstand[]>([]);
-  const [bortfiltrerade, setBortfiltrerade] = useState(0);
-  const [fel, setFel] = useState<{ radnummer: number; skal: string }[]>([]);
   const [lasfel, setLasfel] = useState<string | null>(null);
-  const [korning, setKorning] = useState<'nej' | 'pagar' | 'klar'>('nej');
-  const [visaRedan, setVisaRedan] = useState(false);
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const registrera = useRegistreraInbetalning();
-
   const mappningPanelRef = useRef<HTMLDivElement>(null);
-  const listaPanelRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
 
   /**
-   * FLYTTAR FOKUS DETERMINISTISKT vid stegbyte 'val' → 'mappning'/'lista'.
+   * FLYTTAR FOKUS DETERMINISTISKT vid stegbyte 'val' → 'mappning'.
    *
    * Knappen "Ladda upp fil" (steg 'val') AVMONTERAS när `laddaFil` byter
    * steg, och utan detta faller fokus till `document.body` - en
@@ -191,10 +169,13 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
    * målat det NYA stegets DOM förrän efter renderingen, så en synkron
    * `.focus()`-anrop omedelbart efter `setSteg` hade träffat FÖREGÅENDE
    * stegs träd.
+   *
+   * [TASK-402.4] Det tredje steget ('lista') är rivet, och därmed också dess
+   * fokusmål. Vägen dit är nu en NAVIGERING, och routern flyttar fokus på sitt
+   * eget sätt när sidan byts.
    */
   useEffect(() => {
     if (steg === 'mappning') mappningPanelRef.current?.focus();
-    else if (steg === 'lista') listaPanelRef.current?.focus();
   }, [steg]);
 
   /**
@@ -213,7 +194,6 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
 
   async function laddaFil(fil: File) {
     setLasfel(null);
-    setKorning('nej');
     setFilnamn(fil.name);
 
     let text: string;
@@ -229,7 +209,7 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
     setAnalys(nyAnalys);
 
     if (nyAnalys.igenkand) {
-      visaRader(text, nyAnalys.igenkand);
+      visaRader(text, nyAnalys.igenkand, fil.name);
       return;
     }
     // AC #1: okänt format (noll ELLER FLERA strukturellt matchande
@@ -240,13 +220,34 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
     setSteg('mappning');
   }
 
-  function visaRader(text: string, vald: Kolumnmappning) {
+  /**
+   * [TASK-402.4] ÖVERLÄMNINGEN till bekräftelsesteget.
+   *
+   * Fyra led i en fast ordning: parsa filen, matcha raderna mot de öppna
+   * betalningarna, skriv minnet, navigera. Bara det sista ledet är nytt —
+   * de tre första är exakt vad den rivna listan gjorde innan den ritade sig
+   * själv.
+   *
+   * `filnamn` PASSERAS SOM ARGUMENT och läses inte ur state: `setFilnamn` i
+   * `laddaFil` har inte hunnit committas när den igenkända filen går rakt
+   * igenom hit, och minnet hade då bokfört föregående fils namn (eller en tom
+   * sträng vid första importen). En mätt fälla, inte en teoretisk.
+   */
+  function visaRader(text: string, vald: Kolumnmappning, namn: string) {
     const parsat = parsaTransaktioner(text, vald);
-    setMappning(vald);
-    setRader(byggImportrader(parsat, oppna, importloggKarta()));
-    setBortfiltrerade(parsat.bortfiltrerade.length);
-    setFel(parsat.fel);
-    setSteg('lista');
+    const rader = byggImportrader(parsat, oppna, importloggKarta());
+    const minne = tillImportminne(parsat, rader, {
+      filnamn: namn,
+      bank: vald.bank,
+      skapad: new Date().toISOString(),
+    });
+    if (!sparaImport(minne)) {
+      setLasfel(
+        'Kontoutdraget kunde inte lämnas över till bekräftelsesteget. Webbläsaren tillåter inte lagring i det här läget. Prova i ett vanligt fönster.',
+      );
+      return;
+    }
+    void navigate({ to: '/mer/betalningar/registrera', search: { kalla: 'import' } });
   }
 
   /**
@@ -265,111 +266,10 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
     );
     const attSpara: Kolumnmappning = { ...utkast, signatur };
     sparaMappning(attSpara);
-    visaRader(innehall, attSpara);
+    visaRader(innehall, attSpara, filnamn);
   }
 
-  function andraRad(nyckel: string, andring: Partial<Importradstillstand>) {
-    setRader((tidigare) =>
-      tidigare.map((rad) => (radnyckel(rad.rad) === nyckel ? { ...rad, ...andring } : rad)),
-    );
-  }
-
-  /**
-   * Kör bekräftelsen. Sekventiellt - se filhuvudet för varför.
-   *
-   * Utfallen samlas i en LOKAL karta och skrivs till tillståndet EN gång, i
-   * stället för ett `setRader` per varv: en uppdatering per rad hade gett
-   * React åtta omritningar av en lista Lotta tittar på, och en halvfärdig
-   * lista som ändrar sig under handen är svårare att följa än en som byter
-   * läge en gång.
-   */
-  async function bekrafta() {
-    const attKora = raderAttRegistrera(rader);
-    if (attKora.length === 0) return;
-
-    setKorning('pagar');
-    const utfall = new Map<string, Importradstillstand['utfall']>();
-    const kvitton: { inbetalningId: string; namn: string; belopp: number }[] = [];
-    const nyaReferenser: string[] = [];
-
-    for (const rad of attKora) {
-      const nyckel = radnyckel(rad.rad);
-      const { transaktion } = rad.rad;
-      try {
-        const svar = await registrera.mutateAsync({
-          anmalanRecordId: rad.vald as string,
-          // Beloppet skickas som STRÄNG och normaliseras server-side, precis
-          // som formulärets (`Betalningar.schema.ts` § RegistreraInbetalningInput).
-          belopp: String(transaktion.belopp),
-          betalsatt,
-          ...(transaktion.datum !== null ? { betalningsdatum: transaktion.datum } : {}),
-          ...(transaktion.bankreferens !== null ? { bankreferens: transaktion.bankreferens } : {}),
-        });
-
-        utfall.set(nyckel, {
-          klass: 'registrerad',
-          inbetalningId: svar.inbetalning.id,
-          kvittens: `${visaKronor(svar.inbetalning.belopp)} kr registrerat.`,
-        });
-        if (transaktion.bankreferens !== null) nyaReferenser.push(transaktion.bankreferens);
-        if (rad.medKvitto) {
-          kvitton.push({
-            inbetalningId: svar.inbetalning.id,
-            // RAD.VALD, INTE `kandidater[0]`: en osäker rad kan ha fått en
-            // ANNAN kandidat vald än den första, och en omatchad rad har
-            // ALLTID en tom kandidatlista - `kandidater[0]` hade då varit
-            // `undefined` och alltid fallit till bankens (Swish-ägarens)
-            // namn i stället för deltagarens. `oppna` bär hela sökrymden,
-            // inklusive de rader Lotta hittat via sökfältet (som aldrig
-            // hamnar i `rad.matchning.kandidater`).
-            namn:
-              namnForVal(rad.vald, rad.matchning.kandidater, oppna) ??
-              transaktion.namn ??
-              'Okänt namn',
-            belopp: svar.inbetalning.belopp,
-          });
-        }
-      } catch (error) {
-        if (arDubblettfel(error)) {
-          utfall.set(nyckel, { klass: 'dubblett' });
-          // LOGGAS ÄVEN HÄR: en server-avvisad dubblett är precis det
-          // importloggen finns för att göra synligt vid NÄSTA import (se
-          // `bankmappning-minne.ts` § "VAD DEN ÄR TILL FÖR"). Utan detta
-          // bokfördes bara de rader SOM LYCKADES i try-grenen, och en
-          // referens databasen redan kände till men denna webbläsares logg
-          // inte gjorde (annan dator, rensad lagring) hade fallit ut som
-          // OMATCHAD nästa gång i stället för "redan registrerad".
-          if (transaktion.bankreferens !== null) nyaReferenser.push(transaktion.bankreferens);
-        } else {
-          utfall.set(nyckel, {
-            klass: 'fel',
-            skal: error instanceof Error ? error.message : 'Okänt fel.',
-          });
-        }
-      }
-    }
-
-    bokforImporterade(nyaReferenser, idag);
-    setRader((tidigare) =>
-      tidigare.map((rad) => {
-        const nytt = utfall.get(radnyckel(rad.rad));
-        return nytt === undefined ? rad : { ...rad, utfall: nytt, ibockad: false };
-      }),
-    );
-    setKorning('klar');
-    if (kvitton.length > 0) onRegistrerade(kvitton);
-  }
-
-  const summa = sammanfattaImport(rader);
-  const arbetsyta = attHantera(rader);
-  const redan = redanImporterade(rader);
   const utkastfel = utkast ? mappningsFel(utkast) : null;
-  // AC #3-ytan (`Transaktion.ts` § `bankreferens`): en rad UTAN referens har
-  // inget dubblettskydd - varken indexet i databasen eller den lokala
-  // loggen kan känna igen den vid en omimport. Räknas bland ARBETSYTAN
-  // (raderna Lotta faktiskt kan bocka i just nu), inte bland redan
-  // registrerade, som redan är ofarliga oavsett.
-  const utanReferens = arbetsyta.filter((rad) => rad.rad.transaktion.bankreferens === null).length;
 
   return (
     <section
@@ -516,108 +416,6 @@ export function SwishImport({ oppna, idag, betalsatt, onRegistrerade, onStang }:
           </div>
         </div>
       )}
-
-      {steg === 'lista' && (
-        // `tabIndex={-1}` + `ref`: fokusmål för `useEffect`-svepet ovan. Se
-        // dess docblock för VARFÖR (a11y-golvet, tidigare oåtgärdat).
-        <div ref={listaPanelRef} tabIndex={-1} className="flex flex-col gap-3 outline-none">
-          <p role="status" aria-live="polite" className="text-small text-text-muted">
-            {sammanfattningstext(summa, filnamn, mappning?.bank ?? '')}
-          </p>
-
-          {utanReferens > 0 && (
-            <MessageBox intent="warning" title="Rader utan bankreferens">
-              {`${utanReferens} ${utanReferens === 1 ? 'rad saknar' : 'rader saknar'} bankreferens och har inget dubblettskydd. Importeras samma rapport igen kan ${
-                utanReferens === 1 ? 'den' : 'de'
-              } registreras en gång till.`}
-            </MessageBox>
-          )}
-
-          {(bortfiltrerade > 0 || fel.length > 0) && (
-            <ul className="flex flex-col gap-1 text-caption text-text-muted">
-              {bortfiltrerade > 0 && (
-                <li>{`${bortfiltrerade} rader i filen var inte inbetalningar och togs inte med.`}</li>
-              )}
-              {fel.map((post) => (
-                <li key={post.radnummer} className="flex items-center gap-1">
-                  <AlertTriangle aria-hidden size={13} className="shrink-0" />
-                  {`Rad ${post.radnummer}: ${post.skal}`}
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {arbetsyta.length === 0 && redan.length > 0 && korning === 'nej' && (
-            <MessageBox intent="success" title="Allt i filen är redan registrerat">
-              Ingen ny inbetalning skapas. Du kan importera samma rapport hur många gånger som
-              helst.
-            </MessageBox>
-          )}
-
-          {/* SAMMA RADFORMSKLASS SOM INKORGEN (designfynd 6) —
-              `divide-y`-container i stället för separata bordade kort per
-              rad, se `BetalningsInkorg.tsx`s `BetalningsradKort`. Villkorad
-              på längd av samma skäl som den listan: en tom `<ul>` hade annars
-              stått kvar under "Allt i filen är redan registrerat" ovan. */}
-          {arbetsyta.length > 0 && (
-            <ul className="divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
-              {arbetsyta.map((rad) => (
-                <Importrad
-                  key={radnyckel(rad.rad)}
-                  rad={rad}
-                  oppna={oppna}
-                  idag={idag}
-                  onAndra={(andring) => andraRad(radnyckel(rad.rad), andring)}
-                />
-              ))}
-            </ul>
-          )}
-
-          {redan.length > 0 && (
-            <div className="flex flex-col gap-2">
-              <div>
-                <Button
-                  intent="ghost"
-                  size="sm"
-                  onPress={() => setVisaRedan((v) => !v)}
-                  aria-expanded={visaRedan}
-                >
-                  {`Redan registrerade (${redan.length})`}
-                </Button>
-              </div>
-              {visaRedan && (
-                <ul className="flex flex-col gap-1 px-3 text-small text-text-muted">
-                  {redan.map((rad) => (
-                    <li key={radnyckel(rad.rad)}>
-                      {`${rad.rad.transaktion.namn ?? 'Okänt namn'} · ${visaKronor(
-                        rad.rad.transaktion.belopp,
-                      )} kr · importerad ${rad.tidigareImporterad}`}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              isDisabled={summa.attRegistrera === 0 || korning === 'pagar'}
-              isLoading={korning === 'pagar'}
-              onPress={() => void bekrafta()}
-            >
-              {`Registrera ${summa.attRegistrera} ${
-                summa.attRegistrera === 1 ? 'betalning' : 'betalningar'
-              }`}
-            </Button>
-            <Button intent="ghost" onPress={valjFil}>
-              Välj en annan fil
-            </Button>
-            <Button intent="ghost" onPress={onStang}>
-              {korning === 'klar' ? 'Klar' : 'Avbryt'}
-            </Button>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -627,212 +425,4 @@ function kolumnEtikett(index: number, rubrik: string | null, exempel: string[]):
   const namn = rubrik !== null && rubrik !== '' ? rubrik : `Kolumn ${index + 1}`;
   const prov = exempel.slice(0, 2).join(', ');
   return prov === '' ? namn : `${namn} (${prov})`;
-}
-
-function sammanfattningstext(
-  summa: ReturnType<typeof sammanfattaImport>,
-  filnamn: string,
-  bank: string,
-): string {
-  if (summa.registrerade > 0 || summa.misslyckade > 0 || summa.redanRegistrerade > 0) {
-    const delar = [`${summa.registrerade} registrerade`];
-    if (summa.redanRegistrerade > 0) {
-      delar.push(`${summa.redanRegistrerade} redan registrerade`);
-    }
-    if (summa.misslyckade > 0) delar.push(`${summa.misslyckade} misslyckades`);
-    return delar.join(' · ');
-  }
-  // [TASK-346.14, designfynd 3/språkfynd 2] Kongruens vid N=1 — "1 rader"
-  // läste fel. Räknelogiken (VAD som räknas, ramrads-frågan §3 bullet 3) är
-  // ORÖRD, uppdraget säger uttryckligen "rör den inte" — bara ordformen
-  // ändras utifrån talet som redan finns.
-  const kalla = bank === '' ? filnamn : `${filnamn}, läst som ${bank}`;
-  const radOrd = summa.lasta === 1 ? 'rad' : 'rader';
-  const sakraOrd = summa.sakra === 1 ? 'säker' : 'säkra';
-  const osakraOrd = summa.osakra === 1 ? 'osäker' : 'osäkra';
-  const omatchadeOrd = summa.omatchade === 1 ? 'omatchad' : 'omatchade';
-  return `${kalla}: ${summa.lasta} ${radOrd} · ${summa.sakra} ${sakraOrd} · ${summa.osakra} ${osakraOrd} · ${summa.omatchade} ${omatchadeOrd}`;
-}
-
-/* ═══════════════════════════ EN RAD ═══════════════════════════ */
-
-type RadProps = {
-  rad: Importradstillstand;
-  oppna: readonly InkorgsRad[];
-  idag: string;
-  onAndra: (andring: Partial<Importradstillstand>) => void;
-};
-
-/**
- * EN bankrad i bekräftelselistan.
- *
- * DE TRE LÄGENA ÄR AC #4, ORD FÖR ORD: "säkra rader förbockade, osäkra visar
- * kandidater, omatchade får sökfältet". Kryssrutan för kvitto finns på VARJE
- * rad med samma default som formuläret (i), så att Lotta kan ta bort den för
- * en enskild rad utan att röra de andra.
- *
- * VALET OCH BOCKEN HÖR IHOP. Väljer Lotta en anmälan på en osäker rad bockas
- * den i automatiskt - annars hade hon behövt två handlingar för det som är
- * ett beslut. Väljer hon bort anmälan igen bockas raden ur, eftersom en
- * ibockad rad utan anmälan inte kan registreras (`raderAttRegistrera`
- * § KRAVET PÅ `vald`).
- */
-function Importrad({ rad, oppna, idag, onAndra }: RadProps) {
-  const [sokterm, setSokterm] = useState('');
-  const { transaktion } = rad.rad;
-  const klass = rad.matchning.klass;
-
-  // Omatchade rader får sökfältet, och söker i SAMMA rankning som inkorgen
-  // (`rankaTraffar`): personer med öppna betalningar först. Att bygga en egen
-  // sökordning här hade gett Lotta två olika svar på samma fråga.
-  const traffar = sokterm.trim() === '' ? [] : rankaTraffar([...oppna], sokterm, idag).slice(0, 8);
-  const valbara = klass === 'omatchad' ? traffar : rad.matchning.kandidater;
-
-  function valj(anmalanRecordId: string | null) {
-    onAndra({ vald: anmalanRecordId, ibockad: anmalanRecordId !== null });
-  }
-
-  return (
-    // Egen kant/bakgrund riven (designfynd 6) — raden lever nu i förälderns
-    // `divide-y`-container, samma hårlinje-rytm som inkorgens rader.
-    <li className="flex flex-col gap-2 py-3">
-      <div className="flex flex-wrap items-start gap-3">
-        <InitialAvatar namn={transaktion.namn ?? 'Utan namn'} />
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="font-medium">
-            {`${transaktion.namn ?? 'Utan namn'} · ${visaKronor(transaktion.belopp)} kr`}
-          </span>
-          <span className="text-caption text-text-muted">
-            {radbeskrivning(transaktion.datum, transaktion.telefon, transaktion.meddelande)}
-          </span>
-          <span className="text-caption text-text-muted">{rad.matchning.grund}</span>
-        </div>
-        <span className="shrink-0 rounded border border-transparent bg-bg px-2 py-0.5 text-caption">
-          {klass === 'saker' ? 'Säker' : klass === 'osaker' ? 'Osäker' : 'Omatchad'}
-        </span>
-      </div>
-
-      {rad.utfall === null ? (
-        <>
-          {klass === 'omatchad' && (
-            <SearchField
-              aria-label={`Sök anmälan för ${transaktion.namn ?? 'raden'}`}
-              value={sokterm}
-              onChange={setSokterm}
-            >
-              <AriaInput
-                placeholder="Sök på namn, telefon eller belopp"
-                className="mm-fokusring-vid-fokus text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) min-h-10 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 text-body"
-              />
-            </SearchField>
-          )}
-
-          {valbara.length > 0 && (
-            <Select
-              label="Registrera på anmälan"
-              selectedKey={rad.vald ?? 'ingen'}
-              onSelectionChange={(nyckel) => valj(nyckel === 'ingen' ? null : String(nyckel))}
-            >
-              <SelectItem id="ingen">Välj anmälan ...</SelectItem>
-              {valbara.map((kandidat) => (
-                <SelectItem key={kandidat.nyckel} id={kandidat.betalning.anmalanRecordId}>
-                  {kandidatEtikett(kandidat)}
-                </SelectItem>
-              ))}
-            </Select>
-          )}
-
-          {klass === 'omatchad' && sokterm.trim() !== '' && traffar.length === 0 && (
-            <p className="text-caption text-text-muted">
-              Ingen kvarvarande betalning matchar sökningen.
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-4">
-            <Checkbox
-              isSelected={rad.ibockad}
-              isDisabled={rad.vald === null}
-              onChange={(vald) => onAndra({ ibockad: vald })}
-              className="group flex cursor-pointer items-center gap-2 text-small data-[disabled]:cursor-not-allowed data-[disabled]:opacity-60"
-            >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded border border-(--mm-input-border) bg-(--mm-input-bg) group-data-[selected]:border-text group-data-[selected]:bg-text">
-                <Check
-                  aria-hidden="true"
-                  size={14}
-                  className="text-text-inverse opacity-0 group-data-[selected]:opacity-100"
-                />
-              </span>
-              <span>Ta med</span>
-            </Checkbox>
-
-            {/* Samma kryssruta och samma default som `RegistreraForm` (i). */}
-            <Checkbox
-              isSelected={rad.medKvitto}
-              onChange={(vald) => onAndra({ medKvitto: vald })}
-              className="group flex cursor-pointer items-center gap-2 text-small"
-            >
-              <span className="flex size-5 shrink-0 items-center justify-center rounded border border-(--mm-input-border) bg-(--mm-input-bg) group-data-[selected]:border-text group-data-[selected]:bg-text">
-                <Check
-                  aria-hidden="true"
-                  size={14}
-                  className="text-text-inverse opacity-0 group-data-[selected]:opacity-100"
-                />
-              </span>
-              <span>Skicka kvitto</span>
-            </Checkbox>
-          </div>
-        </>
-      ) : (
-        <p role="status" className="text-small">
-          {utfallstext(rad.utfall)}
-        </p>
-      )}
-    </li>
-  );
-}
-
-/**
- * Namnet på anmälan Lotta FAKTISKT valde för raden - inte gissat ur index 0.
- *
- * Sökordningen speglar var valet kan ha kommit ifrån: `kandidater` är
- * matchningens egna förslag (säkra/osäkra rader), `oppna` är HELA
- * sökrymden och täcker även ett fritt sökval på en omatchad rad (vars
- * kandidatlista alltid är tom per `Matchning`-invarianten).
- */
-function namnForVal(
-  vald: string | null,
-  kandidater: readonly InkorgsRad[],
-  oppna: readonly InkorgsRad[],
-): string | null {
-  if (vald === null) return null;
-  const traff =
-    kandidater.find((k) => k.betalning.anmalanRecordId === vald) ??
-    oppna.find((k) => k.betalning.anmalanRecordId === vald);
-  return traff?.namn ?? null;
-}
-
-function radbeskrivning(
-  datum: string | null,
-  telefon: string | null,
-  meddelande: string | null,
-): string {
-  const delar = [datum ?? 'Datum saknas i filen'];
-  if (telefon !== null) delar.push(telefon);
-  if (meddelande !== null && meddelande !== '') delar.push(meddelande);
-  return delar.join(' · ');
-}
-
-function kandidatEtikett(kandidat: InkorgsRad): string {
-  const saknas = kandidat.kvar;
-  // Delad domänterm (Marcus 2026-09-01): "kvar att betala", beloppet först i
-  // löpande text. Etiketten är en ` · `-fogad rad, så ledet står versal-löst
-  // och börjar ändå med en siffra.
-  const belopp = saknas === null ? 'pris saknas' : `${visaKronor(saknas)} kr kvar att betala`;
-  return `${kandidat.namn} · ${kandidat.betalning.eventNamn ?? 'Utan event'} · ${belopp}`;
-}
-
-function utfallstext(utfall: NonNullable<Importradstillstand['utfall']>): string {
-  if (utfall.klass === 'registrerad') return utfall.kvittens;
-  if (utfall.klass === 'dubblett') return 'Redan registrerad. Ingen ny inbetalning skapades.';
-  return `Kunde inte registreras: ${utfall.skal}`;
 }
