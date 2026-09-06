@@ -33,7 +33,7 @@ import type { BekraftelsestegModell } from './bekraftelsesteg-modell';
 import { visaKronor } from './belopp-inmatning';
 import type { Betalsatt } from './betalsatt-minne';
 import { lasSenasteBetalsatt, sparaBetalsatt } from './betalsatt-minne';
-import type { Importminne } from './importminne';
+import { type Importminne, importoversiktFranMinne } from './importminne';
 import {
   harledRad,
   type InkorgsRad,
@@ -719,16 +719,11 @@ export function useBekraftelsesteg(
     importrader: obestamda,
     valjImportanmalan,
     sokImportanmalan,
-    importkalla:
-      minne === null
-        ? null
-        : {
-            filnamn: minne.filnamn,
-            bank: minne.bank,
-            lasta: minne.lasta,
-            bortfiltrerade: minne.bortfiltrerade,
-            fel: minne.fel,
-          },
+    // [TASK-416.6 fix-runda 2] DELAD härledning med laddläges-skelettet
+    // (`Bekraftelsesteget.tsx`, `importoversiktFranMinne`) — se den
+    // funktionens docblock (`importminne.ts`) för varför den inte får
+    // dupliceras.
+    importkalla: importoversiktFranMinne(minne),
     block: {
       granskningsBlockRef,
       jobbrader: jobbstatus?.rader ?? [],

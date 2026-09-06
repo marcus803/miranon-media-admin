@@ -100,6 +100,10 @@ export const handlers = [
   // Saknades helt fram till denna skiva: varje test som navigerade till
   // check-in var tvunget att äga sin egen `get-attendance`-handler eller
   // riskera `OmockadRequestError`. Se `fixture-data.ts` § ATTENDANCE_RESPONSE.
+  // [TASK-416.16] Samma handler täcker sedan den skivan även BARE
+  // `/event/$eventId` (eventdetaljens ovillkorliga sidmount- och
+  // hover/fokus-prefetch, ADR-078 beslut 3) — ingen egen handler behövdes,
+  // ATTENDANCE_RESPONSE var redan normalläget.
   http.get(EF('get-attendance'), () => json(ATTENDANCE_RESPONSE)),
   // [TASK-338.3] Räckviddsdialogens Plats-axel läser SAMMA lista som
   // Mer → Platser (`usePlacesList`), så varje öppning av

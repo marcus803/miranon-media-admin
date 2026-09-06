@@ -1,6 +1,7 @@
 import type { Route } from '@playwright/test';
 import { verbCopy } from '../../src/data/activityLog/verbCopy';
 import { expect, type Page, test } from '../support/test-bas';
+import { mockTomNarvaro } from './helpers/tom-narvaro';
 import { mockTommaAnteckningar } from './helpers/tomma-anteckningar';
 import { mockValjarLista, valjarRad } from './helpers/valjar-lista';
 
@@ -161,6 +162,9 @@ async function mockSidan(page: Page): Promise<Rigg> {
   // täcker den redan) — alltid tom, deterministisk, via delade sömmen
   // (TASK-47).
   await mockTommaAnteckningar(page);
+  // TASK-416.16: eventsidan prefetchar nu get-attendance ovillkorligt
+  // (sidmount + Check-in-hover) — se helpers/tom-narvaro.ts.
+  await mockTomNarvaro(page);
 
   await page.route(CREATE_EVENT_NOTE, async (route: Route) => {
     const body = route.request().postDataJSON() as { text: string };

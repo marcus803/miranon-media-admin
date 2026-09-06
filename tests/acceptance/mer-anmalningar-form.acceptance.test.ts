@@ -936,6 +936,335 @@ test.describe('Anmälningssidans form (TASK-299.5 — /mer/anmalningar)', () => 
   });
 });
 
+/**
+ * Review-grinden runda 1 (TASK-416.4, PR #2415, Marcus mandat) — TASK-416.19.
+ *
+ * `headerBlock`/`filterRadBlock` monterades tidigare i TRE separata `return`-
+ * grenar där laddat-grenen skjöt in `<p role=status>Anmälningarna
+ * laddade.</p>` FÖRE `headerBlock` (barn-index 0) medan isPending/isError
+ * hade `headerBlock` som index 0. Reacts keyless reconciliation matchar barn
+ * POSITIONELLT — ett index-mismatch mellan grenar tvingar fram en FULL
+ * remount av `<FilterRad>` (och allt i den: panelens öppna/stängda state,
+ * `EventValjare`s popover-state, fokus, inskriven text). Fixat genom att göra
+ * HELA `AnmalningarSida` till ETT returträd med fasta syskon-positioner
+ * (samma form som `Intresserade.tsx`, TASK-416.8) — se komponentens egen
+ * docblock för den fulla motiveringen.
+ *
+ * ── TVÅ MÄTTA GRÄNSER SOM STYRDE TESTDESIGNEN NEDAN (bokförda i
+ * slutrapporten, INTE testbrister) ──────────────────────────────────────
+ *
+ * (1) `FilterRad.tsx` (~rad 298–312) visar ENBART dekorativa, ofokuserbara
+ * skelettblock för ALLA dimensioner — `EventValjare`s sökfält monteras INTE
+ * — så länge FilterRads egna `isPending`-prop är sann, och den propen är
+ * BUNDEN till exakt samma boolean som väljer AnmalningarSidas render-gren.
+ * De två flippar alltså ATOMISKT tillsammans: ett "fortfarande isPending,
+ * men sökfältet är fokuserbart"-ögonblick kan strukturellt inte existera.
+ *
+ * (2) Komponentens EGEN, redan befintliga a11y-effekt (se `announceRef`/
+ * `headingRef.current?.focus()` ovan, "Fokus -> <h1> ... när data anlänt (en
+ * gång per laddning)") flyttar OVILLKORLIGT fokus till `<h1>` FÖRSTA gången
+ * `registrations` blir sant under komponentens livstid — oavsett om den
+ * kommer från isPending ELLER isError. Mätt (2026-09-06, headless
+ * Playwright): en öppen `EventValjare`-popover med inskriven text stängs då
+ * av sitt EGET, KORREKTA blur-beteende (WAI-ARIA combobox-mönstret: stäng
+ * popovern när fokus lämnar den) — INTE av en remount. `get-events`
+ * anropades noll gånger extra under övergången (mätt via nätverksräknare),
+ * så det är inte heller en events-refetch som stör. Detta gör bokstavlig
+ * "fokus i sökfältet överlever" OMÖJLIG att bevisa för EN FÖRSTA lyckad
+ * laddning, oavsett om header/FilterRad remonteras eller ej — samma
+ * beteende skulle synas även i en HYPOTETISKT perfekt fixad komponent.
+ *
+ * DÄRFÖR: båda testen nedan bevisar den FAKTISKA regressionen (header/
+ * FilterRad byter INTE DOM-nod-identitet mellan isPending/isError och
+ * laddat) med en mekanism som är IMMUN mot ovanstående två gränser — en
+ * `data-`-markör satt via `page.evaluate()` på `filter-panel`-noden FÖRE
+ * övergången, kontrollerad att sitta kvar på SAMMA nod (inte en ny, omärkt
+ * nod) EFTER — plus att panelens ÖPPNA state (en `useState` intern i
+ * `FilterRad`, som skulle nollställas till `defaultOppen=false` vid en
+ * remount) håller genom övergången. Ingen av delarna rör fokus, så ingen av
+ * gränserna ovan stör mätningen.
+ *
+ * TVÅSIDIGT BEVISAT (Final Summary bär de exakta felmeddelandena): körda mot
+ * den GAMLA tre-`return`-strukturen (fixen i `AnmalningarSida.tsx` tillfälligt
+ * borttagen, testfilen orörd) föll BÅDA testen — markören var BORTA och
+ * panelen STÄNGD efter övergången i båda fallen (ny, omonterad `<FilterRad>`
+ * med `defaultOppen=false`). Körda mot fixen är båda gröna.
+ */
+test.describe('Regressionsvakt: fasta syskon-positioner håller FilterRad odemonterad (TASK-416.19)', () => {
+  /** DOM-nod-identitetsmarkör — immun mot fokus-/blur-bikonfunder (se
+      docblocket ovan): en remount ersätter noden och tar markören med sig,
+      en vanlig re-render av SAMMA nod behåller den. */
+  const REMOUNT_MARKOR = 'data-remount-marker-416-19';
+
+  async function markeraFilterPanel(page: Page): Promise<void> {
+    await page.evaluate((attr) => {
+      const el = document.querySelector('[data-testid="filter-panel"]');
+      el?.setAttribute(attr, 'markerad-fore-overgang');
+    }, REMOUNT_MARKOR);
+  }
+
+  function markorFinnsKvar(page: Page) {
+    return page.locator(`[data-testid="filter-panel"][${REMOUNT_MARKOR}="markerad-fore-overgang"]`);
+  }
+
+  /** Håller `get-registrations` öppet tills testet kallar `release()` —
+      gör isPending-fönstret deterministiskt (samma mönster som
+      `mer-intresserade.acceptance.test.ts` `mockLeads({ manualRelease })`). */
+  function mockRegistrationsManuell(network: NetworkFixture, rows: Row[]): () => void {
+    let release = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    network.use(
+      http.get(EF('get-registrations'), async () => {
+        await gate;
+        return json({ registrations: rows });
+      }),
+    );
+    return release;
+  }
+
+  /** FLAGGSTYRD (inte räkneverk): 404 tills testet kallar den returnerade
+      funktionen, DÄREFTER lyckas varje anrop — modellerar en riktig
+      isError → laddat-övergång via TanStack Querys `refetchOnWindowFocus`
+      (samma mekanism och motivering som
+      `mer-intresserade.acceptance.test.ts` `mockLeadsFelarTillsFlaggat`). */
+  function mockRegistrationsFelarTillsFlaggat(network: NetworkFixture, rows: Row[]): () => void {
+    let lyckas = false;
+    network.use(
+      http.get(EF('get-registrations'), () =>
+        lyckas ? json({ registrations: rows }) : json({ error: 'x' }, 404),
+      ),
+    );
+    return () => {
+      lyckas = true;
+    };
+  }
+
+  test('FilterRads panel-nod och öppna state överlever isPending → laddat (ingen remount)', async ({
+    page,
+    network,
+  }) => {
+    const release = mockRegistrationsManuell(network, blandadeRader());
+    await page.goto('/mer/anmalningar');
+
+    // Genuint isPending: skeleton-antalsraden och FilterRads egen
+    // skeleton-grid (ingen sökbar Event-kontroll monterad än, se docblocket
+    // ovan, gräns 1).
+    await expect(page.getByText('Laddar anmälningarna…')).toBeVisible();
+
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await markeraFilterPanel(page);
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+
+    release();
+    await expect(page.getByRole('heading', { level: 1, name: 'Anmälningar' })).toBeVisible();
+    await expect(page.getByText('3 anmälningar', { exact: true })).toBeVisible();
+
+    // SAMMA panel-nod (markören sitter kvar) OCH FORTFARANDE ÖPPEN — inte en
+    // ny, ostängd `<FilterRad>` (defaultOppen=false vid en remount).
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+  });
+
+  test('FilterRads panel-nod och öppna state överlever isError → laddat (ingen remount)', async ({
+    page,
+    network,
+  }) => {
+    const tillatLyckasHadanefter = mockRegistrationsFelarTillsFlaggat(network, [
+      reg({ fornamn: 'Carl', efternamn: 'Carlsson', inskickad: '2026-06-22T10:00:00.000Z' }),
+    ]);
+    await page.goto('/mer/anmalningar');
+
+    await expect(page.getByRole('alert')).toBeVisible();
+
+    // FilterRads `isPending`-prop är FALSK i fel-läget (docblocket ovan,
+    // gräns 1) — panelen visar REDAN riktiga kontroller, Event-väljaren
+    // inkluderad, så sökfältet KAN nås och skrivas i (bevisas nedan) — men
+    // se gräns 2 för varför dess FOKUS inte kan förväntas överleva.
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('event-valjare-trigger').click();
+    await expect(page.getByTestId('event-valjare-popover')).toBeVisible();
+
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök event eller ort' });
+    await sokfalt.fill('Sköv');
+    await expect(sokfalt).toBeFocused();
+    await expect(sokfalt).toHaveValue('Sköv');
+
+    await markeraFilterPanel(page);
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+
+    tillatLyckasHadanefter();
+    // Utlöser TanStack Querys refetchOnWindowFocus — den enda realistiska
+    // vägen isError → laddat i denna komponent (ingen "försök igen"-knapp).
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+
+    await expect(page.getByText('Carl Carlsson')).toBeVisible();
+    await expect(page.getByRole('alert')).toHaveCount(0);
+
+    // SAMMA panel-nod (markören sitter kvar) OCH FORTFARANDE ÖPPEN genom
+    // övergången — den strukturella bevisföringen för AC #2, immun mot
+    // gräns 2:s (korrekta, avsiktliga) fokus→h1-steal och EventValjares
+    // egen blur-stängning av sin popover.
+    await expect(markorFinnsKvar(page)).toHaveCount(1);
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+  });
+
+  /**
+   * Review-runda 2 (TASK-416.19, PR #2423, Marcus mandat) — NY a11y-
+   * regression införd av runda 1:s fix, inte en pre-existerande bugg.
+   *
+   * `filterAnnonsering` (sr-only, `aria-live="polite"`, INGET `role`) sitter
+   * sedan runda 1 på en FAST syskon-position i alla tre render-lägen. FÖRE
+   * runda 1 existerade den noden ENDAST i laddat-grenen, så innehållet var
+   * strukturellt omöjligt att sätta förrän data landat. EFTER runda 1, men
+   * FÖRE denna rättning, vaktade de två effekter som sätter
+   * `periodAnnouncement` (se effekternas egna kommentarer ovan i
+   * `AnmalningarSida.tsx`) bara `isPending` — och `FilterRad` självt får
+   * `isPending={isPending}` (aldrig `dataOkand`, en MEDVETEN, oförändrad
+   * design från TASK-416.4 runda 1), så Period-`Select`n (statiska
+   * alternativ, alltid monterad) är fullt interaktiv redan i isError. Ett
+   * periodbyte MEDAN felbeskedet visades satte då `periodAnnouncement` till
+   * en FALSK räknartext ("Visar anmälningar för kommande event. 0
+   * anmälningar.") i en sr-only-region bredvid `MessageBox`s
+   * `role="alert"` — två motstridiga besked till en skärmläsare, och en
+   * osann siffra (källan gav upp, den räknade inte till noll). Rättat genom
+   * att vakta båda effekterna med `dataOkand` (isPending ELLER isError) i
+   * stället för bara `isPending`.
+   *
+   * TVÅSIDIGT BEVISAT: kört mot commit `4dd301bb` (runda 1:s head, INNAN
+   * denna rättning) föll detta test — regionen bar den falska räknartexten
+   * efter periodbytet. Kört mot rättningen är det grönt.
+   *
+   * 5xx går båda retry-lagren (`fetchWithRetry` + QueryClients `retry: 3`,
+   * ~7–8 s backoff, se `acceptance-bas.ts` § TIDEN HÖR TILL KONTRAKTET) —
+   * samma etablerade `timeout: 20_000` som `mer-aktivitetshistorik.
+   * acceptance.test.ts` använder för sitt 500-fel.
+   */
+  test('period-annonseringen förblir tyst under isError (dataOkand-vakt, review-runda 2)', async ({
+    page,
+    network,
+  }) => {
+    mockRegistrations(network, [], { status: 500 });
+    await page.goto('/mer/anmalningar');
+
+    const felbesked = page.getByRole('alert').filter({ hasText: 'Kunde inte hämta anmälningarna' });
+    await expect(felbesked).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('filter-period').getByRole('button').click();
+    await page.getByRole('option', { name: 'Kommande', exact: true }).click();
+
+    // POSITIV SYNKRONISERINGSPUNKT (review-runda 2 fynd 3): bevisar att
+    // rerendern efter periodbytet FAKTISKT skett innan frånvaron nedan
+    // läses. Utan denna rad kan `toHaveCount(0)` uppfyllas för att den mätte
+    // FÖRE reconciliation, inte för att vakten håller — Playwright
+    // uppfyller `toHaveCount(0)` i samma ögonblick elementet inte finns,
+    // oavsett om React hunnit committa. `filter-period`s trigger visar det
+    // VALDA alternativets text (`SelectValue`), så väntan bevisar att
+    // Select-kontrollen (och därmed hela panelens rerender) är klar.
+    await expect(page).toHaveURL(/[?&]period=upcoming/);
+    await expect(page.getByTestId('filter-period')).toContainText('Kommande');
+
+    // Live-regionen ska förbli TOM genom hela fel-fönstret — ingen
+    // räknartext, sann eller falsk, ska annonseras medan källan har gett
+    // upp. `page.getByText` matchar hela sidan, inte bara en scopad region,
+    // så frånvaron bevisas oavsett var texten hade hamnat.
+    await expect(page.getByText(/^Visar anmälningar för/)).toHaveCount(0);
+    await expect(page.getByText(/anmälningar\.$/)).toHaveCount(0);
+    await expect(felbesked).toBeVisible();
+  });
+
+  /**
+   * Review-runda 3 (TASK-416.19, PR #2423, Marcus mandat) — RESTPOST av
+   * runda 2:s fynd 1: `dataOkand`-vakten på de två effekterna stoppar bara
+   * NYA värden, den nollställer aldrig ett REDAN SATT `periodAnnouncement`.
+   * `useState`-värdet överlever alltså en övergång INTO felläget om det
+   * sattes under ett TIDIGARE laddat läge.
+   *
+   * VÄGEN, byggd exakt som utlåtandet beskriver: (1) sidan laddar in med
+   * riktig data, (2) Lotta byter period — `periodAnnouncement` sätts till
+   * en ÄKTA räknartext, (3) en SENARE refetch misslyckas. TanStack Query
+   * sätter då `status: 'error'` OVILLKORLIGT och BEHÅLLER `data`
+   * (query-core, reducerns `case 'error'` spreadar state) — `isError` blir
+   * sann, `dataOkand` blir sann, men `periodAnnouncement`-STATE:T rörs
+   * aldrig av det (ingen av de två effekterna kör om utan en NY period/
+   * filter-nyckel). Utan gårdagens fix (`{dataOkand ? '' : …}` i
+   * renderingen) hade den gamla räknartexten stått kvar i
+   * tillgänglighetsträdet bredvid `MessageBox`s `role="alert"`.
+   *
+   * REFETCH-VÄGEN: `router.ts` sätter `refetchOnReconnect: 'always'` —
+   * `'always'` kringgår query-cores egen `isStale()`-koll helt
+   * (`shouldFetchOn`: `value === 'always' || (value !== false &&
+   * isStale(...))`), till skillnad från `refetchOnWindowFocus: true` som
+   * KRÄVER att queryn är stale (5 min `staleTime`, för färsk direkt efter
+   * den första lyckade laddningen ovan för att en ren
+   * `visibilitychange`-dispatch ska trigga om). Ett syntetiskt
+   * offline→online-par (`onlineManager` i `@tanstack/query-core` lyssnar
+   * bokstavligen på `window`s `online`/`offline`-event, verifierat i
+   * `node_modules/@tanstack/query-core/build/modern/onlineManager.js`)
+   * tvingar därför fram en OVILLKORLIG refetch av `registrations.all`
+   * regardless av `staleTime` — den mock som styrs av `lyckas` nedan låter
+   * den refetchen svara 500.
+   *
+   * TVÅSIDIGT BEVISAT: kört mot commit `6278f0d6` (runda 2:s head, INNAN
+   * denna rättning) föll detta test — den gamla räknartexten stod kvar i
+   * felläget. Kört mot rättningen är det grönt.
+   */
+  test('en TIDIGARE satt räknartext läcker inte ut när en SENARE refetch misslyckas (laddat → filterbyte → error, review-runda 3)', async ({
+    page,
+    network,
+  }) => {
+    let lyckas = true;
+    network.use(
+      http.get(EF('get-registrations'), () =>
+        lyckas ? json({ registrations: blandadeRader() }) : json({ error: 'x' }, 500),
+      ),
+    );
+    await page.goto('/mer/anmalningar');
+
+    // (1) Genuint LADDAT läge — riktig data, inget fel.
+    await expect(page.getByRole('heading', { level: 1, name: 'Anmälningar' })).toBeVisible();
+    await expect(page.getByText('3 anmälningar', { exact: true })).toBeVisible();
+
+    // (2) Periodbyte i laddat läge — `periodAnnouncement` sätts till en ÄKTA
+    // räknartext (Kim/Bo/Eva-mängden har inga event-ID:n att slå upp, så
+    // "Kommande"/"Tidigare" ger 0 träffar bland `blandadeRader()` — det
+    // AVGÖRANDE här är bara att TEXTEN existerar, inte dess siffra).
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('filter-period').getByRole('button').click();
+    await page.getByRole('option', { name: 'Kommande', exact: true }).click();
+
+    await expect(page).toHaveURL(/[?&]period=upcoming/);
+    await expect(page.getByTestId('filter-period')).toContainText('Kommande');
+    const raknartext = page.getByText(/^Visar anmälningar för/);
+    await expect(raknartext).toBeVisible();
+
+    // (3) Nästa `get-registrations`-anrop misslyckas — en OVILLKORLIG
+    // refetch via `refetchOnReconnect: 'always'` (se docblocket ovan),
+    // oberoende av `staleTime` (datan är sekunder gammal, alltså INTE
+    // stale — en ren `visibilitychange` (refetchOnWindowFocus) hade därför
+    // inte triggat om här).
+    lyckas = false;
+    await page.evaluate(() => {
+      window.dispatchEvent(new Event('offline'));
+      window.dispatchEvent(new Event('online'));
+    });
+
+    const felbesked = page.getByRole('alert').filter({ hasText: 'Kunde inte hämta anmälningarna' });
+    await expect(felbesked).toBeVisible({ timeout: 20_000 });
+
+    // Den GAMLA räknartexten får INTE synas i felläget, trots att
+    // `periodAnnouncement`-state:t fortfarande bär det gamla värdet.
+    await expect(raknartext).toHaveCount(0);
+    await expect(page.getByText(/anmälningar\.$/)).toHaveCount(0);
+  });
+});
+
 test.describe('Radanatomin vid MOBIL bredd — namnkolumnen får inte klämmas ihjäl', () => {
   /**
    * REGRESSIONSVAKT, född ur en verklig bugg 2026-08-23.

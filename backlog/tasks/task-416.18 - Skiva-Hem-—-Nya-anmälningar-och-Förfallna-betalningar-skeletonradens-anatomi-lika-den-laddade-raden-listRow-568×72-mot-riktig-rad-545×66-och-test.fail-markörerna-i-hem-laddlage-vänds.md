@@ -7,7 +7,7 @@ title: >-
 status: Done
 assignee: []
 created_date: '2026-09-06 15:44'
-updated_date: '2026-09-06 18:51'
+updated_date: '2026-09-06 19:53'
 labels:
   - ready-for-agent
 dependencies: []
@@ -24,9 +24,9 @@ Källa: TASK-416.13:s mätning (PR #2412, S123, 2026-09-06): Nya anmälningars o
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Skeletonradens boundingBox i Nya anmälningar och Förfallna betalningar är identisk med den laddade radens (toEqual, ±0 px)
-- [ ] #2 De två test.fail()-testen i hem-laddlage är vanliga assertions och gröna; tvåsidigt bevis bifogat
-- [ ] #3 Hem-acceptance grön, axe-svep grönt
+- [x] #1 Skeletonradens boundingBox i Nya anmälningar och Förfallna betalningar är identisk med den laddade radens (toEqual, ±0 px)
+- [x] #2 De två test.fail()-testen i hem-laddlage är vanliga assertions och gröna; tvåsidigt bevis bifogat
+- [x] #3 Hem-acceptance grön, axe-svep grönt
 <!-- AC:END -->
 
 ## Definition of Done
@@ -39,5 +39,7 @@ Källa: TASK-416.13:s mätning (PR #2412, S123, 2026-09-06): Nya anmälningars o
 ## Implementation Notes
 
 <!-- SECTION:NOTES:BEGIN -->
+Review runda 1 (PR #2419, utlåtande) — ask-user-fynd, KÄND BOKFÖRD KANT, ej åtgärdad i denna skiva: ForfallenSkeletonRad (ForfallnaBetalningar.tsx) speglar "Att påminna"/"Väntar"-radens anatomi (ForfallenRadInnehall, items-center, två textrader) — den vanliga vägen, tvåsidigt bevisad. Ett morgonscenario där "Att påminna"/"Väntar" är tomma men "Dags att ringa" är fylld (alla obetalda redan påminda, RINGTROSKEL_DAGAR passerat) ger en riktig FÖRSTA rad som är RingRadInnehall (items-start, 3-4 rader) — skeletonens boundingBox matchar då inte, och layout-hoppet denna skiva finns för att undvika återkommer i just det scenariot. Obevisat och otestat (medMatningsdata()-fixturen ger uteslutande "Att påminna"-rader). Klassat som samma sorts kant som Hem-kortens tomläge (PRD TASK-416 § Öppna frågor, Marcus designval) — ett medvetet icke-täckt scenario, inte ett fel denna skiva åtgärdar. Docblocket i ForfallnaBetalningar.tsx skrevs om (var självmotsägande: påstod "GEMENSAM bas-anatomi för alla tre grupper" i samma mening som RingRadInnehall-undantaget) för att bokföra samma sak ärligt i koden.
+
 REVIEW-RUNDA 3 (PR #2419, Opus, 2026-09-06, på mandat): konvergerad, 4 info. Omslagsformen (span shrink-0 pl-2 + Skeleton w-14) browser-mätt av granskaren: målad rektangel 56 px förskjuten exakt 8 px, yttre 64 px, radhöjd 66 px i båda formerna — runda 2:s härledning bekräftad. Två prosa-rester ej rättade i kod (bokförs här): docblockets radhänvisning 'rad ~168/179' till relTid-spannen är stale (faktiskt 189/200 vid ce22eff6; skriv symbolisk hänvisning nästa gång filen rörs), och testkommentaren 'vid övriga tre viewports är förskjutningen ett annat tal' är obevisad per bredd (ska lyda 'kan vara ett annat tal, ej mätt per bredd'). Landad eb58c07b.
 <!-- SECTION:NOTES:END -->
