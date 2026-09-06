@@ -354,6 +354,12 @@ test.describe('Intresserade-vy (Fas 6e L1 L3 — LÄS-vy via get-leads, promover
     expect(forstaRadenEfter.x).toBeCloseTo(forstaRadenFore.x, 0);
     expect(forstaRadenEfter.y).toBeCloseTo(forstaRadenFore.y, 0);
     expect(forstaRadenEfter.width).toBeCloseTo(forstaRadenFore.width, 0);
+    // HÖJDEN ÄR DEN FAKTISKA REGRESSIONSVAKTEN — utan den hade testet inte
+    // fångat det genuina 8 px-gapet mätningen avtäckte (Skeleton listRow
+    // 72px mot KonvergensRads 80px, se Intresserade.tsx-kommentaren vid
+    // `LISTKROPP_ANKARE`): x/y/width var redan identiska FÖRE `h-20`-fixen
+    // eftersom bredden styrs av containern, inte av innehållet.
+    expect(Math.abs(forstaRadenEfter.height - forstaRadenFore.height)).toBeLessThanOrEqual(1);
   });
 
   test('axe 0 violations på TOM vy', async ({ page, network }) => {
