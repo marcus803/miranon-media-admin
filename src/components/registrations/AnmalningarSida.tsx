@@ -380,9 +380,12 @@ export function AnmalningarSida({
       som det ska. */
   visaAtgardskon?: boolean;
 } = {}) {
-  // Rules-of-hooks: samtliga hooks FÖRE de villkorade early-returnsen
-  // nedan (isPending/isError), annars byter komponenten hook-antal mellan
-  // render-lägen.
+  // Rules-of-hooks: samtliga hooks FÖRE de villkorade JSX-blocken nedan
+  // (headerBlock/filterRadBlock/datakropp, som var för sig grenar på
+  // isPending/isError). Sedan TASK-416.19 finns inga early-returns kvar —
+  // komponenten har ETT enda `return` (se § ETT RETURTRÄD nedan) — men
+  // regeln gäller ändå: hooks får aldrig hamna bakom ett villkor, annars
+  // byter komponenten hook-antal mellan render-lägen.
   const dataSource = useDataSource();
   const headingRef = useRef<HTMLHeadingElement>(null);
   const announceRef = useRef(false);
@@ -405,6 +408,21 @@ export function AnmalningarSida({
       !(err instanceof EdgeFunctionError && err.status >= 400 && err.status < 500) &&
       failureCount < 3,
   });
+
+  // "Har jag en pålitlig siffra/kontroll?" — deklarerad HÄR (inte längre
+  // nere vid `headerBlock`) eftersom BÅDA live-region-effekterna nedan
+  // (period/filter-annonseringen) behöver den som vakt, utöver sidkromets
+  // "Visa alla anmälningar"-länk (se dess docblock längre ner). ANVÄNDS AV
+  // TRE PLATSER, EN DEFINITION — annars glider guard-villkoren isär, exakt
+  // det review-runda 2 (TASK-416.19) fångade: period-/filter-effekterna
+  // vaktade tidigare bara `isPending`, medan FilterRad självt (och alltså
+  // dess Select-kontroller) redan är fullt interaktivt i isError. Ett
+  // periodbyte MEDAN felbeskedet visas satte då `periodAnnouncement` till
+  // en falsk räknartext ("… 0 anmälningar.") i en sr-only-region bredvid
+  // `MessageBox`s `role="alert"` — två motstridiga besked till en
+  // skärmläsare, samma felklass TASK-416.4 review-runda 1 redan städade
+  // bort ur skelettet.
+  const dataOkand = isPending || isError;
 
   // SAMMA `events.list`-nyckel som EventsList/EventValjare — dedupar mot
   // startvärmningen (`src/data/warmup/startvarmningen.ts`), ingen extra
@@ -583,30 +601,46 @@ export function AnmalningarSida({
   // EGEN live-region, skild från "Anmälningarna laddade."-statusen nedan
   // (Roselli-anatomin: en region per ansvar, aldrig återanvänd för två
   // olika besked).
+  //
+  // VAKTEN ÄR `dataOkand` (isPending ELLER isError), INTE bara `isPending`
+  // (review-runda 2, TASK-416.19, Marcus mandat 2026-09-06). Denna
+  // live-region sitter sedan TASK-416.19 på en FAST syskon-position i alla
+  // tre render-lägen (se `filterAnnonsering` och det enda returträdet
+  // nedan) — men FilterRad SJÄLVT får `isPending={isPending}` (aldrig
+  // `dataOkand`, se dess docblock), så dess Period-`Select` (statiska
+  // alternativ, alltid monterad — till skillnad från Typ/Ort som kräver
+  // data) är FULLT INTERAKTIV redan i isError. En tidigare version vaktade
+  // bara `isPending` här: bytte Lotta period MEDAN felbeskedet stod uppe
+  // satte effekten en falsk räknartext ("Visar anmälningar för … 0
+  // anmälningar.") i en sr-only-region bredvid `MessageBox`s
+  // `role="alert"` — två motstridiga besked till en skärmläsare, och en
+  // OSANN siffra (källan gav upp, den räknade inte till noll). Samma
+  // felklass som TASK-416.4 review-runda 1 tog bort ur skelettet.
   const [periodAnnouncement, setPeriodAnnouncement] = useState('');
   const prevPeriod = useRef(period);
   useEffect(() => {
-    if (isPending || prevPeriod.current === period) return;
+    if (dataOkand || prevPeriod.current === period) return;
     prevPeriod.current = period;
     setPeriodAnnouncement(
       `Visar anmälningar för ${PERIOD_ANNOUNCEMENT_LED[period]}. ${visasRader.length} ${
         visasRader.length === 1 ? 'anmälan' : 'anmälningar'
       }.`,
     );
-  }, [period, isPending, visasRader.length]);
+  }, [period, dataOkand, visasRader.length]);
 
   // Live-filtreringen bekräftas i SAMMA region som perioden: båda beskeden
   // svarar på "vad visas nu?" — ett ansvar, en region (EventsLists form).
-  // Punkten skiljer annonsen från panelfotens synliga räknartext.
+  // Punkten skiljer annonsen från panelfotens synliga räknartext. SAMMA
+  // `dataOkand`-vakt som effekten ovan, och av exakt samma skäl.
   const filterNyckel = `${valda.typ}|${valda.ort}|${valda.event}`;
   const prevFilterNyckel = useRef(filterNyckel);
   useEffect(() => {
-    if (isPending || prevFilterNyckel.current === filterNyckel) return;
+    if (dataOkand || prevFilterNyckel.current === filterNyckel) return;
     prevFilterNyckel.current = filterNyckel;
     setPeriodAnnouncement(
       `${filterRaknartext(visasRader.length, periodRader.length, ANMALNINGS_ENHET)}.`,
     );
-  }, [filterNyckel, isPending, visasRader.length, periodRader.length]);
+  }, [filterNyckel, dataOkand, visasRader.length, periodRader.length]);
 
   // Fokus -> <h1> + document.title när data anlänt (en gång per laddning).
   // Vyn NÅS via navigation, till skillnad från landningsytan Hem, så
@@ -657,10 +691,13 @@ export function AnmalningarSida({
   // persist-utgång), och räknar-skelettet stod flush-vänster medan listan
   // sitter i sitt eget -mx-4-kort — vänsterkanten hoppade.
   //
-  // `headerBlock`/`filterRadBlock` är DELAD JSX — SAMMA objekt i alla tre
-  // return-grenar nedan. h1:s och FilterRads klasser/DOM-position är därmed
-  // BYTE-IDENTISKA oavsett query-läge, så `boundingBox()` på dem rör sig
-  // aldrig när datat landar (AC #3).
+  // `headerBlock`/`filterRadBlock` är DELAD JSX — SAMMA objekt renderas på
+  // SAMMA fasta syskon-position i komponentens ENDA returträd (§ ETT
+  // RETURTRÄD, TASK-416.19), oavsett isPending/isError/laddat. h1:s och
+  // FilterRads klasser/DOM-position är därmed BYTE-IDENTISKA oavsett
+  // query-läge, så `boundingBox()` på dem rör sig aldrig när datat landar
+  // (AC #3) — och React remonterar inte `<FilterRad>` vid en övergång
+  // (TASK-416.19s egen bugg-fix).
   //
   // ANTALSRADEN OCH FILTERRAD SKILJER PÅ isPending OCH isError (review-
   // grinden runda 1, TASK-416.4, Marcus mandat 2026-09-06): en tidigare
@@ -670,12 +707,15 @@ export function AnmalningarSida({
   // ("laddar fortfarande" när sanningen är "gav upp"). Syskonytan
   // `EventsList.tsx` (isPending-grenen, ~rad 279–292) skickar bara
   // `isPending={isPending}` till sin FilterRad — samma form här. I isError
-  // visas INGEN skeleton: kromet står kvar (h1 + FilterRads tomma, disabled
-  // kontroller per primitivens eget beteende), och `MessageBox`-felbeskedet
-  // längre ner bär tillståndet. `dataOkand` lever kvar ENDAST för "Visa alla
-  // anmälningar"-länken (se dess docblock nedan) — den är inte samma fråga
-  // som "har jag en pålitlig siffra att visa i en skeleton".
-  const dataOkand = isPending || isError;
+  // visas INGEN skeleton: kromet står kvar (h1 + FilterRads RIKTIGA,
+  // interaktiva kontroller — se § dataOkand ovan för varför just detta
+  // krävde en extra vakt i review-runda 2 — per primitivens eget
+  // isPending=false-beteende), och `MessageBox`-felbeskedet längre ner bär
+  // tillståndet. `dataOkand` (deklarerad ovan, strax efter
+  // registrations-frågan) används här ENDAST för "Visa alla
+  // anmälningar"-länken (se dess docblock nedan) — den frågan ("har jag en
+  // pålitlig siffra att visa i en skeleton") är skild från de två
+  // period-/filter-annonseringseffekternas egen `dataOkand`-vakt.
 
   const headerBlock = (
     <header className="flex flex-col gap-1">
@@ -824,11 +864,16 @@ export function AnmalningarSida({
   // Periodens/filtrets egna live-region — FAST POSITION i alla tre lägen
   // (tidigare bara monterad i laddat-grenen, vilket sköt headerBlock till
   // barn-index 1 i just den grenen). `periodAnnouncement` förblir tom
-  // sträng i isPending (effekterna vaktar `isPending` explicit); i isError
-  // KAN den få innehåll om Lotta hinner ändra ett filter innan felet visas
-  // — regionen annonserar det då korrekt i stället för att tyst tappa
-  // beskedet, vilket var det GAMLA (icke avsedda) beteendet när denna nod
-  // bara existerade i laddat-grenen.
+  // sträng i BÅDE isPending OCH isError: de två effekterna ovan (`prevPeriod`
+  // respektive `prevFilterNyckel`) vaktar med `dataOkand` (isPending ELLER
+  // isError), inte bara `isPending` (review-runda 2, TASK-416.19). Utan den
+  // bredare vakten kunde Lotta byta period/filter MEDAN felbeskedet stod
+  // uppe — FilterRads Period-`Select` och Event-kontrollen är fullt
+  // interaktiva redan i isError, se effekternas egen kommentar — och
+  // regionen hade då annonserat en falsk räknartext ("… 0 anmälningar.")
+  // bredvid `MessageBox`s `role="alert"`. Med `dataOkand`-vakten kan
+  // effekterna aldrig sätta ett nytt värde förrän datan genuint har landat,
+  // så regionen förblir tyst genom hela fel-fönstret.
   const filterAnnonsering = (
     <p className="sr-only" aria-live="polite">
       {periodAnnouncement}
@@ -1031,16 +1076,21 @@ export function AnmalningarSida({
     </ul>
   );
 
-  // De FYRA barnen nedan (`dataLaddadAnnonsering`, `headerBlock`,
+  // De FEM barnen nedan (`dataLaddadAnnonsering`, `headerBlock`,
   // `filterRadBlock`, `filterAnnonsering`, `datakropp` — sidRam är sidkromet
   // och sitter MEDVETET utanför ankaret, se § YTANS ANKARE ovan) är FASTA
   // SYSKON-POSITIONER som alltid finns med i samma ordning i VARJE render,
-  // oavsett isPending/isError/laddat. Det är den strukturen, inte en `key`,
-  // som håller `headerBlock`/`filterRadBlock`s DOM-identitet (och därmed
-  // FilterRads interna `oppen`-state, `EventValjare`s popover-state, samt
-  // fokus och inskriven text i dess sökfält) intakt genom VARJE
-  // tillståndsövergång (TASK-416.19 — samma form som `Intresserade.tsx`,
-  // TASK-416.8).
+  // oavsett isPending/isError/laddat. (Förlagan `Intresserade.tsx` har FYRA
+  // — den saknar en motsvarighet till `filterAnnonsering`, se den filens
+  // egen kommentar.) Det är den strukturen, inte en `key`, som håller
+  // `headerBlock`/`filterRadBlock`s DOM-identitet (och därmed FilterRads
+  // interna `oppen`-state och `EventValjare`s popover-state) intakt genom
+  // VARJE tillståndsövergång (TASK-416.19). Fokus + inskriven text i
+  // `EventValjare`s sökfält omfattas INTE av den garantin över en FÖRSTA
+  // lyckad laddning — se § EN MÄTT, OFRÅNKOMLIG GRÄNS ovan för de två
+  // oberoende skälen (FilterRads egen isPending-gate; den befintliga
+  // fokus→h1-effekten nedan) och testfilens docblock för vad testerna
+  // faktiskt bevisar i stället (DOM-nod-identitet + panelens öppna state).
   return (
     <div className="flex flex-col gap-4">
       {sidRam}

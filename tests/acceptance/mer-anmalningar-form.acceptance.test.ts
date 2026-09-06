@@ -1111,6 +1111,61 @@ test.describe('Regressionsvakt: fasta syskon-positioner håller FilterRad odemon
     await expect(markorFinnsKvar(page)).toHaveCount(1);
     await expect(page.getByTestId('filter-panel')).toBeVisible();
   });
+
+  /**
+   * Review-runda 2 (TASK-416.19, PR #2423, Marcus mandat) — NY a11y-
+   * regression införd av runda 1:s fix, inte en pre-existerande bugg.
+   *
+   * `filterAnnonsering` (sr-only, `aria-live="polite"`, INGET `role`) sitter
+   * sedan runda 1 på en FAST syskon-position i alla tre render-lägen. FÖRE
+   * runda 1 existerade den noden ENDAST i laddat-grenen, så innehållet var
+   * strukturellt omöjligt att sätta förrän data landat. EFTER runda 1, men
+   * FÖRE denna rättning, vaktade de två effekter som sätter
+   * `periodAnnouncement` (se effekternas egna kommentarer ovan i
+   * `AnmalningarSida.tsx`) bara `isPending` — och `FilterRad` självt får
+   * `isPending={isPending}` (aldrig `dataOkand`, en MEDVETEN, oförändrad
+   * design från TASK-416.4 runda 1), så Period-`Select`n (statiska
+   * alternativ, alltid monterad) är fullt interaktiv redan i isError. Ett
+   * periodbyte MEDAN felbeskedet visades satte då `periodAnnouncement` till
+   * en FALSK räknartext ("Visar anmälningar för kommande event. 0
+   * anmälningar.") i en sr-only-region bredvid `MessageBox`s
+   * `role="alert"` — två motstridiga besked till en skärmläsare, och en
+   * osann siffra (källan gav upp, den räknade inte till noll). Rättat genom
+   * att vakta båda effekterna med `dataOkand` (isPending ELLER isError) i
+   * stället för bara `isPending`.
+   *
+   * TVÅSIDIGT BEVISAT: kört mot commit `4dd301bb` (runda 1:s head, INNAN
+   * denna rättning) föll detta test — regionen bar den falska räknartexten
+   * efter periodbytet. Kört mot rättningen är det grönt.
+   *
+   * 5xx går båda retry-lagren (`fetchWithRetry` + QueryClients `retry: 3`,
+   * ~7–8 s backoff, se `acceptance-bas.ts` § TIDEN HÖR TILL KONTRAKTET) —
+   * samma etablerade `timeout: 20_000` som `mer-aktivitetshistorik.
+   * acceptance.test.ts` använder för sitt 500-fel.
+   */
+  test('period-annonseringen förblir tyst under isError (dataOkand-vakt, review-runda 2)', async ({
+    page,
+    network,
+  }) => {
+    mockRegistrations(network, [], { status: 500 });
+    await page.goto('/mer/anmalningar');
+
+    const felbesked = page.getByRole('alert').filter({ hasText: 'Kunde inte hämta anmälningarna' });
+    await expect(felbesked).toBeVisible({ timeout: 20_000 });
+
+    await page.getByRole('button', { name: /^(Visa|Dölj) filter/ }).click();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await page.getByTestId('filter-period').getByRole('button').click();
+    await page.getByRole('option', { name: 'Kommande', exact: true }).click();
+
+    // Live-regionen ska förbli TOM genom hela fel-fönstret — ingen
+    // räknartext, sann eller falsk, ska annonseras medan källan har gett
+    // upp. `page.getByText` matchar hela sidan, inte bara en scopad region,
+    // så frånvaron bevisas oavsett var texten hade hamnat.
+    await expect(page.getByText(/^Visar anmälningar för/)).toHaveCount(0);
+    await expect(page.getByText(/anmälningar\.$/)).toHaveCount(0);
+    await expect(felbesked).toBeVisible();
+  });
 });
 
 test.describe('Radanatomin vid MOBIL bredd — namnkolumnen får inte klämmas ihjäl', () => {
