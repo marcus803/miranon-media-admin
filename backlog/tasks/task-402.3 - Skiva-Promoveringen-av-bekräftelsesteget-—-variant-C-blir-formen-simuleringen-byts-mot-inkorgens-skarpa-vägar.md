@@ -3,10 +3,10 @@ id: TASK-402.3
 title: >-
   Skiva: Promoveringen av bekräftelsesteget — variant C blir formen,
   simuleringen byts mot inkorgens skarpa vägar
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 09:24'
+updated_date: '2026-09-06 14:37'
 labels:
   - ready-for-agent
 dependencies:
@@ -32,7 +32,7 @@ Bekräftelsesteget på /mer/betalningar/registrera renderar variant C:s form ovi
 - [x] #7 Kortets formulär är det delade registreringsformuläret i Klar/Avbryt-läge; Avbryt återställer radens värden
 - [x] #8 Tillgänglighet: statusraden är polite och annonserar start och slut (aldrig per rad); räkningen är role=progressbar med aria-valuenow/-valuemax/-valuetext; kortet bär 'Markerad'/'Inte markerad' för skärmläsare; Ångra-knapparna bär personens namn; axe-svep utan fel
 - [x] #9 ariaSnapshot-paret per yta (variant-läget FÖRE flippen mot den promoverade ytan EFTER) är taget och identiskt; paret deklareras som 'referenser' i facit.json via en AMENDERING-fil (manifestet är agent-fruset)
-- [ ] #10 Marcus har granskat den promoverade ytan mot facit-bilderna på desktop 1440 och iPad 820 (iPad-formen bokförs som amendering-bilder i facit-katalogen)
+- [x] #10 Marcus har granskat den promoverade ytan mot facit-bilderna på desktop 1440 och iPad 820 (iPad-formen bokförs som amendering-bilder i facit-katalogen)
 - [x] #11 Staging-skarpbevis: tio rader registrerade via steget, kvitton köade, inbetalningarna verifierade i Postgres och basens spegel; staging-e2e (samma skarv som inkorgens utskicksflödes-test) täcker körningen, resultatet, fallerad rad, omkörning, Ångra-dialogen och kvittokön; api-pure täcker avstämning, summering, gruppering, 'vad kan registreras nu' och omkörnings-urvalet
 <!-- AC:END -->
 
@@ -196,4 +196,6 @@ Grindar (förgrund, exitkod separat): check-facit.sh 0, check:docs 0 (14 gröna)
 Modell: Sonnet 5 (claude-sonnet-5).
 
 RESUME 4 (2026-09-06): Marcus granskar i PROD (flaggan är på via Vercel sedan S113 steg 14 — bundeln på admin.miranon.dev bär VITE_FEATURE_BETALNINGAR=pa och registrera-chunken; granskningsvyn ovan gäller lika i prod, men Registrera-trycket bokför på riktigt där). Hans fynd gav TASK-402.8 (pillsen bort, namnet klipps, beloppsknapparna under listan) som ändrar formen FÖRE stämpeln — AC #10 görs om på 402.8:s form (402.8 AC #6). 402.6 beror nu på 402.8.
+
+AC #10 BOCKAD (S121 resume 4, 2026-09-06): Marcus granskade den promoverade ytan på granskningsservern 4173 (desktop 1440 + iPad 820) genom TASK-402.8:s tio formvarv — den formen ersätter 402.3:s ursprungliga (402.8 AC #6, Marcus kvittens 'Nu är vi klara med bulkregistrerings-sidan också, vi kör på detta.'). Kortet sätts Done; DoD #5:s visual-baslinje efter stämpel bärs av TASK-402.6 (stämpel + rivning), som planerat i PRD TASK-402. Landad via #2362 → main b6a598c1 (2026-09-06 natt, Marcus GO på hög risk); staging-skarpbevis tio rader (notes ovan).
 <!-- SECTION:NOTES:END -->
