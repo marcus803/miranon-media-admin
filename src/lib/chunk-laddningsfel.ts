@@ -82,14 +82,41 @@
  *
  * ═══ VARFÖR EN SYNLIG UPPMANING ÄR RÄTT SVAR HÄR ═══
  *
- * Hos oss kan eventet bara fyra vid en navigering Lotta själv har utlöst,
- * aldrig spontant medan hon skriver. `src/router.ts` sätter inte
- * `defaultPreload`, och `@tanstack/router-core` sätter ingen default för det
- * fältet (mätt: `dist/esm/router.js` sätter `defaultPreloadDelay: 50` men
- * aldrig `defaultPreload`). I `@tanstack/react-router`s `link.js` gäller
- * `const preload = ... userPreload ?? router.options.defaultPreload`, och varje
- * gren därefter jämför mot `"intent"` / `"render"` / `"viewport"` — med
- * `undefined` är alla falska. Ingen route hämtas alltså på hover.
+ * FRAM TILL TASK-416.10 kunde eventet hos oss bara fyra vid en navigering
+ * Lotta själv utlöst, aldrig spontant medan hon skriver — `src/router.ts`
+ * satte inte `defaultPreload`, och `@tanstack/router-core` sätter ingen
+ * default för det fältet (mätt: `dist/esm/router.js` sätter
+ * `defaultPreloadDelay: 50` men aldrig `defaultPreload`). I
+ * `@tanstack/react-router`s `link.js` gäller
+ * `const preload = ... userPreload ?? router.options.defaultPreload`, och
+ * varje gren därefter jämför mot `"intent"` / `"render"` / `"viewport"` —
+ * med `undefined` var alla falska. Ingen route hämtades på hover.
+ *
+ * SEDAN TASK-416.10 sätter `src/router.ts` `defaultPreload: 'intent'`
+ * (route-chunken ska hämtas på avsikt, inte vid klick — se den filens eget
+ * docblock). Eventet KAN alltså numera fyra även utan att Lotta klickar:
+ * hover/fokus (eller `touchstart`) på en `<Link>` startar
+ * `router.preloadRoute(...)`, som i sin tur kör samma `loadRouteChunk`-väg
+ * som en riktig navigering. Detta ÄNDRAR INTE svaret nedan — det breddar
+ * bara VILKEN händelse som kan trigga det, och är fortsatt begränsat till
+ * denna moduls egen kanal:
+ *
+ * En misslyckad PRELOAD kan aldrig nå `defaultErrorComponent`/`SectionError`
+ * — dubbelt skyddat, källäst `@tanstack/router-core`
+ * `dist/esm/load-client.js` och `@tanstack/react-router`
+ * `dist/esm/link.js`: (1) `preloadClientRoute` fångar varje fel som
+ * `executeClientLane` kastar (inkl. en trasig chunk-import) i sin egen
+ * `try/catch`, loggar med `console.error` och returnerar UTAN att kasta
+ * vidare — felet lämnar aldrig funktionen; (2) `Link.js`s anropsplats lägger
+ * ändå ett eget skyddsnät ovanpå: `router.preloadRoute(_options).catch((err)
+ * => { … console.warn(preloadWarning); })`. Ingen route-match sätts någonsin
+ * till `"error"` av en preload, så `SectionError` kan strukturellt inte
+ * renderas av detta. Det enda som läcker ut är Vites egna window-event
+ * (`vite:preloadError`), som `handlePreloadError` dispatchar OVILLKORLIGT
+ * innan den (icke-refererade) `throw err` — och det är exakt den kanal denna
+ * modul redan lyssnar på. En misslyckad hover-preload visar alltså
+ * `ChunkBanner` NÅGOT TIDIGARE än förut (innan Lotta ens hunnit klicka) —
+ * samma varning, samma väg, ingen ny felyta.
  *
  * LAGERGRÄNSEN är window-eventet, exakt som i `app-uppdatering.ts`: denna fil
  * vet allt om Vites preload-helper och ingenting om React; UI-lagret vet att
