@@ -396,8 +396,16 @@ async function importera(page: Page): Promise<Mockar> {
     timeout: 15_000,
   });
 
-  await page.getByRole('button', { name: 'Importera kontoutdrag' }).click();
-  const panel = page.getByRole('region', { name: 'Importera kontoutdrag' });
+  // [TASK-412, femte varvet] Importen är en DIALOG bakom RUBRIK-TRIGGERNS
+  // meny (Marcus: "gör Titeln 'Betalningar' till en dropdown") — INTE
+  // längre en egen knapp i sidhuvudet, och inte längre en separat ⋯-knapp
+  // (den vägen prövades och revs igen samma dag).
+  // `exact: true` — annars matchar Playwrights default substräng-jämförelse
+  // ÄVEN "Markera betalningar" (radens Markera-knapp, TASK-402.1), en
+  // strict-mode-krock mätt live (8 test föll på precis detta innan fixen).
+  await page.getByRole('button', { name: 'Betalningar', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+  const panel = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
   await expect(panel).toBeVisible();
 
   await panel.locator('input[type="file"]').setInputFiles({
@@ -634,5 +642,60 @@ test.describe('TASK-402.4 — tillgänglighet', () => {
 
     const utfall = await new AxeBuilder({ page }).include('main').analyze();
     expect(utfall.violations).toEqual([]);
+  });
+});
+
+/**
+ * TASK-412 — IMPORTEN SOM DIALOG, NÅDD VIA RUBRIK-TRIGGERN (Marcus
+ * prod-granskning 2026-09-06, S121 resume 4, femte varvet samma dag):
+ * *"Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en dropdown
+ * (typ som på eventdetalj-sidan)."* Rubriken "Betalningar" ÄR triggern
+ * (samma `EventValjare.tsx` § "RUBRIK-FORMEN"-anatomi, fast med en `Meny`
+ * i stället för en `Select` — sidan BYTER inget objekt, den öppnar sina
+ * ÅTGÄRDER). En tidigare, nu riven, ⋯-knapp bredvid tratten (fjärde varvet)
+ * testades aldrig i produktion och lämnar inget spår kvar här.
+ *
+ * AC #3 — fokus IN vid öppning (react-arias `useDialog` fokuserar
+ * DIALOG-ELEMENTET självt vid mount, `RegistreratNuBlock.tsx`s docblock
+ * citerar samma källa), rubriken ÄR dialogens tillgängliga namn, fokus
+ * ÅTER till rubrik-triggern vid stängning, och ett axe-svep av den ÖPPNA
+ * dialogen (skilt från sviten ovans svep av STEGET efter överlämningen).
+ */
+test.describe('TASK-412 — importen som dialog', () => {
+  test('rubrik-triggerns meny öppnar dialogen; fokus in vid öppning, tillbaka vid Escape; axe utan fel', async ({
+    page,
+  }) => {
+    await mocka(page);
+    await page.goto('/mer/betalningar');
+    // `exact: true` — se `importera()`s kommentar om samma strict-mode-krock
+    // mot radens "Markera betalningar"-knapp.
+    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar', exact: true });
+    await expect(rubrikTrigger).toBeVisible({ timeout: 15_000 });
+
+    await rubrikTrigger.click();
+    await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
+    await expect(dialog).toBeVisible();
+    // Fokus går IN i DIALOGEN (elementet självt, inte första knappen —
+    // react-arias `useDialog`-standard).
+    await expect(dialog).toBeFocused();
+
+    const utfall = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    expect(utfall.violations).toEqual([]);
+
+    // Escape stänger utan att röra bankminnet (`stangImport` rör bara
+    // `visaImport` + fokus, se dess docblock) och lämnar fokus på
+    // rubrik-triggern.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect(rubrikTrigger).toBeFocused();
+
+    // En NY öppning startar om i steg 'val' — bevis på att inget av det
+    // gamla filvals-tillståndet läckte över stängningen.
+    await rubrikTrigger.click();
+    await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+    await expect(page.getByRole('dialog', { name: 'Importera kontoutdrag' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ladda upp fil' })).toBeVisible();
   });
 });
