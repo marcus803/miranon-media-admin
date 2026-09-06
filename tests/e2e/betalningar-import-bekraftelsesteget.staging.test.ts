@@ -411,9 +411,9 @@ async function importera(page: Page): Promise<Mockar> {
   await expect(page).toHaveURL(/\/mer\/betalningar\/registrera\?kalla=import/, {
     timeout: 15_000,
   });
-  await expect(steget(page).getByRole('heading', { level: 1, name: 'Bulkregistrering' })).toBeVisible(
-    { timeout: 15_000 },
-  );
+  await expect(
+    steget(page).getByRole('heading', { level: 1, name: 'Bulkregistrering' }),
+  ).toBeVisible({ timeout: 15_000 });
   return mockar;
 }
 
@@ -449,10 +449,12 @@ test.describe('TASK-402.4 — importens fyra radtillstånd i steget', () => {
     await expect(hand.getByRole('button', { name: /^Bengt Lindqvist · Betakursen/ })).toBeVisible();
 
     // Omatchad: sökfält, och INGA förslagsknappar förrän hon sökt.
-    await expect(hand.getByRole('searchbox', { name: 'Sök anmälan för Okand Betalare' })).toBeVisible();
     await expect(
-      hand.getByRole('searchbox', { name: 'Sök anmälan för Bengt Swish' }),
-    ).toHaveCount(0);
+      hand.getByRole('searchbox', { name: 'Sök anmälan för Okand Betalare' }),
+    ).toBeVisible();
+    await expect(hand.getByRole('searchbox', { name: 'Sök anmälan för Bengt Swish' })).toHaveCount(
+      0,
+    );
 
     // ── DUBBLETT: egen sektion, LÅST UTAN KRYSS ───────────────────────────
     const dubbletter = redanRegistrerade(page);
@@ -476,9 +478,7 @@ test.describe('TASK-402.4 — importens fyra radtillstånd i steget', () => {
     await expect(redanRegistrerade(page).getByText('Cecilia Swish')).toBeVisible();
     // Och anmälan är fortfarande valbar för NÅGON ANNAN rad — den är öppen.
     const hand = handhogen(page);
-    await hand
-      .getByRole('searchbox', { name: 'Sök anmälan för Okand Betalare' })
-      .fill('Cecilia');
+    await hand.getByRole('searchbox', { name: 'Sök anmälan för Okand Betalare' }).fill('Cecilia');
     await expect(hand.getByRole('button', { name: /^Cecilia Nord · Alfakursen/ })).toBeVisible();
   });
 });
@@ -541,7 +541,9 @@ test.describe('TASK-402.4 — från fil till registrerade inbetalningar', () => 
     // 409-raden står kvar i listan med serverns egen innebörd i klartext, och
     // är AVMARKERAD så en omkörning inte kan producera fler 409:or.
     await expect(form.getByText('Redan registrerad. Ingen ny inbetalning skapades.')).toBeVisible();
-    await expect(form.getByRole('checkbox', { name: 'David Dahl Inte markerad' })).not.toBeChecked();
+    await expect(
+      form.getByRole('checkbox', { name: 'David Dahl Inte markerad' }),
+    ).not.toBeChecked();
     await expect(form.getByRole('button', { name: 'Registrera', exact: true })).toBeDisabled();
 
     // BANKREFERENSEN FÖLJDE MED PÅ VARJE ANROP (AC #4:s förutsättning — utan
@@ -559,7 +561,9 @@ test.describe('TASK-402.4 — från fil till registrerade inbetalningar', () => 
     expect(perAnmalan.get(CECILIA)?.belopp).toBe('900');
 
     // Efterläget är stegets vanliga: "Registrerat nu" med de tre raderna.
-    await expect(form.getByRole('button', { name: /^Ångra registreringen för/ }).first()).toBeVisible();
+    await expect(
+      form.getByRole('button', { name: /^Ångra registreringen för/ }).first(),
+    ).toBeVisible();
 
     // KÖRNINGEN BYGGDES ALDRIG OM under fötterna trots att de öppna
     // betalningarna krympte efter varje registrering: dubblett-sektionen och

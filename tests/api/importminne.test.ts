@@ -103,7 +103,9 @@ const OPPNA: OppenBetalning[] = [
 const OPPNA_IDS = new Set(OPPNA.map((b) => b.anmalanRecordId));
 
 /** En minnesrad med bara det som skiljer satt. */
-function minnesrad(over: Partial<ImportradIMinnet> & Pick<ImportradIMinnet, 'nyckel'>): ImportradIMinnet {
+function minnesrad(
+  over: Partial<ImportradIMinnet> & Pick<ImportradIMinnet, 'nyckel'>,
+): ImportradIMinnet {
   return {
     radnummer: 1,
     belopp: 1500,
