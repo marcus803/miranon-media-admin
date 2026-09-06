@@ -1,6 +1,6 @@
 ---
 owner: marcus803
-updated: 2026-09-05
+updated: 2026-09-06
 review_by: 2027-01-02
 status: stable
 ---
@@ -397,6 +397,25 @@ person — omvänt mot designflödet (lead först, anmälan sedan).
 **Modalitet** — event-taxonomins andra axel: Utbildning eller Föreläsning
 (kurs × modalitet).
 *I koden:* `Modalitet`.
+
+**Demoläge** — Lottas övningsrum: hela betalningsflödet i en app som är
+samma kod som prod men talar med staging-projektet, med en fast fixtur
+("Lottas morgon") som återställs till samma startläge vid inträde, på knappen
+Börja om och varje natt; äkta kvitton ur stagings egen serie med vattenstämpel
+DEMO; mail bara till Resends testadresser
+([ADR-132](docs/decisions/ADR-132-demolaget-staging-som-maskinrum-bakom-dorr-i-prod-appen.md)).
+Dörren är posten Demo i Mer-menyn. Är INTE testvärlden (den fejkar nätverket;
+demot kör riktigt maskineri).
+*Undvik:* sandlåda (Stripes ord för utvecklarens miljö, inte Lottas rum),
+testläge (staging-CI:s ord), simulering (prototypens rivna webbläsar-lager).
+*I koden:* `VITE_APP_LAGE=demo`, `aterstall-demo`, `demo-inloggning`.
+
+**Demoapp** — den egna adressen där demoläget körs: samma bygge som prod,
+stagings publika nycklar, listen "Demo. Inget sparas på riktigt, inga mail
+skickas." med Börja om och Tillbaka till appen. Öppnas färdiginloggad från
+Mer-menyn via en engångslänk.
+*Undvik:* stagingappen (staging är maskinrummet, demoappen är rummet Lotta
+ser), förhandsbygge (Vercels PR-preview, egen fråga i ADR-132 beslut 8).
 
 **Morgonkoll** — hem-vyns jobb som begrepp: den dagliga genomläsningen där
 Lotta ser vad som väntar och gör det direkt på plats. Identiteten låst S102
