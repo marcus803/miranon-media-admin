@@ -449,8 +449,27 @@ function FramstegskortD({
   return (
     <section
       aria-label="Framsteg"
+      // Roselli-kontraktet (`Skeleton.tsx` filhuvud: "konsumenten äger
+      // innehålls-containern som laddar och sätter aria-busy + ett visuellt
+      // dolt textbesked på den") — SAMMA kontrakt som EventCheckins
+      // event-pending-gren och VariantD:s isListPending-block redan följer.
+      // Review-runda 1 fångade att just DENNA sektion saknade det: dess
+      // `Skeleton`-block är `aria-hidden` (dekorativa), så en skärmläsare
+      // som navigerar hit direkt via landmärken (sektionen har eget
+      // `aria-label`) hade upplevt regionen som tom under laddning.
+      //
+      // INGET `role="status"` här, MEDVETET: kontraktet Skeleton.tsx citerar
+      // är "aria-busy + textbesked" — role=status nämns inte, och att lägga
+      // till en ANDRA live-annonserande region hade riskerat att beskedet
+      // läses upp dubbelt tillsammans med listkroppens EGNA `role="status"`
+      // (samma `isListPending`/`isListError` styr båda, så de kan bli
+      // aktiva SAMTIDIGT). `aria-busy` ensam räcker för att regionen inte
+      // ska läsas som tom vid landmärkes-navigering, utan att skapa en andra
+      // automatisk annonsering.
+      aria-busy={isPending}
       className={`flex flex-col gap-2 rounded-2xl border border-transparent bg-primary-tint p-4 contrast-more:border-border-strong print:border-border-strong ${klass ?? ''}`}
     >
+      {isPending && <span className="sr-only">Laddar framsteg…</span>}
       <div className="flex items-baseline justify-between gap-3">
         {/* Breddlåset: osynlig maxform i samma grid-cell som det verkliga talet. */}
         <span className="grid font-semibold text-xl">
@@ -735,13 +754,38 @@ function initialerD(namn: string): string {
  * (`PersonsList.tsx:317-319`). På mobil öppnar autofokus dessutom tangent-
  * bordet direkt och täcker listan — precis den överblick dörren behöver.
  */
-function VariantD({ eventId, event }: { eventId: string; event: Event }) {
+/**
+ * `event: Event | undefined` (review-runda 1, FYND 2) — INTE längre garanterat
+ * satt. PRD TASK-416:s regel ("sidkromet renderas i ALLA query-tillstånd")
+ * gäller utan undantag för sällsynta vägar: kall cache (`useDorrEvent`s
+ * `placeholderData` hittar inget i `events.list`), en djuplänk, eller
+ * ADR-112-startvärmningens timeout. `EventCheckin` monterar därför ALLTID
+ * `VariantD` — det fanns ingen separat "eventet är otillgängligt"-gren kvar
+ * att hoppa över kromet i (se `EventCheckin` nedan). `event` kan vara
+ * `undefined` medan `eventIsPending`/`eventIsError` säger VARFÖR: kromet
+ * (namn/datum, `FramstegskortD`, sökfältet) degraderar sig självt per fält —
+ * ALDRIG genom att hoppa över hela sektionen.
+ */
+function VariantD({
+  eventId,
+  event,
+  eventIsPending,
+  eventIsError,
+}: {
+  eventId: string;
+  event: Event | undefined;
+  eventIsPending: boolean;
+  eventIsError: boolean;
+}) {
   const dataSource = useDataSource();
 
-  // TASK-416.1: attendance/registrations lever HÄR, inte hos föräldern
-  // (`EventCheckin` gaterar bara på eventet numera). `isPending`/`isError`
-  // styr UTESLUTANDE listkroppen längst ned — sidkromet ovanför (SidRam, h1,
-  // eventnamn/datum, framstegskort, sökfält, meta-rad) är monterat oavsett.
+  // TASK-416.1 + review-runda 1 (FYND 2): attendance/registrations lever HÄR,
+  // inte hos föräldern (`EventCheckin` monterar alltid `VariantD` numera).
+  // `isListPending`/`isListError` VÄVER IN eventets egen `isPending`/
+  // `isError` (INTE bara attendance/registrations) — annars hade "eventet
+  // självt saknas"-vägen inte fått samma listkropps-gating som de två andra
+  // datamängderna, exakt den lucka review-rundan fångade. Sidkromets STATISKA
+  // delar (SidRam, h1) är ändå monterade oavsett — se JSX nedan.
   const registrations = useQuery({
     queryKey: queryKeys.registrations.byEvent(eventId),
     queryFn: () => dataSource.fetchRegistrations({ eventId }),
@@ -750,8 +794,8 @@ function VariantD({ eventId, event }: { eventId: string; event: Event }) {
     queryKey: queryKeys.events.attendance(eventId),
     queryFn: () => dataSource.fetchAttendance({ eventId }),
   });
-  const isListPending = registrations.isPending || attendance.isPending;
-  const isListError = registrations.isError || attendance.isError;
+  const isListPending = eventIsPending || registrations.isPending || attendance.isPending;
+  const isListError = eventIsError || registrations.isError || attendance.isError;
 
   // Sessionsuppsättningen härleds ur ALLA attendance-rader (`byggRader`,
   // ojoinad av session) — INTE ur `rader`/`byggRaderD` nedan, som redan är
@@ -1012,17 +1056,26 @@ function VariantD({ eventId, event }: { eventId: string; event: Event }) {
           på samma rad (varv 2-beslutet står). */}
       <div className="mx-4 mt-4 flex flex-col gap-1">
         <h1 className="font-semibold text-3xl">Check-in</h1>
-        <p className="text-body">
-          <span className="font-medium">{event.eventNamn ?? event.eventlabel ?? 'Eventet'}</span>
-          {datumtext && <span className="text-text-muted">{` · ${datumtext}`}</span>}
-        </p>
+        {/* Review-runda 1, FYND 2: `event` kan vara `undefined` (eventet
+            självt ännu opending/felat, ovanligt men inte längre en egen
+            gren utan krom — se `VariantD`s docblock). Skeletonen står i
+            EXAKT samma slot/klass (`text-body`) som den riktiga paragrafen
+            skulle ha använt, så h1:ens position aldrig flyttar sig. */}
+        {event ? (
+          <p className="text-body">
+            <span className="font-medium">{event.eventNamn ?? event.eventlabel ?? 'Eventet'}</span>
+            {datumtext && <span className="text-text-muted">{` · ${datumtext}`}</span>}
+          </p>
+        ) : (
+          <Skeleton variant="text" className="w-2/5 text-body" />
+        )}
       </div>
 
       <FramstegskortD
         klara={antalKlara}
         totalt={rader.length}
         klass="mt-1"
-        isPending={isListPending}
+        isPending={isListPending || isListError}
         kvitto={
           senaste && (
             <>
@@ -1056,11 +1109,18 @@ function VariantD({ eventId, event }: { eventId: string; event: Event }) {
       <SessionsRadD sessioner={sessioner} vald={session} onValj={setSession} />
 
       {/* Sökfältets form är personlistans (steg k08) — samma input-tokens,
-          samma clear-knapp, ingen autofokus. */}
+          samma clear-knapp, ingen autofokus.
+          `isDisabled` (review-runda 1, FYND 2) — ENDAST kopplad till
+          `event == null` (inte `isListPending` i stort): den BEFINTLIGA,
+          redan testade vägen (eventet klart, attendance/registrations
+          fortfarande laddar) ska förbli oförändrad — sökfältet är aktivt
+          där precis som förut. Disabled-läget täcker bara den ovanliga
+          vägen där vi inte ens har ett event att söka BLAND. */}
       <SearchField
         aria-label="Sök bland de anmälda"
         value={fraga}
         onChange={setFraga}
+        isDisabled={event == null}
         className="group flex flex-col"
       >
         <div className="relative">
@@ -1151,8 +1211,12 @@ function VariantD({ eventId, event }: { eventId: string; event: Event }) {
           </div>
         </div>
       ) : isListError ? (
+        // Texten namnger ALLA TRE möjliga felkällor (review-runda 1, FYND 2:
+        // `isListError` väver nu in `eventIsError`, inte bara attendance/
+        // registrations) — samma ordval som filen bar innan TASK-416.1 delade
+        // upp `useDorrData`.
         <MessageBox intent="error" title="Kunde inte hämta underlaget">
-          Närvaron eller anmälningarna kunde inte hämtas.
+          Eventet, närvaron eller anmälningarna kunde inte hämtas.
         </MessageBox>
       ) : attGora.length === 0 ? (
         <div
@@ -1255,8 +1319,14 @@ function VariantD({ eventId, event }: { eventId: string; event: Event }) {
  * finns inte i app-shapen) — heuristiken är därför: en session ⇒ den; annars
  * Dag 2 om dagens datum är eventets slutdatum, i övrigt Dag 1. Gissningen
  * visas ALLTID för Lotta och kan alltid styras om.
+ *
+ * `event: Event | undefined` (review-runda 1, FYND 2): `VariantD` monteras nu
+ * innan eventet nödvändigtvis landat. Utan ett event kan inte "Dag 2 om
+ * dagens datum är slutdatum"-grenen prövas — den hoppas över (`event?.`) och
+ * härledningen faller tillbaka på `sessioner[0]`, exakt samma fallback som
+ * redan gäller när `sessioner.length <= 1`.
  */
-function useSessionsval(event: Event, rader: Dorrad[]) {
+function useSessionsval(event: Event | undefined, rader: Dorrad[]) {
   const sessioner = useMemo(
     () => SESSION_ORDNING.filter((s) => rader.some((r) => r.session === s)),
     [rader],
@@ -1267,7 +1337,7 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
     if (sessioner.length === 1) return sessioner[0];
     const idag = new Date();
     idag.setHours(0, 0, 0, 0);
-    const slut = event.slutdatum ? new Date(event.slutdatum) : null;
+    const slut = event?.slutdatum ? new Date(event.slutdatum) : null;
     if (slut && !Number.isNaN(slut.getTime())) {
       slut.setHours(0, 0, 0, 0);
       if (idag.getTime() === slut.getTime() && sessioner.includes(AttendanceSession.DAG_2)) {
@@ -1275,7 +1345,7 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
       }
     }
     return sessioner[0];
-  }, [sessioner, event.slutdatum]);
+  }, [sessioner, event?.slutdatum]);
 
   const [vald, setVald] = useState<AttendanceSessionValue | null>(null);
   const session = vald ?? harledd;
@@ -1283,11 +1353,13 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
   /** Datumtexten för den valda sessionen — Dag 1 = start, Dag 2 = slut. */
   const datumtext = useMemo(() => {
     const iso =
-      session === AttendanceSession.DAG_2 ? (event.slutdatum ?? null) : (event.startdatum ?? null);
+      session === AttendanceSession.DAG_2
+        ? (event?.slutdatum ?? null)
+        : (event?.startdatum ?? null);
     if (!iso) return null;
     const d = new Date(iso);
     return Number.isNaN(d.getTime()) ? null : DATUM_LANG.format(d);
-  }, [session, event.startdatum, event.slutdatum]);
+  }, [session, event?.startdatum, event?.slutdatum]);
 
   return { sessioner, session, setSession: setVald, datumtext };
 }
@@ -1305,6 +1377,19 @@ function useSessionsval(event: Event, rader: Dorrad[]) {
  * fynd som persondetalj-precedenten (`dc0eb4ec`) gjorde. D är den enda
  * formen som finns kvar; en prop vars enda möjliga värde är `'d'` bär ingen
  * information.
+ *
+ * MONTERAR ALLTID `VariantD` — INGEN SEPARAT FALLBACK-GREN (review-runda 1,
+ * FYND 2, retirerad efter den ursprungliga TASK-416.1-leveransen). Den
+ * tidigare varianten här returnerade en MINIMAL sidkrom (bara SidRam + h1)
+ * när eventet självt var pending/error/null, vilket bröt PRD TASK-416:s
+ * "sidkromet renderas i ALLA query-tillstånd, utan undantag" — framstegskort,
+ * sökfält och meta-rad saknades precis i den grenen. `VariantD` tar nu emot
+ * `event: Event | undefined` plus `eventIsPending`/`eventIsError` och
+ * degraderar VARJE kromdel för sig (namn/datum → skeleton, sökfält →
+ * disabled, listkroppen → samma skelett/fel-gren som attendance/
+ * registrations redan använde) i stället för att hoppa över hela sektionen.
+ * `eventId` är det ENDA `VariantD` någonsin kräver ovillkorat (routeparametern,
+ * alltid satt) — `event` självt är alltid `Event | undefined` numera.
  */
 export function EventCheckin({ eventId }: { eventId: string }) {
   const event = useDorrEvent(eventId);
@@ -1315,35 +1400,12 @@ export function EventCheckin({ eventId }: { eventId: string }) {
     window.scrollTo({ top: 0 });
   }, []);
 
-  // TASK-416.1 — SIDKROMET GATERAR BARA PÅ EVENTET. `SidRam` + den statiska
-  // rubriken "Check-in" behöver ingen data alls, och eventet självt landar i
-  // praktiken alltid direkt via `placeholderData` (`useDorrEvent`, ADR-078)
-  // eftersom events-listan redan är varm (ADR-112 startvärmning) när dörren
-  // nås FRÅN eventet. Denna gren träffas därför nästan aldrig i skarp drift
-  // — den är ändå inte borttagen: en direktnavigering utan varm cache (eller
-  // ett ogiltigt event-ID) ska visa sidkromet i stället för en tom sida.
-  // Attendance/registrations (som ALDRIG värms, se `VariantD`) rör inte
-  // detta villkor — de styr uteslutande listkroppen längre ned.
-  if (event.isPending || event.isError || event.data == null) {
-    return (
-      <section data-testid="dorrlista-yta" className="flex flex-col gap-2">
-        <SidRam to="/event/$eventId" params={{ eventId }} tillbakaEtikett="Tillbaka till eventet" />
-        <div className="mx-4 mt-4 flex flex-col gap-1">
-          <h1 className="font-semibold text-3xl">Check-in</h1>
-        </div>
-        {event.isPending ? (
-          <div role="status" aria-busy="true" className="mx-4 flex flex-col gap-2">
-            <span className="sr-only">Laddar check-in…</span>
-            <Skeleton variant="text" className="w-2/5 text-body" />
-          </div>
-        ) : (
-          <MessageBox intent="error" title="Kunde inte hämta eventet">
-            Eventet kunde inte hämtas. Kontrollera länken eller försök igen.
-          </MessageBox>
-        )}
-      </section>
-    );
-  }
-
-  return <VariantD eventId={eventId} event={event.data} />;
+  return (
+    <VariantD
+      eventId={eventId}
+      event={event.data}
+      eventIsPending={event.isPending}
+      eventIsError={event.isError}
+    />
+  );
 }

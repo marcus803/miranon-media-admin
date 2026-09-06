@@ -42,6 +42,17 @@ import { expect, test } from './acceptance-bas';
  * `get-attendance` värms ALDRIG (kortets egen premiss) och `get-event` för
  * just detta event anropas bara EN gång i detta scenario, så båda hålls
  * ovillkorat.
+ *
+ * TREDJE TESTET (review-runda 1, FYND 2) — "eventet självt parkerat": ett
+ * HELT ANNAT event-ID, medvetet FRÅNVARANDE ur `EVENTS_RESPONSE.events` (den
+ * default `get-events`-listan), så `placeholderData` inte hittar något att
+ * seeda med — motsatsen till scenariot ovan. `get-event` hålls; `get-
+ * attendance`/`get-registrations` besvaras direkt (isolerar att det är
+ * EVENTETS egen laddning, inte listans, som är den prövade blockeraren).
+ * Bevisar att `VariantD` (inte längre en separat minimal fallback-gren i
+ * `EventCheckin`, se dess docblock) degraderar kromet fält-för-fält — namn/
+ * datum → skelett, sökfältet → `isDisabled`, framstegskortet → `aria-busy` —
+ * i stället för att hoppa över hela sidkromet.
  */
 
 const EVENT_ID = VISUAL_EVENT_ID;
@@ -242,5 +253,129 @@ test.describe('Check-in — Lugnt laddläge (TASK-416.1)', () => {
       .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
       .analyze();
     expect(results.violations).toEqual([]);
+  });
+
+  test('eventet självt parkerat (get-event hålls, events.list saknar posten): kromet står kvar, boundingBox identisk efter landning', async ({
+    page,
+    network,
+  }) => {
+    // Medvetet FRÅNVARANDE ur `EVENTS_RESPONSE.events` — se filhuvudet.
+    const EVENT_ID_OKAND = 'recLaddlageEventPend01';
+    const ANMALAN_OKAND_A = 'recLaddlageAnmPend01';
+    const ANMALAN_OKAND_B = 'recLaddlageAnmPend02';
+
+    const st = {
+      hall: true,
+      parkerade: [] as Array<() => void>,
+      slappAlla() {
+        for (const slapp of this.parkerade.splice(0)) slapp();
+      },
+    };
+    const vantaOmHallen = () =>
+      st.hall ? new Promise<void>((slapp) => st.parkerade.push(slapp)) : Promise.resolve();
+
+    network.use(
+      http.get(EF('get-event'), async ({ request }) => {
+        const id = new URL(request.url).searchParams.get('id');
+        if (id !== EVENT_ID_OKAND) return json(EVENT_DETAIL_RESPONSE);
+        await vantaOmHallen();
+        return json({
+          event: {
+            ...EVENT_DETAIL_RESPONSE.event,
+            id: EVENT_ID_OKAND,
+            eventNamn: 'Föreläsning Parkerad',
+            eventlabel: 'Parkerad 1 okt',
+            startdatum: '2026-10-01',
+            slutdatum: '2026-10-01',
+          },
+        });
+      }),
+      // Besvaras DIREKT (inte hållna) — isolerar att det är EVENTETS egen
+      // laddning som prövas här, inte listans (den vägen har redan sitt eget
+      // test ovan).
+      http.get(EF('get-registrations'), ({ request }) => {
+        const eventId = new URL(request.url).searchParams.get('eventId');
+        if (eventId !== EVENT_ID_OKAND) return json({ registrations: [] });
+        return json({
+          registrations: [
+            reg({ id: ANMALAN_OKAND_A, eventId: EVENT_ID_OKAND }),
+            reg({
+              id: ANMALAN_OKAND_B,
+              fornamn: 'Beata',
+              efternamn: 'Berg',
+              email: 'beata@example.se',
+              personId: 'recLaddlagePers002',
+              eventId: EVENT_ID_OKAND,
+            }),
+          ],
+        });
+      }),
+      http.get(EF('get-attendance'), () =>
+        json({
+          attendance: [
+            att({
+              id: 'recLaddlageDeltPend01',
+              anmalanId: ANMALAN_OKAND_A,
+              eventId: EVENT_ID_OKAND,
+            }),
+            att({
+              id: 'recLaddlageDeltPend02',
+              anmalanId: ANMALAN_OKAND_B,
+              personId: 'recLaddlagePers002',
+              personNamn: NAMN_B,
+              eventId: EVENT_ID_OKAND,
+            }),
+          ],
+        }),
+      ),
+    );
+
+    await page.goto(`/event/${EVENT_ID_OKAND}/narvaro`);
+
+    const h1 = page.getByRole('heading', { level: 1, name: 'Check-in' });
+    await expect(h1).toBeVisible();
+
+    // Kromet står kvar trots att EVENTET självt (inte bara attendance/
+    // registrations) är parkerat: sökfältet är monterat men INAKTIVERAT
+    // (FYND 2 — ingen event-identitet att söka BLAND ännu; den befintliga,
+    // redan testade "list pending"-vägen ovan lämnar sökfältet aktivt,
+    // oförändrat).
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök bland de anmälda' });
+    await expect(sokfalt).toBeVisible();
+    await expect(sokfalt).toBeDisabled();
+
+    // Framstegskortet är monterat och markerar sig BUSY (FYND 1) — en
+    // skärmläsare som navigerar hit direkt via landmärken (sektionen har
+    // eget `aria-label`) ser att regionen laddar, inte att den är tom.
+    const framsteg = page.getByRole('region', { name: 'Framsteg' });
+    await expect(framsteg).toHaveAttribute('aria-busy', 'true');
+
+    const skelettrader = page.getByTestId('dorrlista-skelettrad');
+    await expect(skelettrader.first()).toBeVisible();
+
+    await page.mouse.move(0, 0);
+    const h1BoxLaddar = await h1.boundingBox();
+    const forstaRadBoxLaddar = await skelettrader.first().boundingBox();
+
+    st.hall = false;
+    st.slappAlla();
+
+    await expect(page.getByText('Föreläsning Parkerad')).toBeVisible();
+    await expect(sokfalt).toBeEnabled();
+    await expect(framsteg).toHaveAttribute('aria-busy', 'false');
+    await expect(skelettrader).toHaveCount(0);
+    await page.evaluate(
+      () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+    );
+
+    const h1BoxLaddat = await h1.boundingBox();
+    const forstaRadenLaddad = page
+      .getByRole('list', { name: 'Anmälda att checka in' })
+      .getByRole('listitem')
+      .first();
+    const forstaRadBoxLaddat = await forstaRadenLaddad.boundingBox();
+
+    expect(h1BoxLaddat).toEqual(h1BoxLaddar);
+    expect(forstaRadBoxLaddat).toEqual(forstaRadBoxLaddar);
   });
 });
