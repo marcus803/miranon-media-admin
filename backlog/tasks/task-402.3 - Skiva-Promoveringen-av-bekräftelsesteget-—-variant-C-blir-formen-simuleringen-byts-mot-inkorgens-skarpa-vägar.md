@@ -6,7 +6,7 @@ title: >-
 status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 00:22'
+updated_date: '2026-09-06 01:06'
 labels:
   - ready-for-agent
 dependencies:
@@ -178,4 +178,20 @@ FYND ATT BÄRA VIDARE (inte fixade i denna skiva)
 3. hamta-jobbstatus UTAN jobbId returnerar det SENASTE jobbet i basen, inte
    sessionens eget. JobbLyssnare i skalet anropar den så; en verifiering som
    läser den frågan mäter fel jobb. Använd alltid ?jobbId=.
+
+RUNDA 2 2026-09-06 01:06 UTC (SHA efter denna commit: se PR #2362s senaste push) — review-agentens fem fynd (granskad SHA 081a2e95) rättade/utredda:
+
+1. [warning/ask-user] Grindens hemvist (staging-e2e, inte tests/visual/) — Marcus vägval, INGEN kod ändrad. Skälet bokfört i PR-kroppen under "Öppet för Marcus: grindens hemvist" med exakt konfigrad (playwright.config.ts:384) och en kostnadsbedömd hermetisk väg (ny egen webServer-gren + MSW-handlers + ett nytt WebSocket-mock för JobbLyssnare — den sistnämnda delen redan tilldelad TASK-346.6/346.7 i configens egen kommentar; TASK-346.7 är Done men rörde andra ytor och flippade aldrig raden). Ingen egen bedömning fattad — Marcus väljer.
+
+2. [warning/ask-user] AC #9 felställd premiss — RÄTTAT. facit.json:s "referenser" var tomt trots att AC #9 var bockad. Verifierat mot scripts/lib/facit-godkand-skrivning.mjs: hooken fryser bara ett manifest med satt (icke-null) "godkand" — vårt är null, skrivning tillåten. Per ADR-102 § Updates A5 (enda tidpunkten hash-låset kan sättas) skrev jag "referenser": [{fil, sha256}] för alla tio ariaSnapshot-filer direkt i facit.json. "godkand" orört (null). bash scripts/check-facit.sh exit 0. Promoverings-grinden omkörd lokalt mot samma HEAD: 10/10 gröna, git status på tests/e2e/__aria__/ helt ren (bevisar hasharna matchar). AMENDERING-filens felaktiga "manifestet är agent-fruset"-premiss rättad med källa. AC #9 förblir bockad (ingen ombockning behövdes, bara premissen).
+
+3. [warning/ask-user] DoD #4 saknade bilder — RÄTTAT. Fem skärmdumpar av den promoverade ytan (mockade EF-svar, samma fixtur som facit, egen lokal dev-server port 5180 under staging-semaforen, samma metod som PR #2360) committade i tasks/sessions/bilagor/task-402.3-facit-jamforelse/skarp-{utgangslage,pagar,efter,angra,efter-skicka}.png. Jämförelsetabell (dimensioner, RGB vid samma token-punkter, pixelräkning) i PR-kroppen. Tre av fem bilder byte-lika dimension med facit; två ("efter"/"efter-skicka") 42 px högre — sannolikt Avvikelse C:s längre serverfeltext, bokfört öppet, inte som säker slutsats.
+
+4. [info/auto-fix] "11/11" → 10 (5 lägen × 2 bredder). Rättat i PR-kroppen och denna not. Commit-meddelandena (d95b8e1a, f4ab8cec) skrivs INTE om (historik).
+
+5. [info/auto-fix] "7 fall" → 6 för tests/e2e/bekraftelsesteget.staging.test.ts. Rättat i PR-kroppen och denna not. Commit-meddelande (f4ab8cec) skrivs INTE om.
+
+Grindar (förgrund, exitkod separat): check-facit.sh 0, check:docs 0 (14 gröna), typecheck 0, biome 0 (18 varn/83 info, oförändrat), check-langa-streck.mjs 0 (321 filer). Promoverings-grinden omkörd: 11/11 (10 + setup) gröna.
+
+Modell: Sonnet 5 (claude-sonnet-5).
 <!-- SECTION:NOTES:END -->
