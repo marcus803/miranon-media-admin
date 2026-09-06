@@ -775,7 +775,41 @@ jobs:
     # ALDRIG detta tak reflexmässigt vid nästa post-merge-cancellation: den
     # bakomliggande flake-orsaken är INTE fastställd av T135, bara
     # avbrottsMEKANISMEN. Se tråden för den öppna eskaleringen.
-    timeout-minutes: 12
+    #
+    # HÖJT 12→20 MIN 2026-09-06 (TASK-404, enabling-detour) — samma form som
+    # TASK-383 gjorde för acceptance-självtestet. Detta är INTE reflexen
+    # stycket ovan varnar för: PRD TASK-402:s skivor lägger var och en till
+    # staging-e2e-fall i samma svit, och marginalen krymper mätbart per
+    # landning. Post-merge-mätserie (`gh api .../actions/runs/<id>/attempts/
+    # <n>/jobs`, main):
+    #   33989193147 (5c7a8a9d) attempt 1: 12m16s CANCELLED (20:09:18–20:21:34Z)
+    #   33989193147 (5c7a8a9d) attempt 2: 11m35s grön     (20:52:03–21:03:38Z)
+    #   33996542511 (364f75b9, TASK-402.2): 11m46s grön   (22:40:28–22:52:14Z)
+    #   34017272056 (b6a598c1, TASK-402.3) attempt 1: 12m17s CANCELLED
+    #     (2026-09-06 06:45:07–06:57:24Z); omkörningen pågick vid denna commit.
+    # AC #1 (per-fil-väggklocka för tests/e2e/*.staging.test.ts) gick INTE att
+    # utvinna ur jobbloggen: CI-reportern är 'dot' (se
+    # tests/support/fixturvarld/overskuggnings-rapport.ts:
+    # `PLAYWRIGHT_DEFAULT_REPORTER = process.env.CI ? 'dot' : 'list'`), som
+    # bara skriver framstegs-punkter plus en aggregerad slutsumma — inga
+    # per-test-tidsstämplar i klartext, och steget "Ladda upp Playwright-
+    # artefakter vid rött e2e" nedan laddar bara upp playwright-report/ vid
+    # failure()||cancelled(), så en GRÖN körning lämnar ingen rapport-artefakt
+    # att läsa i efterhand heller. Per-STEG i stället, två fulla gröna
+    # körningar (API-steget/E2E-steget, väggklocka från steg-start till nästa
+    # steg-start):
+    #   364f75b9 (402.2): API 5m32s (524 test) · E2E 5m39s (241 test, 226
+    #     passed/14 skipped/1 flaky) · jobbtotal 11m46s
+    #   5c7a8a9d attempt 2:  API 5m43s (524 test) · E2E 5m24s (239 test, 224
+    #     passed)                     · jobbtotal 11m35s
+    # 20 min ≈ nästan 2× värsta uppmätta jobbtotal (12m17s) — branschpraxis-
+    # headroom i TASK-383:s form, ingen ny mätserie utöver ovanstående.
+    # Detta köper marginal, det löser inte tillväxten: sviten fortsätter växa
+    # med varje TASK-402.x-skiva. Se TASK-404 (denna höjning) och TASK-383
+    # (samma mätnings-uppföljning för acceptance-klassen); delning av sviten
+    # eller flytt till en hermetisk fixturvärld är Marcus eget vägval, inte
+    # verkställt här.
+    timeout-minutes: 20
     permissions:
       contents: read
     concurrency:
