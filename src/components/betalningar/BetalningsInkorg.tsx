@@ -1349,36 +1349,425 @@ export function BetalningsInkorg() {
 
   const sidRam = <SidRam to="/mer" tillbakaEtikett="Tillbaka till Mer" />;
 
-  if (isPending) {
-    return (
-      <section className="flex flex-col gap-4">
-        {sidRam}
-        <header className="px-4">
-          <h1 className="font-semibold text-3xl">Betalningar</h1>
-        </header>
-        <div aria-busy="true" role="status" className="flex flex-col gap-3 px-4">
-          <span className="sr-only">Laddar betalningar ...</span>
-          <Skeleton variant="text" aria-hidden />
-          <Skeleton variant="listRow" aria-hidden />
-          <Skeleton variant="listRow" aria-hidden />
-        </div>
-      </section>
-    );
-  }
+  /* ═══════════════════════════════════════════════════════════════════════
+   * [TASK-416.2, PRD TASK-416s regel] SIDKROMET RENDERAS I ALLA TRE
+   * QUERY-TILLSTÅND — samma mönster som `AnmalningarSida.tsx` (TASK-416.4)
+   * och `EventsList.tsx` (isPending-grenen, ~rad 279–292).
+   * ═══════════════════════════════════════════════════════════════════════
+   * FÖRE DENNA FIX visade isPending/isError bara `sidRam` + en enkel `h1`
+   * + tre lösa skeleton-block; sidhuvudets meny-trigger ("Importera
+   * kontoutdrag") och hela FilterRad (sökfält, tratt, panel) fanns bara i
+   * det laddade läget. Lotta mötte alltså ett annat krom varje gång
+   * inkorgen laddade om (sidladdning, flikbyte, TASK-346.7:s
+   * `refetchOnMount: 'always'`).
+   *
+   * `headerBlock`/`filterRadBlock` ÄR DELAD JSX — SAMMA objekt i alla tre
+   * return-grenar nedan, så h1:s och FilterRads klasser/DOM-position är
+   * BYTE-IDENTISKA oavsett query-läge (`boundingBox()` rör sig aldrig vid
+   * datalandning, AC #2 — mätt, se PR-kroppen).
+   *
+   * FilterRad FÅR `isPending={isPending}` — ALDRIG `dataOkand` nedan. Samma
+   * review-fynd `AnmalningarSida.tsx` (TASK-416.4 runda 2) redan betalade:
+   * matar man in `isError` här också fryser panelens dropdown-skelett kvar
+   * för EVIGT fast källan definitivt gett upp — en vilseledande "laddar
+   * fortfarande" när sanningen är "gav upp". I isError degraderar FilterRad
+   * i stället till sitt eget, ärliga beteende för tomma/okända dimensioner
+   * (`FilterRad.tsx` rad ~298–312).
+   *
+   * `dataOkand` (isPending || isError) styr ENDAST kö-radens "N kvitton
+   * väntar"-text i headerBlock. Den bygger på `sammanfattning`, härledd ur
+   * `rader` (`oppna?.betalningar ?? []`, tom i isPending) — men SKA ändå
+   * aldrig visas förrän frågan lyckats: `oppna` KAN i sällsynta fall bära
+   * KVARVARANDE data från en tidigare lyckad hämtning när en efterföljande
+   * bakgrunds-refetch fallerar (`refetchOnMount: 'always'` gör om anropet
+   * vid varje montering) — utan vakten hade kö-raden kunnat visa ett tal ur
+   * data Lotta inte längre kan lita på, mitt i felbeskedet.
+   */
+  const dataOkand = isPending || isError;
 
-  if (isError) {
-    return (
-      <section className="flex flex-col gap-4">
-        {sidRam}
-        <header className="px-4">
-          <h1 className="font-semibold text-3xl">Betalningar</h1>
-        </header>
-        <MessageBox intent="error" title="Betalningarna kunde inte hämtas">
-          {error instanceof Error ? error.message : 'Okänt fel.'}
-        </MessageBox>
-      </section>
-    );
-  }
+  /* ═══ SIDHUVUDETS RYTM — BESLUT 1 (designfynd 2c + Marcus 2026-09-01),
+      HISTORIK, RIVET AV BESLUT 2 NEDAN ═══
+      "Importera kontoutdrag" satt först som en ensam strö-knapp mellan
+      segmentväljaren och listan, sedan flyttad hit, bredvid rubriken,
+      med knappen gömd medan importytan var öppen. Marcus samma dag, om
+      linjeringen: *"Jag tycker 'Importera kontoutdrag'-knappen ska sitta
+      liksom centrerat på rubrik-raden men kant i kant med sökrutan."*
+      Lösningen var strukturell: headern fick FilterRadens tre-delade
+      rytm (`[innehåll flex-1][gap-4][rund ändknapp]`) med en TOM spegel
+      av trattens mått för att reservera spåret, `pl-4` i stället för
+      `px-4` så högerkanten nådde samma x som filterraden (568 px via
+      dess `-mx-4`), och `items-center` för att dela mittlinje med
+      rubriken.
+
+      ═══ BESLUT 2 (Marcus prod-granskning 2026-09-06, S121 resume 4,
+      TASK-412) — HISTORIK, RIVET AV BESLUT 3 NEDAN ═══
+      Marcus, om dialog-formen importen fick (se `<Modal>`-monteringen
+      nedan): *"jag vill liksom ha det lite 'renare' upptill."* Knappen
+      var RIVEN ur headern helt — INTE flyttad till filterraden (en
+      första idé om det prövades och backades samma session: *"Jag vet
+      inte om de där med att flytta sökrutan blir bra när jag tänker
+      efter. Jag tror vi kan behålla det som det är MEN vi tar bort
+      knappen 'Importera kontoutdrag' och skapar istället en rund ikon
+      med tre prickar bredvid filtreringsikonen (till höger) som öppnar
+      vår dropdown där det står 'Importera kontoutdrag'."*) — och landade
+      då i `FilterRad`-radens `extraKnapp`-slot, till höger om tratten.
+
+      ═══ BESLUT 3 (Marcus, femte varvet samma dag) — GÄLLANDE FORM ═══
+      Två fynd i samma andetag: *"Agenten ändrade storleken på de tre
+      prickarna istället för att ändra storleken på cirkeln som de
+      sitter i vilket var vad jag menade. Ändra tillbaka prickarna …
+      när filterikonen är aktiv så blir den mörkgrå och SER större ut.
+      … Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
+      dropdown (typ som på eventdetalj-sidan)."* ⋯-knappen är ALLTSÅ
+      RIVEN IGEN, den här gången för gott — se `FilterRad.tsx` (hela
+      `extraKnapp`-slotten riven med den, ingen konsument kvar) och
+      `strokeWidth`-fyndet ovan (moot, försvinner med knappen).
+
+      RUBRIKEN "Betalningar" ÄR NU SJÄLV TRIGGERN, i eventväljarens
+      RUBRIK-FORM (`EventValjare.tsx` § "RUBRIK-FORMEN", rad ~344-392):
+      `h1` runt en `AriaButton` (`-mx-2 inline-flex … rounded-lg px-2
+      py-1 text-left hover:bg-bg-emphasized`), chevron 18 px intill
+      texten. SKILLNADEN ÄR MEDVETEN OCH SYNS: eventväljaren BYTER
+      OBJEKT (en `Select` — `SelectValue`/`selectedKey`), den här
+      triggern öppnar sidans ÅTGÄRDER (samma `Meny`/`MenyPost`-primitiv
+      `extraKnapp` använde) — därför `ChevronsUpDown` (samma ikon,
+      samma "det här fäller ut något"-signal) men `Meny`s `etikett`
+      "Åtgärder för Betalningar", inte ett värde-namn. `aria-haspopup`
+      sätts INTE manuellt — `MenuTrigger` (react-aria-components) sätter
+      den automatiskt på sin `Button`-kontext-medvetna barn, samma sätt
+      den redan gjorde det på ⋯-knappen (verifierat: `axe` gav noll fel
+      i sviten som byggde den).
+
+      INGEN BESKRIVNINGSRAD under rubriken (eventväljarens "Byt event"-
+      motsvarighet) — Marcus: *"jag vill ha det rent upptill"*, chevronen
+      ÄR hela signalen. `truncate` (samma nowrap-lås som förlagan) håller
+      rubriken på EN rad ner mot 320 px; menyn öppnar UNDER rubriken utan
+      att skjuta layouten (samma `Popover`-mekanik som ⋯-knappen redan
+      bevisade).
+
+      `importKnappRef` FLYTTAR HIT (från den nu rivna ⋯-knappen):
+      `stangImport` fokuserar den när importytan stängs, oförändrad
+      logik, ny plats.
+
+      HEADERN BÄR ALLTSÅ ÅTER "BARA RUBRIKEN" — men rubriken är nu
+      INTERAKTIV. `px-4` oförändrat sedan BESLUT 2 (ingen spegel-plikt,
+      se det stycket). */
+  const headerBlock = (
+    <header className="flex flex-col gap-1 px-4">
+      <h1 className="min-w-0 font-semibold text-3xl">
+        <Meny
+          etikett="Åtgärder för Betalningar"
+          trigger={
+            <AriaButton
+              ref={importKnappRef}
+              aria-labelledby={betalningarRubrikId}
+              className="-mx-2 inline-flex max-w-[calc(100%+1rem)] items-center gap-1.5 rounded-lg px-2 py-1 text-left hover:bg-bg-emphasized motion-safe:transition-colors"
+            >
+              <span id={betalningarRubrikId} className="block truncate">
+                Betalningar
+              </span>
+              <ChevronsUpDown
+                aria-hidden="true"
+                size={18}
+                className="shrink-0 text-text-secondary"
+              />
+            </AriaButton>
+          }
+        >
+          <MenyPost
+            ikon={<Upload aria-hidden="true" size={16} />}
+            onAction={() => setVisaImport(true)}
+          >
+            Importera kontoutdrag
+          </MenyPost>
+        </Meny>
+      </h1>
+      {/* KÖ-RADEN ERSÄTTER TRE-TALS-RADEN (Marcus 2026-09-01, om
+          "5 öppna · 5 förfallna · 0 kvitton i kö"): *"vad betyder det?
+          … 5 förfallna hör väl inte hit, det hör väl till
+          påminnelse-blocket"*. Båda invändningarna håller:
+
+            • FÖRFALLNA-talet hör till påminnelse-arbetet, som bor i
+              Hem-blocket `ForfallnaBetalningar`. Här var det ett tal utan
+              handling — förfallo-MÄRKET per rad finns kvar och är det som
+              faktiskt hjälper när Lotta prickar av.
+            • ÖPPNA-talet sades redan två gånger till: av listan själv och
+              av filterpanelens "Visar X av Y betalningar".
+            • KVITTON I KÖ var det enda talet som bar något Lotta inte
+              kunde se någon annanstans — men "i kö" är jargong för en
+              jobbmotor hon inte känner till.
+
+          Raden renderas därför BARA när det finns något i kön, och säger
+          vad som händer i stället för att räkna en datastruktur. Noll
+          kvitton är inget besked; det är frånvaron av ett.
+
+          [TASK-416.2] `!dataOkand`-VAKTEN ÄR NY: raden läser `sammanfattning`
+          (härledd ur `rader`), som i isPending alltid är tom (0, döljs redan
+          av villkoret) men i isError KAN bära kvarvarande data från en
+          tidigare lyckad hämtning (se `dataOkand`s docblock ovan). Utan
+          vakten hade kö-raden kunnat visa ett tal Lotta inte längre kan lita
+          på, mitt i felbeskedet — samma disciplin som `AnmalningarSida.tsx`s
+          antalsrad. */}
+      {!dataOkand && sammanfattning.kvittonAttSkicka > 0 && (
+        <p className="text-small text-text-muted">
+          {`${sammanfattning.kvittonAttSkicka} ${
+            sammanfattning.kvittonAttSkicka === 1 ? 'kvitto väntar' : 'kvitton väntar'
+          } på att skickas`}
+        </p>
+      )}
+    </header>
+  );
+
+  const filterRadBlock = (
+    <div className="flex flex-col gap-3 px-4" data-testid="betalningar-filterrad">
+      {/* SÖKFÄLTET OCH TRATTEN DELAR RAD (Marcus 2026-09-01: *"sätta
+          filterikonen till höger om sökrutan på samma rad, tror det blir
+          snyggare"*).
+
+          INGEN NY LAYOUT-KOD BEHÖVDES: `FilterRad`s `children` ÄR den
+          slotten — "kontrollen till VÄNSTER om tratt-ingången … Den får
+          radens fria bredd; tratten är `shrink-0` bredvid den"
+          (`FilterRad.tsx` § `children`). Eventlistan lade sina period-pill
+          där; inkorgen lägger sitt sökfält. Sökfältets egen markup,
+          `sokRef` och fokus-kontraktet (AC #3: "fokus åter i tomt sökfält")
+          är byte för byte oförändrade — bara föräldern är ny.
+
+          OCH DÄRMED ÄR TRATTEN SYNLIG ÄVEN UNDER SÖKNING. Det var tidigare
+          villkorat på `!soker`, ärvt från den rivna toggeln, och den kanten
+          var bokförd som en öppen fråga i pass 2B ("ett satt filter är
+          osynligt medan sökningen pågår"). Marcus layoutbeslut avgör den:
+          en kontroll som sitter PÅ sökraden kan inte försvinna när man
+          skriver i den utan att raden hoppar.
+
+          KVARSTÅENDE SPÄNNING, ÖPPET BOKFÖRD: sökningen läser fortfarande
+          HELA radmängden (`rankaTraffar` på `rader`, inte på `visasRader`),
+          så filtren gäller listan — inte träffarna. Det är MEDVETET och
+          oförändrat: Lotta söker upp ett namn eller ett belopp ur banken
+          och ska hitta personen oavsett vilken period panelen råkar stå på,
+          vilket är precis det "registrera i efterhand"-fall som annars gett
+          noll träffar. Panelens räknare beskriver alltså listan även medan
+          träffarna visas. Ändras detta ska det vara ett eget beslut, inte
+          en följd av en layoutflytt. */}
+      <FilterRad
+        dimensioner={dimensioner}
+        valda={valda}
+        onValj={(nyckel, varde) => {
+          if (nyckel === 'period') {
+            void setPeriod(varde ? PERIOD_FRAN_ETIKETT[varde] : 'alla');
+          } else if (nyckel === 'typ') void setTyp(varde);
+          else if (nyckel === 'ort') void setOrt(varde);
+          else void setValtEvent(varde);
+        }}
+        onRensa={rensaFilter}
+        visade={visasRader.length}
+        totalt={rader.length}
+        enhet={BETALNINGS_ENHET}
+        triggerRef={filterKnappRef}
+        /* Marcus prod-granskning 2026-09-06 (TASK-410): ihopfälld som
+           förut ledde till en ensam Markera-knapp på egen rad, vilket såg
+           fel ut. Utfälld som default löser det; övriga FilterRad-
+           konsumenter (AktivitetsHistorik, EventsList, AnmalningarSida)
+           är oförändrade — de skickar inte propen och behåller sitt
+           ihopfällda startläge. */
+        defaultOppen
+        /* [TASK-412, femte varvet] ⋯-KNAPPEN ÄR RIVEN (var HÄR, i denna
+           `extraKnapp`-slot) — se sidhuvudets BESLUT 3: Marcus ville
+           prickarnas STORLEK ändrad genom cirkeln de sitter i, inte
+           genom prickarna själva, och bad samtidigt om en annan väg helt
+           ("Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
+           dropdown"). `FilterRad.tsx`s `extraKnapp`-prop är riven i
+           samma commit (över-engineering-vakten: ingen konsument kvar).
+           Åtgärden bor nu i sidhuvudets rubrik-trigger, se `headerBlock`
+           ovan. */
+        /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
+           *"hela listan är för smal, det ska vara lika bred som menybaren.
+           Även filtreringskomponenten"*).
+
+           MÄTT: `<main>` bär `max-w-[600px] px-4` (AppShell), alltså en inre
+           kolumn på 568 px, och `TabBar` speglar den exakt med
+           `max-w-[568px]` — de två är redan i synk. Det som gjorde ytan smal
+           var ett ANDRA `px-4` på blocket här omkring: allt inuti stod på
+           536 px, 32 px smalare än menybaren rakt under.
+
+           `-mx-4` tar bort exakt det andra lagret, aldrig det första. Ingen
+           ny hårdkodad siffra införs — bredden följer menybaren vid varje
+           viewport, och identiskt idiom med `AnmalningarSida.tsx`. */
+        className="-mx-4"
+        /* [TASK-416.2, AC #1] isPending SKICKAS NU TILL PRIMITIVEN.
+           FilterRad degraderar SJÄLV till dropdown-skelett i panelens
+           slutgeometri (`FilterRad.tsx` rad ~298–312, ~395–396) tills
+           källan landat — se `dataOkand`s docblock ovan för varför detta
+           ALDRIG är `dataOkand`. */
+        isPending={isPending}
+      >
+        <SearchField
+          aria-label="Sök på namn, telefon eller belopp"
+          value={sokterm}
+          onChange={setSokterm}
+          className="group flex flex-col"
+        >
+          <div className="relative">
+            <AriaInput
+              ref={sokRef}
+              placeholder="Sök på namn, telefon eller belopp"
+              className="mm-fokusring-vid-fokus text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) min-h-10 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
+            />
+            <AriaButton
+              aria-label="Rensa sökningen"
+              className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden"
+            >
+              <X aria-hidden="true" size={16} className="shrink-0" />
+            </AriaButton>
+          </div>
+        </SearchField>
+      </FilterRad>
+      <p className="sr-only" aria-live="polite">
+        {filterAnnons}
+      </p>
+    </div>
+  );
+
+  /* ═══════════════════════════════════════════════════════════════════════
+   * [TASK-416.2 RUNDA 2, review-fynd 1] SEX FASTA SYSKON-POSITIONER I ETT
+   * ENDA RETURTRÄD — INTE TRE SEPARATA `return`, SOM RUNDA 1 SKREV DET.
+   * ═══════════════════════════════════════════════════════════════════════
+   * Samma mönster som TASK-416.8:s fix i `Intresserade.tsx` (#2395,
+   * "annonsering"/"rubrik"/"sokRad"/"datakropp").
+   *
+   * RUNDA 1:S FEL, MÄTT (review-grinden, Marcus mandat): den laddade grenen
+   * sköt in `<p role="status">{N} kvarvarande...</p>` FÖRE `headerBlock`
+   * (position 1), medan isPending/isError hade `headerBlock` DIREKT efter
+   * `sidRam` (position 0). Reacts keyless reconciliation matchar barn
+   * POSITIONELLT (array-index utan explicit `key`): vid isPending→laddat
+   * jämförde React position 1 — gammalt `<header>` mot nytt `<p>` — och
+   * TYPERNA skiljer sig, så HELA subträdet från den positionen och framåt
+   * monterades OM. Fokus i menytriggern (`headerBlock`) eller inskriven
+   * text i FilterRads sökfält (redan renderad i isPending) gick förlorad
+   * exakt vid landningen — en `boundingBox()`-mätning ser aldrig detta,
+   * eftersom den mäter GEOMETRI, inte DOM-identitet.
+   *
+   * LÖSNINGEN: exakt SEX fasta syskon-positioner i `<section>` (se det
+   * enda returträdet längst ner i funktionen) — `sidRam`, `statusAnnons`,
+   * `headerBlock`, `realtidsfelBlock`, `filterRadBlock`, `datakropp` — i
+   * EXAKT den ordningen i ALLA tre query-lägen. Varje position är ETT
+   * JSX-uttryck som ALLTID finns med (även när det evaluerar till
+   * `null`/`false`/tom sträng), så barnens ARRAY-INDEX aldrig ändras
+   * mellan lägena — bara VÄRDET på en given position varierar.
+   * `headerBlock`/`filterRadBlock` jämförs därför alltid mot SIG SJÄLVA,
+   * oavsett vad `datakropp` för tillfället representerar.
+   *
+   * `statusAnnons` ÄR SAMMA `<p>`-ELEMENT I ALLA TRE LÄGEN — bara texten
+   * och `aria-busy` varierar (review-fyndets egen föreslagna form:
+   * "rendera `<p role='status' aria-live='polite' className='sr-only'>`
+   * ALLTID, med tomt/pending-innehåll tills datan landat"). isError ger
+   * medvetet TOM text: `MessageBox`s egen felannonsering (i `datakropp`)
+   * bär redan beskedet, och en andra, tom live-region-uppdatering är
+   * ofarlig brus, inte en dubbelannonsering. */
+  const statusAnnons = (
+    <p className="sr-only" role="status" aria-live="polite" aria-busy={isPending || undefined}>
+      {isPending
+        ? 'Laddar betalningar ...'
+        : isError
+          ? ''
+          : `${rader.length} kvarvarande betalningar laddade.`}
+    </p>
+  );
+
+  /* Realtidsfelet (TASK-346.4:s namngivna TODO, betald här). Byggd på
+     nedstängningsvaktens PREDIKAT, aldrig på råa status-värden - annars
+     hade rutan blinkat vid varje navigering.
+
+     [TASK-416.2 RUNDA 2] FLYTTAD TILL EN EGEN, FAST SYSKON-POSITION (satt
+     tidigare bara i det laddade returträdet, mellan headerBlock och
+     filterRadBlock) — av SAMMA skäl som `statusAnnons` ovan: en slot som
+     bara fanns i EN av de tre grenarna var en positionell krock i väntan
+     på att hända (se docblocket ovan). `realtidsfel` är dessutom en helt
+     OBEROENDE källa (`useRealtidsfel()`, en extern websocket-status), så
+     banderollen kan nu även synas UNDER pågående laddning eller ett
+     fel-läge om realtiden råkar vara nere samtidigt — en STRIKT
+     förbättring mot tidigare (banderollen kunde tidigare aldrig synas
+     förrän datat landat), inte en beteendeförsämring. */
+  const realtidsfelBlock = realtidsfel !== null && (
+    <MessageBox intent="warning" title="Realtidsuppdateringen är nere">
+      Kvittonas status uppdateras inte av sig själv just nu. Läget läses om varje gång du öppnar
+      sidan, så inget går förlorat.
+    </MessageBox>
+  );
+
+  /* `datakropp` I ISPENDING — SKELETON BARA I KORTLISTAN (AC #1/#2). Se
+     docblocket ovan för VARFÖR den här skeleton-grenen numera är ett
+     `datakropp`-värde i stället för ett eget returträd, aldrig VAD den
+     ritar (den delen är oförändrad sedan förra granskningsvarvet).
+     Kortskelettet härmar den LADDADE listans exakta boxmodell
+     (grupprubrik + `-mx-4`-kort i `bg-bg-muted`, `BetalningsradKort`s
+     stängda form: avatar `size-9`, namnrad `text-body`, metarad
+     `text-caption`, en tom badge-rad-spegel så `gap-1`-mellanrummet blir
+     detsamma som en rad UTAN förfallen-/obekräftad-/spegelSlapar-pillar,
+     plus en knapp-yta för "Registrera betalning") så att FÖRSTA kortets
+     boundingBox blir identisk pending/laddat (mätt, se PR-kroppen).
+     `<div>`, inte `<ul>/<li>` — samma val som `EventsList.tsx`/
+     `AnmalningarSida.tsx` gör i sina skeleton-grenar: rent dekorativa
+     block ska inte annonseras som en (tom) lista.
+
+     MARKERA-KNAPPENS RAD RESERVERAS ÄVEN HÄR (mätt, inte antaget): en
+     tidigare version av detta skelett saknade denna rad helt och sköt
+     FÖRSTA KORTET 73 px för högt jämfört med det laddade läget
+     (`MarkeringsAtgardsRad`s `mt-6 px-4`-rad, `Button size="sm"` ~32 px
+     hög — headless Playwright, 1280×720, se PR-kroppen för båda
+     mätningarna, före och efter). Samma `mt-6 px-4`-geometri som den
+     riktiga raden (rad ~1946 nedan), en enda knapp-formad skeleton i
+     stället för "Markera".
+
+     [TASK-416.2 RUNDA 2, review-fynd 2 — BOKFÖRT, EJ ÅTGÄRDAT] Raden
+     reserveras OVILLKORLIGT, men den RIKTIGA `MarkeringsAtgardsRad`
+     renderas bara när `markerbaraIds.length > 0` (se `datakropp`s laddade
+     gren längre ner). En GENUINT TOM inkorg (noll öppna betalningar) får
+     därför ett litet layout-hopp vid landning — skeletonet speglar det
+     SANNOLIKA fallet (Lotta har öppna betalningar att registrera, PRD:ns
+     hela premiss), inte det tomma. Detta är SAMMA KLASS avvägning som
+     Hem-kortens tomläge (PRD § Öppna frågor, Marcus designval) och rättas
+     INTE här — se `tests/e2e/mer-betalningar-laddlage.staging.test.ts`s
+     docblock för samma bokföring i testet. */
+  const datakroppPending = (
+    <>
+      <div className="mt-6 px-4">
+        <Skeleton variant="text" className="h-8 w-24 rounded-full" />
+      </div>
+      <div className="flex flex-col gap-2 px-4">
+        <Skeleton variant="text" className="w-40 text-lg" />
+        <div className="-mx-4 flex flex-col gap-2 rounded-2xl border border-transparent bg-bg-muted p-2 contrast-more:border-border-strong">
+          {['a', 'b', 'c'].map((k) => (
+            <div
+              key={k}
+              data-testid="betalningar-skeleton-kort"
+              className="rounded-2xl border border-transparent bg-surface p-3"
+            >
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+                <div className="flex min-w-0 items-center gap-3 sm:flex-1">
+                  <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                  <div className="flex min-w-0 flex-1 flex-col gap-1">
+                    <Skeleton variant="text" className="w-2/5 text-body" />
+                    <Skeleton variant="text" className="w-3/5 text-caption" />
+                    <div className="flex flex-wrap items-center gap-2" />
+                  </div>
+                </div>
+                <Skeleton
+                  variant="text"
+                  className="h-8 w-36 self-start rounded-full sm:self-auto"
+                />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  const datakroppFel = (
+    <MessageBox intent="error" title="Betalningarna kunde inte hämtas">
+      {error instanceof Error ? error.message : 'Okänt fel.'}
+    </MessageBox>
+  );
 
   /* Båda hinkarna, alltid — periodfiltret har redan gjort urvalet FÖRE
      grupperingen, så med `upcoming` är `tidigare` tom och tvärtom. Under
@@ -1468,247 +1857,14 @@ export function BetalningsInkorg() {
     ? (registrerade.find((post) => post.inbetalningId === vantande[0].inbetalningId) ?? null)
     : null;
 
-  return (
-    <section className="flex flex-col gap-4">
-      {sidRam}
-      <p className="sr-only" role="status" aria-live="polite">
-        {`${rader.length} kvarvarande betalningar laddade.`}
-      </p>
-
-      {/* ═══ SIDHUVUDETS RYTM — BESLUT 1 (designfynd 2c + Marcus 2026-09-01),
-          HISTORIK, RIVET AV BESLUT 2 NEDAN ═══
-          "Importera kontoutdrag" satt först som en ensam strö-knapp mellan
-          segmentväljaren och listan, sedan flyttad hit, bredvid rubriken,
-          med knappen gömd medan importytan var öppen. Marcus samma dag, om
-          linjeringen: *"Jag tycker 'Importera kontoutdrag'-knappen ska sitta
-          liksom centrerat på rubrik-raden men kant i kant med sökrutan."*
-          Lösningen var strukturell: headern fick FilterRadens tre-delade
-          rytm (`[innehåll flex-1][gap-4][rund ändknapp]`) med en TOM spegel
-          av trattens mått för att reservera spåret, `pl-4` i stället för
-          `px-4` så högerkanten nådde samma x som filterraden (568 px via
-          dess `-mx-4`), och `items-center` för att dela mittlinje med
-          rubriken.
-
-          ═══ BESLUT 2 (Marcus prod-granskning 2026-09-06, S121 resume 4,
-          TASK-412) — HISTORIK, RIVET AV BESLUT 3 NEDAN ═══
-          Marcus, om dialog-formen importen fick (se `<Modal>`-monteringen
-          nedan): *"jag vill liksom ha det lite 'renare' upptill."* Knappen
-          var RIVEN ur headern helt — INTE flyttad till filterraden (en
-          första idé om det prövades och backades samma session: *"Jag vet
-          inte om de där med att flytta sökrutan blir bra när jag tänker
-          efter. Jag tror vi kan behålla det som det är MEN vi tar bort
-          knappen 'Importera kontoutdrag' och skapar istället en rund ikon
-          med tre prickar bredvid filtreringsikonen (till höger) som öppnar
-          vår dropdown där det står 'Importera kontoutdrag'."*) — och landade
-          då i `FilterRad`-radens `extraKnapp`-slot, till höger om tratten.
-
-          ═══ BESLUT 3 (Marcus, femte varvet samma dag) — GÄLLANDE FORM ═══
-          Två fynd i samma andetag: *"Agenten ändrade storleken på de tre
-          prickarna istället för att ändra storleken på cirkeln som de
-          sitter i vilket var vad jag menade. Ändra tillbaka prickarna …
-          när filterikonen är aktiv så blir den mörkgrå och SER större ut.
-          … Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
-          dropdown (typ som på eventdetalj-sidan)."* ⋯-knappen är ALLTSÅ
-          RIVEN IGEN, den här gången för gott — se `FilterRad.tsx` (hela
-          `extraKnapp`-slotten riven med den, ingen konsument kvar) och
-          `strokeWidth`-fyndet ovan (moot, försvinner med knappen).
-
-          RUBRIKEN "Betalningar" ÄR NU SJÄLV TRIGGERN, i eventväljarens
-          RUBRIK-FORM (`EventValjare.tsx` § "RUBRIK-FORMEN", rad ~344-392):
-          `h1` runt en `AriaButton` (`-mx-2 inline-flex … rounded-lg px-2
-          py-1 text-left hover:bg-bg-emphasized`), chevron 18 px intill
-          texten. SKILLNADEN ÄR MEDVETEN OCH SYNS: eventväljaren BYTER
-          OBJEKT (en `Select` — `SelectValue`/`selectedKey`), den här
-          triggern öppnar sidans ÅTGÄRDER (samma `Meny`/`MenyPost`-primitiv
-          `extraKnapp` använde) — därför `ChevronsUpDown` (samma ikon,
-          samma "det här fäller ut något"-signal) men `Meny`s `etikett`
-          "Åtgärder för Betalningar", inte ett värde-namn. `aria-haspopup`
-          sätts INTE manuellt — `MenuTrigger` (react-aria-components) sätter
-          den automatiskt på sin `Button`-kontext-medvetna barn, samma sätt
-          den redan gjorde det på ⋯-knappen (verifierat: `axe` gav noll fel
-          i sviten som byggde den).
-
-          INGEN BESKRIVNINGSRAD under rubriken (eventväljarens "Byt event"-
-          motsvarighet) — Marcus: *"jag vill ha det rent upptill"*, chevronen
-          ÄR hela signalen. `truncate` (samma nowrap-lås som förlagan) håller
-          rubriken på EN rad ner mot 320 px; menyn öppnar UNDER rubriken utan
-          att skjuta layouten (samma `Popover`-mekanik som ⋯-knappen redan
-          bevisade).
-
-          `importKnappRef` FLYTTAR HIT (från den nu rivna ⋯-knappen):
-          `stangImport` fokuserar den när importytan stängs, oförändrad
-          logik, ny plats.
-
-          HEADERN BÄR ALLTSÅ ÅTER "BARA RUBRIKEN" — men rubriken är nu
-          INTERAKTIV. `px-4` oförändrat sedan BESLUT 2 (ingen spegel-plikt,
-          se det stycket). */}
-      <header className="flex flex-col gap-1 px-4">
-        <h1 className="min-w-0 font-semibold text-3xl">
-          <Meny
-            etikett="Åtgärder för Betalningar"
-            trigger={
-              <AriaButton
-                ref={importKnappRef}
-                aria-labelledby={betalningarRubrikId}
-                className="-mx-2 inline-flex max-w-[calc(100%+1rem)] items-center gap-1.5 rounded-lg px-2 py-1 text-left hover:bg-bg-emphasized motion-safe:transition-colors"
-              >
-                <span id={betalningarRubrikId} className="block truncate">
-                  Betalningar
-                </span>
-                <ChevronsUpDown
-                  aria-hidden="true"
-                  size={18}
-                  className="shrink-0 text-text-secondary"
-                />
-              </AriaButton>
-            }
-          >
-            <MenyPost
-              ikon={<Upload aria-hidden="true" size={16} />}
-              onAction={() => setVisaImport(true)}
-            >
-              Importera kontoutdrag
-            </MenyPost>
-          </Meny>
-        </h1>
-        {/* KÖ-RADEN ERSÄTTER TRE-TALS-RADEN (Marcus 2026-09-01, om
-            "5 öppna · 5 förfallna · 0 kvitton i kö"): *"vad betyder det?
-            … 5 förfallna hör väl inte hit, det hör väl till
-            påminnelse-blocket"*. Båda invändningarna håller:
-
-              • FÖRFALLNA-talet hör till påminnelse-arbetet, som bor i
-                Hem-blocket `ForfallnaBetalningar`. Här var det ett tal utan
-                handling — förfallo-MÄRKET per rad finns kvar och är det som
-                faktiskt hjälper när Lotta prickar av.
-              • ÖPPNA-talet sades redan två gånger till: av listan själv och
-                av filterpanelens "Visar X av Y betalningar".
-              • KVITTON I KÖ var det enda talet som bar något Lotta inte
-                kunde se någon annanstans — men "i kö" är jargong för en
-                jobbmotor hon inte känner till.
-
-            Raden renderas därför BARA när det finns något i kön, och säger
-            vad som händer i stället för att räkna en datastruktur. Noll
-            kvitton är inget besked; det är frånvaron av ett. */}
-        {sammanfattning.kvittonAttSkicka > 0 && (
-          <p className="text-small text-text-muted">
-            {`${sammanfattning.kvittonAttSkicka} ${
-              sammanfattning.kvittonAttSkicka === 1 ? 'kvitto väntar' : 'kvitton väntar'
-            } på att skickas`}
-          </p>
-        )}
-      </header>
-
-      {/* Realtidsfelet (TASK-346.4:s namngivna TODO, betald här). Byggd på
-          nedstängningsvaktens PREDIKAT, aldrig på råa status-värden - annars
-          hade rutan blinkat vid varje navigering. */}
-      {realtidsfel !== null && (
-        <MessageBox intent="warning" title="Realtidsuppdateringen är nere">
-          Kvittonas status uppdateras inte av sig själv just nu. Läget läses om varje gång du öppnar
-          sidan, så inget går förlorat.
-        </MessageBox>
-      )}
-
-      <div className="flex flex-col gap-3 px-4">
-        {/* SÖKFÄLTET OCH TRATTEN DELAR RAD (Marcus 2026-09-01: *"sätta
-            filterikonen till höger om sökrutan på samma rad, tror det blir
-            snyggare"*).
-
-            INGEN NY LAYOUT-KOD BEHÖVDES: `FilterRad`s `children` ÄR den
-            slotten — "kontrollen till VÄNSTER om tratt-ingången … Den får
-            radens fria bredd; tratten är `shrink-0` bredvid den"
-            (`FilterRad.tsx` § `children`). Eventlistan lade sina period-pill
-            där; inkorgen lägger sitt sökfält. Sökfältets egen markup,
-            `sokRef` och fokus-kontraktet (AC #3: "fokus åter i tomt sökfält")
-            är byte för byte oförändrade — bara föräldern är ny.
-
-            OCH DÄRMED ÄR TRATTEN SYNLIG ÄVEN UNDER SÖKNING. Det var tidigare
-            villkorat på `!soker`, ärvt från den rivna toggeln, och den kanten
-            var bokförd som en öppen fråga i pass 2B ("ett satt filter är
-            osynligt medan sökningen pågår"). Marcus layoutbeslut avgör den:
-            en kontroll som sitter PÅ sökraden kan inte försvinna när man
-            skriver i den utan att raden hoppar.
-
-            KVARSTÅENDE SPÄNNING, ÖPPET BOKFÖRD: sökningen läser fortfarande
-            HELA radmängden (`rankaTraffar` på `rader`, inte på `visasRader`),
-            så filtren gäller listan — inte träffarna. Det är MEDVETET och
-            oförändrat: Lotta söker upp ett namn eller ett belopp ur banken
-            och ska hitta personen oavsett vilken period panelen råkar stå på,
-            vilket är precis det "registrera i efterhand"-fall som annars gett
-            noll träffar. Panelens räknare beskriver alltså listan även medan
-            träffarna visas. Ändras detta ska det vara ett eget beslut, inte
-            en följd av en layoutflytt. */}
-        <FilterRad
-          dimensioner={dimensioner}
-          valda={valda}
-          onValj={(nyckel, varde) => {
-            if (nyckel === 'period') {
-              void setPeriod(varde ? PERIOD_FRAN_ETIKETT[varde] : 'alla');
-            } else if (nyckel === 'typ') void setTyp(varde);
-            else if (nyckel === 'ort') void setOrt(varde);
-            else void setValtEvent(varde);
-          }}
-          onRensa={rensaFilter}
-          visade={visasRader.length}
-          totalt={rader.length}
-          enhet={BETALNINGS_ENHET}
-          triggerRef={filterKnappRef}
-          /* Marcus prod-granskning 2026-09-06 (TASK-410): ihopfälld som
-             förut ledde till en ensam Markera-knapp på egen rad, vilket såg
-             fel ut. Utfälld som default löser det; övriga FilterRad-
-             konsumenter (AktivitetsHistorik, EventsList, AnmalningarSida)
-             är oförändrade — de skickar inte propen och behåller sitt
-             ihopfällda startläge. */
-          defaultOppen
-          /* [TASK-412, femte varvet] ⋯-KNAPPEN ÄR RIVEN (var HÄR, i denna
-             `extraKnapp`-slot) — se sidhuvudets BESLUT 3: Marcus ville
-             prickarnas STORLEK ändrad genom cirkeln de sitter i, inte
-             genom prickarna själva, och bad samtidigt om en annan väg helt
-             ("Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
-             dropdown"). `FilterRad.tsx`s `extraKnapp`-prop är riven i
-             samma commit (över-engineering-vakten: ingen konsument kvar).
-             Åtgärden bor nu i sidhuvudets rubrik-trigger, se `<header>`
-             ovan. */
-          /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
-             *"hela listan är för smal, det ska vara lika bred som menybaren.
-             Även filtreringskomponenten"*).
-
-             MÄTT: `<main>` bär `max-w-[600px] px-4` (AppShell), alltså en inre
-             kolumn på 568 px, och `TabBar` speglar den exakt med
-             `max-w-[568px]` — de två är redan i synk. Det som gjorde ytan smal
-             var ett ANDRA `px-4` på blocket här omkring: allt inuti stod på
-             536 px, 32 px smalare än menybaren rakt under.
-
-             `-mx-4` tar bort exakt det andra lagret, aldrig det första. Ingen
-             ny hårdkodad siffra införs — bredden följer menybaren vid varje
-             viewport, och identiskt idiom med `AnmalningarSida.tsx`. */
-          className="-mx-4"
-        >
-          <SearchField
-            aria-label="Sök på namn, telefon eller belopp"
-            value={sokterm}
-            onChange={setSokterm}
-            className="group flex flex-col"
-          >
-            <div className="relative">
-              <AriaInput
-                ref={sokRef}
-                placeholder="Sök på namn, telefon eller belopp"
-                className="mm-fokusring-vid-fokus text-(color:--mm-input-text) placeholder:text-(color:--mm-input-text-placeholder) min-h-10 w-full rounded border border-(--mm-input-border) bg-(--mm-input-bg) px-3 pr-10 text-body [&::-webkit-search-cancel-button]:[-webkit-appearance:none]"
-              />
-              <AriaButton
-                aria-label="Rensa sökningen"
-                className="absolute top-1/2 right-2 flex size-6 -translate-y-1/2 items-center justify-center rounded text-text-muted hover:text-text group-data-[empty]:hidden"
-              >
-                <X aria-hidden="true" size={16} className="shrink-0" />
-              </AriaButton>
-            </div>
-          </SearchField>
-        </FilterRad>
-        <p className="sr-only" aria-live="polite">
-          {filterAnnons}
-        </p>
-      </div>
-
+  /* `datakropp` I LADDAT LÄGE — allt som tidigare stod direkt i det enda
+     (numera rivna) loaded-returträdet, oförändrat i sak. Fragmentet blir
+     VÄRDET på `datakropp`s tredje gren (se konstruktionen och det enda
+     returträdet i slutet av funktionen) — `sidRam`/`statusAnnons`/
+     `headerBlock`/`realtidsfelBlock`/`filterRadBlock` ligger INTE här
+     längre, de är egna fasta syskon-positioner (se docblocket ovan). */
+  const datakroppLoaded = (
+    <>
       {/* [TASK-346.10] Importen ligger FÖRE "Skicka N kvitton", i den ordning
           Lottas lördag faktiskt går: läs banken, bekräfta raderna, skicka
           kvittona.
@@ -2156,6 +2312,19 @@ export function BetalningsInkorg() {
           ))}
         </div>
       )}
+    </>
+  );
+
+  const datakropp = isPending ? datakroppPending : isError ? datakroppFel : datakroppLoaded;
+
+  return (
+    <section className="flex flex-col gap-4">
+      {sidRam}
+      {statusAnnons}
+      {headerBlock}
+      {realtidsfelBlock}
+      {filterRadBlock}
+      {datakropp}
     </section>
   );
 }
@@ -2433,6 +2602,7 @@ function BetalningsradKort({
        — alltså hade precis de användare regeln finns för tappat
        markerings-signalen (`Deltagare.tsx` § review-fynd 6, samma fälla). */
     <li
+      data-testid="betalningar-kort"
       className={`rounded-2xl border p-3 ${
         oppen
           ? 'border-(--mm-betalningskort-markerad-border) bg-(--mm-betalningskort-markerad-bg) contrast-more:border-(--mm-betalningskort-markerad-border)'
