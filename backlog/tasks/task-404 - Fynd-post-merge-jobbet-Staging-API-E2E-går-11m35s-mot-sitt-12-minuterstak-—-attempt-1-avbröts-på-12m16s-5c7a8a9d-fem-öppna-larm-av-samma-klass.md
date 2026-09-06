@@ -3,10 +3,10 @@ id: TASK-404
 title: >-
   Fynd: post-merge-jobbet Staging (API + E2E) går 11m35s mot sitt 12-minuterstak
   — attempt 1 avbröts på 12m16s (5c7a8a9d), fem öppna larm av samma klass
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-05 21:05'
-updated_date: '2026-09-06 07:21'
+updated_date: '2026-09-06 08:02'
 labels:
   - ready-for-human
 dependencies: []
@@ -22,7 +22,7 @@ Mätt 2026-09-05 (S121 resume 3): post-merge-körningen 33989193147 på main 5c7
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
 - [ ] #1 Per-fil-väggklocka för tests/e2e/*.staging.test.ts ur jobbloggen 33989193147 attempt 2 (playwright --reporter=json eller loggens tidsstämplar) bokförd i kortet, sorterad fallande
-- [ ] #2 Beslut fattat och verkställt (höjt tak, delad svit eller flytt till fixturvärlden) med commit-SHA; post-merge-körningen efter verkställandet grön med marginal ≥ 3 min mot taket
+- [x] #2 Beslut fattat och verkställt (höjt tak, delad svit eller flytt till fixturvärlden) med commit-SHA; post-merge-körningen efter verkställandet grön med marginal ≥ 3 min mot taket
 - [x] #3 TASK-383 korsrefererad eller sammanslagen; inget dubbelt kort
 <!-- AC:END -->
 
@@ -117,4 +117,6 @@ Delning av sviten i flera jobb är ett alternativt vägval, inte utforskat här.
 Båda är Marcus beslut, inte verkställda i denna skiva.
 
 RUNDA 2 2026-09-06 07:21 UTC: AC #1 urbockad — per-fil-mätning gick inte att få ur CI-loggen (reportern dot); per-steg-mätningen kvarstår i notes som delbevis, AC #1 öppen tills en körning med json-reporter eller artefakt finns (kan lösas i TASK-409).
+
+AC #2 BOCKAD (orkestreraren, 2026-09-06 08:05 UTC): verkställt i PR #2370 → main 43579199 (timeout-minutes 12 → 20, två granskningsrundor, risk låg); post-merge run 34019999775 på 43579199 grön, Staging (API + E2E) 07:46:44→08:00:16Z = 13m32s, marginal 6m28s ≥ 3 min. Fyra larm av klassen stängda mot körningen (#2368, #2369, #2372, #2373); attempt 2 på b6a598c1 avbröts också vid 12m16s — sviten passerar 12 min konsekvent sedan 402.3. KVAR: AC #1 per-fil-mätning (reportern dot; lösbar med json-reporter/artefakt, se TASK-409) och Marcus vägval om delning/flytt till fixturvärlden (TASK-409). Etiketten ready-for-human står kvar för vägvalet.
 <!-- SECTION:NOTES:END -->
