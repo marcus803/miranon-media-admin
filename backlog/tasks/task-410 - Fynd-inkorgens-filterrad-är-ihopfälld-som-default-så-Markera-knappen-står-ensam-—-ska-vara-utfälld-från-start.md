@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 09:11'
+updated_date: '2026-09-06 09:50'
 labels:
   - ready-for-agent
 dependencies: []
@@ -20,9 +21,9 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Betalningsinkorgens filterrad renderas utfälld vid första besöket utan att användaren tryckt på tratt-knappen; Dölj filter fungerar som förut
-- [ ] #2 FilterRad-primitiven bär en prop för start-läget; övriga konsumenter av FilterRad är oförändrade (grep på FilterRad-anrop bokförd i kortet)
-- [ ] #3 Befintliga acceptans-/e2e-tester för inkorgen gröna; ett test täcker start-läget
+- [x] #1 Betalningsinkorgens filterrad renderas utfälld vid första besöket utan att användaren tryckt på tratt-knappen; Dölj filter fungerar som förut
+- [x] #2 FilterRad-primitiven bär en prop för start-läget; övriga konsumenter av FilterRad är oförändrade (grep på FilterRad-anrop bokförd i kortet)
+- [x] #3 Befintliga acceptans-/e2e-tester för inkorgen gröna; ett test täcker start-läget
 <!-- AC:END -->
 
 ## Definition of Done
@@ -31,3 +32,9 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+FilterRad-konsumenter (grep 2026-09-06, S121): src/components/betalningar/BetalningsInkorg.tsx:1603 (fick defaultOppen), src/components/aktivitetshistorik/AktivitetsHistorik.tsx:817 (oförändrad, ingen defaultOppen), src/components/events/EventsList.tsx:279 (oförändrad), src/components/registrations/AnmalningarSida.tsx:744 (oförändrad). Lösning: FilterRadProps fick en ny valfri prop defaultOppen (default false, oförändrat beteende), läst av useState vid mount. BetalningsInkorg.tsx är enda konsumenten som sätter defaultOppen (utan värde = true). Test: tests/e2e/betalningar-inkorg-markera-lage.staging.test.ts fick ett nytt describe TASK-410 som verifierar start-läget öppet + att toggling fortfarande fungerar; samma fils befintliga test som klickade 'Visa filter' för att nå panelen justerades (panelen är redan öppen nu).
+<!-- SECTION:NOTES:END -->

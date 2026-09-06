@@ -1615,6 +1615,13 @@ export function BetalningsInkorg() {
           totalt={rader.length}
           enhet={BETALNINGS_ENHET}
           triggerRef={filterKnappRef}
+          /* Marcus prod-granskning 2026-09-06 (TASK-410): ihopfälld som
+             förut ledde till en ensam Markera-knapp på egen rad, vilket såg
+             fel ut. Utfälld som default löser det; övriga FilterRad-
+             konsumenter (AktivitetsHistorik, EventsList, AnmalningarSida)
+             är oförändrade — de skickar inte propen och behåller sitt
+             ihopfällda startläge. */
+          defaultOppen
           /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
              *"hela listan är för smal, det ska vara lika bred som menybaren.
              Även filtreringskomponenten"*).

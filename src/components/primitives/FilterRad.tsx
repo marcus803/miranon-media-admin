@@ -82,6 +82,15 @@ export interface FilterRadProps {
   onSkrivUt?: () => void;
   /** Ref till tratt-knappen — filter-ytans stabila fokus-ankare. */
   triggerRef?: Ref<HTMLButtonElement>;
+  /**
+   * Start-läget för panelen. `false` (default, oförändrat för alla
+   * befintliga konsumenter) ⇒ ihopfälld tills tratten trycks; `true` ⇒
+   * utfälld redan vid första render. Läses bara vid MOUNT (`useState`s
+   * lat initiering) — ändras propen efter mount rör den inte panelen, det
+   * är fortfarande tratten som äger toggling (se docblocket ovan,
+   * "Öppet/stängt är HUR-state").
+   */
+  defaultOppen?: boolean;
   className?: string;
 }
 
@@ -215,11 +224,15 @@ export function FilterRad({
   isPending = false,
   onSkrivUt,
   triggerRef,
+  defaultOppen = false,
   className,
 }: FilterRadProps) {
   // Öppet/stängt är HUR-state (URL-STATE-SPEC §Princip) och ägs internt —
   // bara filterVALEN är delbara, och ingen konsument har behövt läsa det.
-  const [oppen, setOppen] = useState(false);
+  // `defaultOppen` sätter bara START-värdet (lat initiering, TASK-410) —
+  // befintliga konsumenter som inte skickar propen får exakt samma
+  // ihopfällda start som förut.
+  const [oppen, setOppen] = useState(defaultOppen);
   const aktiva = antalAktivaFilter(dimensioner, valda);
   // Kolumnantalet räknas på dropdown-dimensionerna; kontroll-dimensioner tar
   // egen full rad och ska inte krympa de andra (se KOLUMN_KLASS-docblocket).
