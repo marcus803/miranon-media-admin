@@ -3,10 +3,10 @@ id: TASK-410
 title: >-
   Fynd: inkorgens filterrad är ihopfälld som default så Markera-knappen står
   ensam — ska vara utfälld från start
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 09:11'
-updated_date: '2026-09-06 11:02'
+updated_date: '2026-09-06 13:43'
 labels:
   - ready-for-agent
 dependencies: []
@@ -38,4 +38,6 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 
 <!-- SECTION:NOTES:BEGIN -->
 FilterRad-konsumenter (grep 2026-09-06, S121): src/components/betalningar/BetalningsInkorg.tsx:1603 (fick defaultOppen), src/components/aktivitetshistorik/AktivitetsHistorik.tsx:817 (oförändrad, ingen defaultOppen), src/components/events/EventsList.tsx:279 (oförändrad), src/components/registrations/AnmalningarSida.tsx:744 (oförändrad). Lösning: FilterRadProps fick en ny valfri prop defaultOppen (default false, oförändrat beteende), läst av useState vid mount. BetalningsInkorg.tsx är enda konsumenten som sätter defaultOppen (utan värde = true). Test: tests/e2e/betalningar-inkorg-markera-lage.staging.test.ts fick ett nytt describe TASK-410 som verifierar start-läget öppet + att toggling fortfarande fungerar; samma fils befintliga test som klickade 'Visa filter' för att nå panelen justerades (panelen är redan öppen nu).
+
+FINAL SUMMARY (S121 resume 4, 2026-09-06): byggd AFK av bygg-agent (Sonnet 5) i egen worktree; två varv på Marcus granskning på granskningsservern 4173 (luft 16→24 px, sedan 40 px ovanför Markera-knappen, luften under oförändrad). Granskning runda 1: risk låg, 1 info (kommentarsterminologi), 0 blockerande — konvergerad. Marcus godkännande 2026-09-06 verbatim: 'Betalnings/inkorgs-sidan är bra nu. Nu måste den till prod så snabbt och bra som möjligt.' Landad via merge-kön PR #2379 → main 29a3c16d (2026-09-06 12:19 UTC). Post-merge CI på 29a3c16d: run 34032774066, conclusion success (läst 2026-09-06 via gh run list). DoD #2 (rörd fil-klass grindar) och #3 (path-scopad add) håller enligt PR-kroppen och granskningen; DoD #1 = alla AC bockade.
 <!-- SECTION:NOTES:END -->
