@@ -133,9 +133,13 @@ function faltForBlock(id: BlockId): EventinnehallFalt | undefined {
   return EVENTINNEHALL_BLOCK.find((b) => b.def.id === id)?.falt;
 }
 
-/** Skeletonets radbredder (TASK-416.7) — EXAKT SJU, samma längd som
- *  `EVENTINNEHALL_BLOCK`s sju kombinationer (filhuvudet: ytan listar alltid
- *  precis så många, aldrig fler eller färre). Bredderna varieras
+/** Skeletonets radbredder (TASK-416.7) — EXAKT SJU, samma längd som listan
+ *  `useEventinnehallList` hämtar: de sju Event×Typ-kombinationerna
+ *  (`useEventinnehallList.ts`s docstring; data-model.md § Bilagornas
+ *  datamodell; `SJU_KOMBINATIONER`, scripts/seed-eventinnehall-modell.mjs)
+ *  — INTE `EVENTINNEHALL_BLOCK` ovan, som är ett annat begrepp (de fjorton
+ *  redigerbara fälten på ETT valt Eventinnehåll-objekt). Ytan listar alltid
+ *  precis sju rader, aldrig fler eller färre. Bredderna varieras
  *  deterministiskt, aldrig slumpat (PersonsList.tsx-mönstret) så laddläget
  *  läses som en namnlista, inte en streckkod. */
 const EVENTINNEHALL_SKELETON_BREDD = [
