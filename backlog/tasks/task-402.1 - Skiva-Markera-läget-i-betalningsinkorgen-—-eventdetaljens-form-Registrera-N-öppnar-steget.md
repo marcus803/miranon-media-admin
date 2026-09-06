@@ -3,9 +3,10 @@ id: TASK-402.1
 title: >-
   Skiva: Markera-läget i betalningsinkorgen — eventdetaljens form, Registrera N
   öppnar steget
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-05 19:02'
+updated_date: '2026-09-06 00:53'
 labels:
   - ready-for-agent
 dependencies: []

@@ -8,6 +8,7 @@ import { SidRamKnapp } from '@/components/primitives/SidRam';
 import { useOppnaBetalningar } from '@/data/betalningar/useBetalningar';
 import type { OppenBetalning } from '@/domain/schemas';
 import { idagIso } from './idag';
+import { rensaMarkering } from './markerings-minne';
 import { VariantC } from './prototype/VariantC';
 import { useBekraftelsesteg } from './useBekraftelsesteg';
 
@@ -56,25 +57,36 @@ import { useBekraftelsesteg } from './useBekraftelsesteg';
  * ═══════════════════════════════════════════════════════════════════════════
  * Inkorgens markera-läge (`TASK-402.1`) bär ett sessionsbundet
  * markeringsminne som PRD:n säger ska rensas "vid registrering, Rensa och
- * navigation utanför betalningsfamiljen". Krokpunkten finns HÄR, namngiven
- * och tom: `efterRegistrering` nedan. `402.1` fyller den med sitt
- * `rensaMarkering()` och behöver då INTE röra körningen, ögonblicksbilden
- * eller `useBekraftelsesteg` — bara byta ut en no-op mot ett anrop.
+ * navigation utanför betalningsfamiljen". Krokpunkten fanns HÄR, namngiven
+ * och tom: `efterRegistrering` nedan.
+ *
+ * [TASK-402.1, 2026-09-06] SKARVEN ÄR SLUTEN och den höll: no-op:en byttes mot
+ * `rensaMarkering()` från `markerings-minne.ts` och EN import. Körningen,
+ * ögonblicksbilden och `useBekraftelsesteg` är orörda — diffen mot denna fil
+ * är kroppen i `efterRegistrering` plus importraden, ingenting annat.
  */
 
 /**
- * KROKPUNKTEN `TASK-402.1` FYLLER.
+ * KROKPUNKTEN `TASK-402.1` FYLLER — NU FYLLD.
  *
  * Anropas EN gång när en körning gått från `registrerar` till `klart` och
  * minst en rad faktiskt registrerades. Den är avsiktligt en fri funktion och
  * inte en prop: markeringsminnet är ett SESSIONS-lokalt lager (samma klass som
  * `betalsatt-minne.ts`), inte något denna komponent ska ta emot uppifrån.
  *
- * TOM MED AVSIKT tills `402.1` landat — en tom funktion som säger vad den ska
- * bli är ärligare än en kommentar om ett anrop som inte finns.
+ * [TASK-402.3 → TASK-402.1] Kroppen är utbytt mot `rensaMarkering()`, exakt
+ * som skarven lovade: körningen, ögonblicksbilden och `useBekraftelsesteg` är
+ * ORÖRDA. PRD § Markera-läget: minnet rensas "vid registrering, Rensa och
+ * navigation utanför betalningsfamiljen" — detta är den första av de tre.
+ *
+ * VARFÖR "MINST EN RAD REGISTRERAD" ÄR RÄTT VILLKOR (och det står i
+ * `StegMedKrok` nedan, inte här): en körning där ALLA rader fallerade lämnar
+ * raderna kvar i listan med "Försök igen". Att rensa markeringen då hade tagit
+ * ifrån Lotta urvalet i samma stund hon behöver det mest — tillbaka-pilen hade
+ * lett till en inkorg utan markering trots att ingenting bokförts.
  */
 function efterRegistrering(): void {
-  // TASK-402.1: rensa det sessionsbundna markeringsminnet här.
+  rensaMarkering();
 }
 
 export function Bekraftelsesteget({ ids }: { ids?: string }) {
