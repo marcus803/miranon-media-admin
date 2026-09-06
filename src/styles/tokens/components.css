@@ -285,7 +285,9 @@
   --mm-messagebox-error-border: var(--mm-error);
   --mm-messagebox-error-text: var(--mm-error);
 
-  /* ── Markerat betalningskort (pass 11, Marcus dom 2026-09-01) ──
+  /* ── Markerat betalningskort ──
+     ═══ BESLUT 1 (pass 11, Marcus dom 2026-09-01) — HISTORIK, RIVET AV
+     BESLUT 2 NEDAN, INTE TYST ═══
      Marcus: *"du använder samma grön på markeringen som gröna notis-rutan,
      så notisrutan syns inte"*.
 
@@ -294,23 +296,45 @@
      `--mm-success-bg` (raden ovan). Samma token, samma hex — #f0fdf4 mot
      #f0fdf4. Rutan var alltså inte svårläst, den var bokstavligen osynlig.
 
-     TVÅ SEPARATA GREPP löser det, och båda behövs:
-      1. KORTET FÅR EN SVAGARE TINT (nedan). 50 % mot vit ⇒ ~#f8fefa. Den
-         gröna signalen bärs av RAMEN, inte av ytan — vilket är vad Marcus
-         beställde ("grön RAM + svag tint").
-      2. NOTISRUTAN FÅR EN HEL KANT (`border-y border-r` på konsumentens
-         `className`, se `RegistreraForm.tsx`). Fyllnadsskillnaden mot kortet
-         är liten i sig — #f0fdf4 mot #f8fefa är knappt 1,02:1 i luminans,
-         eftersom `--p-green-100` redan ligger nära vitt — så det är KANTEN
-         som gör rutan till en ruta. Att bara justera tinten hade inte räckt,
-         och det är värt att veta innan någon "förenklar" bort kanten.
+     TVÅ SEPARATA GREPP löste det då, och det andra lever kvar (se BESLUT 2):
+      1. KORTET FICK EN SVAGARE TINT. 50 % mot vit ⇒ ~#f8fefa. Den gröna
+         signalen bars av RAMEN, inte av ytan ("grön RAM + svag tint").
+         RIVET av BESLUT 2 — kortet bär åter hela `--mm-success-bg`.
+      2. NOTISRUTAN FICK EN HEL KANT (`border-y border-r` på konsumentens
+         `className`, se `RegistreraForm.tsx`). KVARSTÅR OFÖRÄNDRAT —
+         se det stycket för hur den nu även löser BESLUT 2:s återställda
+         kollision med en egen vit bakgrund i stället för kortets tint.
 
-     KONTRASTER RÄKNADE (WCAG 1.4.11, 3:1-golvet för icke-text):
-       ramen #606b57 mot kortets tint ~#f8fefa → 5,46:1 ✓
-       ramen #606b57 mot notisrutans #f0fdf4  → 5,37:1 ✓
-     `contrast-more` tänder dessutom full intent-färg på båda, så golvet
-     stiger i det läget i stället för att falla. */
-  --mm-betalningskort-markerad-bg: color-mix(in srgb, var(--mm-success-bg) 50%, var(--mm-surface));
+     ═══ BESLUT 2 (Marcus prod-granskning 2026-09-06, S121 resume 4,
+     TASK-411) — GÄLLANDE FORM ═══
+     Marcus, om inkorgens markerade kort jämfört med bekräftelsestegets:
+     *"Det är inte samma gröna markering på korten på inkorgen som det är på
+     bulkregistreringen. Bulkregistreringen har rätt grön markeringsfärg, och
+     'rätt' är samma gröna färg som på eventdetaljer."* Båda förlagorna
+     (`VariantC.tsx`s bulkregistrering, `Deltagare.tsx`s MarkerbartKort) bär
+     hela `--mm-success-bg` — BESLUT 1:s svagare tint var alltså en AVVIKELSE
+     från husets egen konvention, inte konventionen. `--mm-betalningskort-
+     markerad-bg` pekar därför om till `var(--mm-success-bg)` rakt av: SAMMA
+     platta som förlagorna, ingen egen tint.
+
+     BESLUT 1:s kollision (grön ruta osynlig mot grön platta) återkommer med
+     detta — och löses nu på ANNAT håll, hos konsumenten i stället för i
+     kortets ton: Marcus samma dag, om notisen, *"Vi testar med att
+     success-notisen får vit bakgrund då, men konturen behåller vi … och
+     bocken sätter vi samma gröna färg på som konturen."* Se
+     `RegistreraForm.tsx` för den ändringen — denna token rör den inte.
+
+     KONTRASTER RÄKNADE OM (WCAG 1.4.11, 3:1-golvet för icke-text; script,
+     `contrast(a,b) = (L_ljus+0.05)/(L_mörk+0.05)` på sRGB-relativ luminans):
+       ramen #606b57 mot kortets platta #f0fdf4    → 5,37:1 ✓ (oförändrad
+                                                       mot BESLUT 1 — samma
+                                                       hex som notisrutan bar
+                                                       redan då)
+       ramen #606b57 mot notisrutans NYA vita botten #ffffff → 5,62:1 ✓
+     `contrast-more` tänder dessutom full intent-färg på ramen (MessageBox-
+     primitivens `contrast-more:border`), så golvet stiger i det läget i
+     stället för att falla — oförändrat av båda besluten. */
+  --mm-betalningskort-markerad-bg: var(--mm-success-bg);
   --mm-betalningskort-markerad-border: var(--mm-success);
   --mm-messagebox-body-text: var(--mm-text);
 

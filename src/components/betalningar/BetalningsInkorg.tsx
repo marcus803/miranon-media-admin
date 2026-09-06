@@ -2251,17 +2251,25 @@ function BetalningsradKort({
    * förhöjd kontrast, alltså hade precis de användare regeln finns för tappat
    * markerings-signalen (`Deltagare.tsx` § review-fynd 6, samma fälla).
    *
-   * ÄRVS INTE: den gröna PLATTANS styrka. Eventdetaljen bär `--mm-success-bg`
-   * rakt av; inkorgen bär `--mm-betalningskort-markerad-bg`, som är EXAKT
-   * samma token blandad 50 % mot ytan. Skälet är mätt och står i
-   * `components.css` § "Markerat betalningskort": Marcus dom 2026-09-01
-   * (*"du använder samma grön på markeringen som gröna notis-rutan, så
-   * notisrutan syns inte"*) gav inkorgen en egen, svagare tint där RAMEN bär
-   * signalen. RAMEN ÄR DÄRMED IDENTISK med förlagans:
-   * `--mm-betalningskort-markerad-border` ÄR `var(--mm-success)`, samma
-   * #606b57. Kontrasten mot tinten är uppmätt till 5,46:1 (WCAG 1.4.11 kräver
-   * 3:1), och plattan bär enligt samma mätning "i praktiken INGENTING för den
-   * färgblinde" — signalen som AC #1 handlar om är alltså oförändrad.
+   * PLATTANS STYRKA — HISTORIK, TASK-411 river föregående rads påstående:
+   * eventdetaljen bär `--mm-success-bg` rakt av, och sedan 2026-09-01 bar
+   * inkorgen en EGEN, svagare tint (`--mm-betalningskort-markerad-bg` blandad
+   * 50 % mot ytan) eftersom Marcus dom samma dag löd *"du använder samma
+   * grön på markeringen som gröna notis-rutan, så notisrutan syns inte"*.
+   * Marcus PRÖVADE OM den 2026-09-06 (prod-granskning, S121 resume 4): rätt
+   * grön är samma som bekräftelsestegets och eventdetaljens, alltså hela
+   * `--mm-success-bg`. `--mm-betalningskort-markerad-bg` pekar därför om till
+   * `var(--mm-success-bg)` (se `components.css` § "Markerat betalningskort"
+   * för båda besluten i följd) — SAMMA PLATTA som förlagorna nu, ingen egen
+   * tint. Kollisionen 2026-09-01 varnade om är löst på ANNAT håll: notisrutan
+   * i `RegistreraForm.tsx` får en egen vit bakgrund (SCOPAD till denna yta
+   * via `notisBakgrund="vit"` sedan RUNDA 2:s granskningsfynd — se anropet
+   * nedan och `RegistreraForm.tsx`s docblock) i stället för att kortet
+   * späds ut. RAMEN ÄR OFÖRÄNDRAD:
+   * `--mm-betalningskort-markerad-border` ÄR fortfarande `var(--mm-success)`,
+   * #606b57, nu 5,62:1 mot vit botten i notisrutan och 5,37:1 mot kortets
+   * `--mm-success-bg` (WCAG 1.4.11 kräver 3:1) — se `components.css` för
+   * uträkningen.
    *
    * RADIEN är inkorgens `rounded-2xl`, inte eventsidans `rounded-xl`: kortet
    * är samma kort som raden bredvid, bara kryssbart. Ett kort som bytte radie
@@ -2315,11 +2323,22 @@ function BetalningsradKort({
        sidled. `overflow-hidden` behövs inte längre — det fanns för att hålla
        den rivna utbrytningen i schack.
 
-       FÄRGERNA KOMMER UR EGNA TOKENS (fynd 2). Markeringen bar tidigare
-       `--mm-success-bg`, samma token MessageBox success-ytan bär, så en grön
-       notisruta inuti kortet blev osynlig. `--mm-betalningskort-markerad-*`
-       (components.css) ger kortet en SVAGARE tint och låter ramen bära
-       signalen; mätvärdena och kontrasterna står vid tokenet.
+       FÄRGERNA KOMMER UR EGNA TOKENS (fynd 2, historik — TASK-411 river
+       "svagare tint" nedan). Markeringen bar `--mm-success-bg`, samma token
+       MessageBox success-ytan bär, så en grön notisruta inuti kortet blev
+       osynlig. `--mm-betalningskort-markerad-*` (components.css) fick 2026-
+       09-01 en SVAGARE egen tint där ramen bar signalen i stället.
+       [TASK-411, Marcus prod-fynd 2026-09-06] Tinten var FEL mot förlagorna
+       — bekräftelsestegets och eventdetaljens markerade kort bär hela
+       `--mm-success-bg`, och det är vad Lotta ska se här också.
+       `--mm-betalningskort-markerad-bg` pekar nu om till `var(--mm-success-
+       bg)` (samma platta, ingen egen tint), och kollisionen med notisrutan
+       löses i stället hos KONSUMENTEN — `RegistreraForm.tsx` ger den vit
+       bakgrund NÄR `notisBakgrund="vit"` (satt HÄR, av det öppna kortet
+       nedan; scopad sedan RUNDA 2:s granskningsfynd så de tre andra ytor
+       som delar formuläret via `RegistreraYta` behåller sin gröna
+       success-botten) — mätvärdena och kontrasterna står vid tokenet i
+       components.css.
 
        `contrast-more` BOR I VARDERA GRENEN, aldrig i basklasserna: en
        ovillkorad `contrast-more:border-border-strong` hade vunnit över den
@@ -2391,6 +2410,13 @@ function BetalningsradKort({
           onKlar={onKlar}
           // Kortets gröna ram ÄR grupperingen — se docblocket vid kortet.
           visaAvdelare={false}
+          // [TASK-411, RUNDA 2 — Marcus: "Ja, begränsa till inkorgen."]
+          // BARA denna öppna, gröna kortyta sätter vit botten på
+          // success-notisen (se `notisBakgrund`s docblock i
+          // `RegistreraForm.tsx` § `PropsGemensamt` för hela resonemanget
+          // och kollisionen den löser). `RegistreraYta.tsx`s tre andra
+          // ytor lämnar propen utelämnad och behåller sin gröna botten.
+          notisBakgrund="vit"
         />
       )}
     </li>
