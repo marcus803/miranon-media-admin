@@ -2,6 +2,7 @@ import type { Jobbstatus } from '@/domain/schemas';
 import type {
   BekraftelseRad,
   Beloppsgenvag,
+  Beloppslage,
   Fas,
   ObestamdImportrad,
   Radvarden,
@@ -84,6 +85,24 @@ export type BekraftelsestegModell = {
   batchDatum: string;
   summering: Summering;
   sattGenvag: (genvag: Beloppsgenvag) => void;
+  /**
+   * [TASK-402.8 varv 5] BELOPPSLÄGET för de markerade raderna — kapselns tre
+   * poster (`Förslag` | `Anmälningsavgift` | `Hela beloppet`).
+   *
+   * Anropet gör TVÅ saker: sätter beloppet på varje markerad, registrerbar rad
+   * utanför hand-högen till radens kandidat i läget, och gör läget till
+   * modellens `aktivGenvag` — så kapseln kan visa vilket som gäller OCH så en
+   * rad som markeras senare får samma belopp (`beloppForNyMarkerad`).
+   *
+   * Regeln är ren och bor i `sattBeloppslage` (`bekraftelsesteg-harledningar`);
+   * båda modell-implementationerna kallar den, så formen kan inte se skillnad.
+   *
+   * OBLIGATORISK OCH INTE VALFRI, till skillnad från importfälten nedan:
+   * `VariantC` renderar kapseln ovillkorligt, så en modell utan metoden vore
+   * en yta med tre lägen som inte gör något. Prototypens simulering får därför
+   * samma rader kod tills `TASK-402.6` river den.
+   */
+  sattBeloppslage: (lage: Beloppslage) => void;
   sattBetalsattAlla: (betalsatt: Betalsatt) => void;
   sattDatumAlla: (datum: string) => void;
   sattRadBelopp: (nyckel: string, belopp: string) => void;

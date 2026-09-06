@@ -85,6 +85,32 @@ export type BekraftelseRad = {
    * en markering och väntar på hennes hand. Bär vilket val det var.
    */
   ejGenomforbar: Beloppsgenvag | null;
+  /**
+   * [TASK-402.8 varv 5] LOTTA HAR SPARAT RADFORMULÄRET (Klar) — RADEN ÄR
+   * HENNES.
+   *
+   * ORDALYDELSEN ÄR VIDARE ÄN "skrivit beloppet för hand", och det är den
+   * ärliga beskrivningen av koden: `sattRadVarden` sätter flaggan för HELA
+   * formuläret — betalsätt, betalningsdatum och notering lika mycket som
+   * beloppet. En rad där hon bara bytte betalsätt räknas alltså också som
+   * hennes undantag. Det är avsiktligt (hon har varit inne i raden och sagt
+   * Klar), men docblocket sade tidigare bara "beloppet" och beskrev därmed
+   * ett smalare fält än det som finns.
+   *
+   * Fältet finns för EN sak: en sådan rad som avmarkeras och markeras igen
+   * ska behålla sina värden i stället för att tyst få beloppsläget påtvingat
+   * (`beloppForNyMarkerad`). Utan flaggan går hennes undantag förlorat vid
+   * ett bock-klick hon uppfattar som ofarligt.
+   *
+   * SÄTTS av `sattRadBelopp`/`sattRadVarden`, NOLLAS av `sattBeloppslage` —
+   * ett läge skriver över undantaget, precis som blockets egen text lovar.
+   *
+   * ASYMMETRI, ÖPPET BOKFÖRD: `sattGenvag` (varianternas A/B-genvägar) nollar
+   * INTE flaggan, till skillnad från `sattBeloppslage`. De två har olika
+   * semantik och olika konsumenter — genvägarna rivs med A/B i `TASK-402.6`,
+   * så skillnaden harmoniseras inte här utan försvinner med dem.
+   */
+  handredigerad: boolean;
   /** Registreringens utfall, satt efter "Registrera N". */
   utfall: RadUtfall | null;
   /** Inbetalningens id ur serverns svar; `null` tills raden registrerats. */
@@ -216,6 +242,147 @@ export function arRegistrerbar(rad: BekraftelseRad): boolean {
   if (!rad.markerad) return false;
   if (rad.utfall?.klass === 'registrerad') return false;
   return radbelopp(rad) !== null;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   BELOPPSLÄGET (TASK-402.8) — EN REGEL FÖR DE MARKERADE RADERNA
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Fyra varv med Marcus ledde hit, och varje varv rev något av det förra:
+
+     varv 1  två fristående knappar som SATTE beloppet en gång
+     varv 3  plus en "Återställ förslagen"-knapp för vägen tillbaka
+     varv 4  knapparna blev en toggel som visade vilket val som gällde
+     varv 5  *"Togglen behöver ju sitta i något. När ingen knapp är vald så
+             ser ju knapparna inte ut som knappar utan bara en textsträng på
+             grå bakgrund."*
+
+   Svaret på varv 5 är inte en ram runt två knappar utan ett TREDJE LÄGE.
+   `Förslag` är inte längre frånvaron av ett val — det ÄR ett val, förvalt och
+   lysande från start. Därmed finns inget tomt läge att rita, och
+   återställnings-knappen behövs inte: att välja `Förslag` ÄR återställningen.
+
+   LÄGET ÄR EN LEVANDE REGEL, INTE EN ENGÅNGSHANDLING. Det beskriver vad
+   kapseln senast gjorde OCH vad en rad som markeras HÄREFTER ska få
+   (`beloppForNyMarkerad`). Utan det hade en nymarkerad rad kommit in med sitt
+   förslag mitt i ett "Hela beloppet"-läge, och Lotta hade fått en avvikelse
+   hon aldrig bad om.
+
+   EN HANDREDIGERING SLÄCKER INTE LÄGET (ändrat i varv 5). Den är hennes
+   medvetna undantag från regeln, och raden bär det i `handredigerad` så en
+   senare markering inte skriver över det hon just skrev. */
+
+/** Kapselns tre lägen. `forslag` är förvalet och den neutrala vägen tillbaka. */
+export type Beloppslage = 'forslag' | 'avgift' | 'allt';
+
+/**
+ * Raden saknar ett belopp — den bor i "Behöver din hand".
+ *
+ * Flyttad hit ur `VariantC.tsx` i `TASK-402.8`: hög-indelningen och
+ * lägesregeln måste läsa SAMMA predikat, annars kan en rad vara i högen
+ * enligt formen och utanför den enligt regeln.
+ */
+export function saknarBelopp(rad: BekraftelseRad): boolean {
+  return rad.ejGenomforbar !== null || rad.belopp.trim() === '';
+}
+
+/**
+ * Radens belopp i ett givet läge, eller `null` när läget inte går ihop för
+ * raden (avgiften redan betald, pris utan fack, pris saknas i basen).
+ *
+ * ALL PRISLOGIK LÅNAS, som överallt annars här: `forslagsbelopp` och
+ * `genvagsbelopp` läser radens egna kandidater ur inkorgens
+ * `harledBeloppsknappar`. Det finns inget delat belopp — priset är per event
+ * OCH per person.
+ */
+export function beloppForLage(rad: BekraftelseRad, lage: Beloppslage): number | null {
+  return lage === 'forslag' ? forslagsbelopp(rad.beloppsknappar) : genvagsbelopp(rad, lage);
+}
+
+/**
+ * Rör läget denna rad? Fyra villkor, alla ur kortets AC #3.
+ *
+ *   1. MARKERAD. En avmarkerad rad räknas ingenstans och registreras inte.
+ *   2. INTE REDAN REGISTRERAD. Raden är bokförd; dess belopp är historik.
+ *      (En rad vars registrering FALLERADE är däremot med — den ska kunna
+ *      köras om, samma regel som `arRegistrerbar`.)
+ *   3. INTE I "BEHÖVER DIN HAND". Högen väntar på Lottas hand.
+ *   4. RADEN HAR ETT BELOPP I LÄGET. Saknas kandidaten rörs raden inte alls;
+ *      den behåller vad den hade.
+ */
+export function berorsAvLage(rad: BekraftelseRad, lage: Beloppslage): boolean {
+  if (!rad.markerad) return false;
+  if (rad.utfall?.klass === 'registrerad') return false;
+  if (saknarBelopp(rad)) return false;
+  return beloppForLage(rad, lage) !== null;
+}
+
+/** Hur många rader läget KAN röra — pillens av/på. */
+export function antalILage(rader: readonly BekraftelseRad[], lage: Beloppslage): number {
+  return rader.filter((rad) => berorsAvLage(rad, lage)).length;
+}
+
+/**
+ * Hur många rader läget faktiskt ÄNDRAR — beskedets tal.
+ *
+ * Skiljer sig från `antalILage` med avsikt: en rad som redan bär lägets
+ * belopp ändras inte, och ett besked som räknade den hade sagt "6 belopp
+ * satta" när noll flyttade sig.
+ */
+export function antalAndradeILage(rader: readonly BekraftelseRad[], lage: Beloppslage): number {
+  return rader.filter(
+    (rad) => berorsAvLage(rad, lage) && radbelopp(rad) !== beloppForLage(rad, lage),
+  ).length;
+}
+
+/**
+ * Raderna efter att ett läge valts. Orörda rader returneras som SAMMA objekt,
+ * så React kan se på referensen att kortet inte ändrats.
+ *
+ * `handredigerad` NOLLAS på de rader läget skriver: hennes undantag är
+ * överskrivet, precis som blockets egen text lovar ("Skriver över föreslaget
+ * belopp på alla markerade rader").
+ */
+export function sattBeloppslage(
+  rader: readonly BekraftelseRad[],
+  lage: Beloppslage,
+): BekraftelseRad[] {
+  return rader.map((rad) => {
+    if (!berorsAvLage(rad, lage)) return rad;
+    const belopp = beloppForLage(rad, lage);
+    return belopp === null
+      ? rad
+      : { ...rad, belopp: visaKronor(belopp), ejGenomforbar: null, handredigerad: false };
+  });
+}
+
+/**
+ * Beloppet en rad ska få NÄR DEN MARKERAS, enligt det aktiva läget — eller
+ * `null` när raden ska lämnas ifred.
+ *
+ * TRE FALL LÄMNAS IFRED, och det tredje är hela poängen med `handredigerad`:
+ * en registrerad rad (historik), en rad utan kandidat i läget, och en rad
+ * Lotta skrivit beloppet på för hand. Utan det sista hade en avmarkering och
+ * en ny markering tyst kastat bort hennes siffra.
+ *
+ * `markerad` PRÖVAS INTE HÄR, till skillnad från `berorsAvLage`: funktionen
+ * anropas i samma ögonblick som raden blir markerad, alltså medan fältet
+ * fortfarande är `false`.
+ */
+export function beloppForNyMarkerad(rad: BekraftelseRad, lage: Beloppslage): string | null {
+  if (rad.utfall?.klass === 'registrerad') return null;
+  if (rad.handredigerad) return null;
+  const belopp = beloppForLage(rad, lage);
+  return belopp === null ? null : visaKronor(belopp);
+}
+
+/**
+ * Vilket läge kapseln ska visa som valt. Modellens `aktivGenvag` är bredare
+ * än de tre lägena — den bär `annat` åt varianterna A/B — och kapseln har
+ * ALLTID ett val, så allt utanför de tre faller till `forslag`.
+ */
+export function aktivtBeloppslage(genvag: Beloppsgenvag | null): Beloppslage {
+  return genvag === 'avgift' || genvag === 'allt' ? genvag : 'forslag';
 }
 
 /**
@@ -360,6 +527,7 @@ export function byggRader(
       markerad: true,
       notering: '',
       ejGenomforbar: null,
+      handredigerad: false,
       utfall: null,
       inbetalningId: null,
       kvitto: 'ingen',
@@ -446,6 +614,7 @@ export function byggImportrad(
     markerad: true,
     notering: '',
     ejGenomforbar: null,
+    handredigerad: false,
     utfall: null,
     inbetalningId: null,
     kvitto: 'ingen',

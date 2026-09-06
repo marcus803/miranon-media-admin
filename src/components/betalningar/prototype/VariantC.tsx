@@ -6,19 +6,25 @@ import {
   Checkbox,
   SearchField,
 } from 'react-aria-components';
-import { Button } from '@/components/primitives';
+import { Button, ToggleButton, ToggleButtonGroup } from '@/components/primitives';
 import { InitialAvatar } from '@/components/primitives/InitialAvatar';
 import { StatusBadge } from '@/components/registrations/StatusBadge';
 import {
+  aktivtBeloppslage,
+  antalAndradeILage,
+  antalILage,
   baraOmkorning as arBaraOmkorning,
   arRegistrerbar,
   avstamning,
   type BekraftelseRad,
   type Beloppsklass,
+  type Beloppslage,
+  beloppForNyMarkerad,
   blockrader,
   grupperaRader,
   type ObestamdImportrad,
   radbelopp,
+  saknarBelopp,
   summera,
   vantandeKvitton,
 } from '../bekraftelsesteg-harledningar';
@@ -27,7 +33,6 @@ import { visaKronor } from '../belopp-inmatning';
 import type { InkorgsRad } from '../inkorg-harledningar';
 import { RegistreraForm } from '../RegistreraForm';
 import { RegistreratNuBlock } from '../RegistreratNuBlock';
-import { RadMarken } from './radfalt';
 
 /**
  * BEKRÄFTELSESTEGETS FORM — variant C, "Avvikelse-först" (S121, Marcus val
@@ -101,10 +106,112 @@ const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
   saknas: { ett: 'rad utan belopp', flera: 'rader utan belopp' },
 };
 
-/** Raden saknar ett belopp — bulkvalet gick inte ihop, eller fältet är tomt. */
-function saknarBelopp(rad: BekraftelseRad): boolean {
-  return rad.ejGenomforbar !== null || rad.belopp.trim() === '';
-}
+/**
+ * [TASK-402.8 varv 5] KAPSELNS TRE LÄGEN — ord, besked och utseende.
+ *
+ * ORDEN BÄR INGA TAL, med avsikt. "1 000 kr" och "2 500 kr" hade varit en
+ * LÖGN på den här sidan: priset är per event OCH per person, så en rad vars
+ * deltagare redan betalat 2 000 av 2 500 får 500 av samma tryck som ger en
+ * annan rad 2 500. Segmentet namnger VAD beloppet är, aldrig hur mycket —
+ * talet står kvar per rad, där det är sant.
+ *
+ * `Förslag` FÖRST OCH FÖRVALT (varv 5): det är appens eget förval per rad och
+ * därmed både utgångsläget och vägen tillbaka. Varv 3:s separata
+ * "Återställ förslagen"-knapp är riven — ett läge som alltid är valbart gör
+ * en egen ångra-knapp överflödig, och kapseln slipper det tomma tillstånd
+ * Marcus såg ("bara en textsträng på grå bakgrund").
+ */
+const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
+  { lage: 'forslag', etikett: 'Förslag', besked: 'förslaget' },
+  { lage: 'avgift', etikett: 'Anmälningsavgift', besked: 'anmälningsavgiften' },
+  { lage: 'allt', etikett: 'Hela beloppet', besked: 'hela beloppet' },
+];
+
+/* ═══ SEGMENTENS UTSEENDE — HUSETS SEKUNDÄRA KNAPP, INTE KAPSELNS PILL ══════
+   Marcus: *"Men samtidigt ska det liksom se ut som 'sekundär' knappar ju.
+   Måste liksom matcha och passa in i Sätt alla belopp-rutan."*
+
+   VÄGEN ÄR `className`, INTE EN NY VARIANT I PRIMITIVEN. Prövat först, och
+   det räckte: `ToggleButtonGroup`/`ToggleButton` slår ihop sina cva-klasser
+   med konsumentens via `cn` (tailwind-merge), så varje utility jag skriver
+   här vinner över primitivens i samma grupp — inklusive `data-[selected]:`-
+   och `not-data-[selected]:data-[hovered]:`-varianterna, så länge samma
+   modifierkedja används. Primitiven är därmed ORÖRD och dess fyra andra
+   konsumenter kan inte påverkas (verifierat med grep).
+
+   FÄRGERNA ÄR SEKUNDÄRKNAPPENS EGNA KOMPONENT-TOKENS, inte en avskrift av
+   dess klasser: `--mm-button-secondary-*`. En avskrift hade varit en andra
+   definition av samma knapp och kunnat glida isär från originalet; tokens kan
+   det inte. Det är också husets regel (CLAUDE.md § Design-system: inga
+   hårdkodade färger, allt via custom properties).
+
+   DET VALDA SEGMENTETS KONTUR ÄR `--mm-text`, och steget dit tog fem varv med
+   Marcus öga som instrument. Landningen är samma svärta som Registrera-
+   knappen, och det är ett MEDVETET val efter att tre dämpningar prövats:
+   *"om vi går tillbaka till mörkgrå då, samma som registrera knappen, de går
+   färgerna ihop i alla fall."*
+
+     varv 5–6  `--mm-text`           14,22:1 / 13,31:1  *"för mörk grå färg …
+                                     nu har den ju samma färg som registrera
+                                     knappen"*
+     varv 7    `--mm-text-muted`      4,88:1 /  4,57:1  *"blev nog sämre än
+                                     innan"*
+     varv 8    guld (`--mm-primary-hover` på `--mm-primary-tint`)
+                                      3,14:1 /  3,10:1  *"Blev sämre"*
+     varv 9    `--mm-text-secondary`  7,25:1 /  6,78:1  *"Blev sämre"* i sak —
+                                     varv 10 valde bort dämpningen helt
+     varv 10   `--mm-text`           14,22:1 / 13,31:1  ← här, tillbaka till
+                                     varv 6:s värde
+
+   VARFÖR SVÄRTAN ÄR RÄTT TROTS ATT DEN DELAS MED PRIMÄRKNAPPEN: invändningen
+   i varv 7 var att konturen såg ut som Registrera-knappen. Tre dämpningar
+   senare är domen den motsatta — färgerna GÅR IHOP, och en kontur är inte en
+   fyllning: den mörka kanten läser som "vald", inte som "primär handling",
+   eftersom segmentet fortfarande är en outline-knapp med ljus fyllning.
+   Guldet från varv 8 är rivet, kontur och fond.
+
+   Golvet är oförändrat: WCAG 1.4.11 kräver 3:1 för tillståndsmarkören mot
+   BÅDA angränsande färgerna (panelen och segmentets egen fyllning), och
+   14,22:1 / 13,31:1 klarar det med bred marginal. Texten (`--mm-text`) mot
+   fyllningen ger 13,31:1 mot 4,5-golvet.
+
+   INGENTING I BOXMODELLEN ÄNDRAS MELLAN VALT OCH OVALT (varv 6). Marcus:
+   *"när man klickar runt på knapparna så ser de ut att röra sig, eller det
+   gör dem, inte okej."* Och de gjorde det: varv 5 gav det valda segmentet
+   `font-semibold`, vilket är BREDARE text. Med `auto-cols-fr` + `w-fit`
+   sätts kolumnbredden av det bredaste segmentets max-content — så fort
+   vikten flyttade sig flyttade hela radens bredd med den, och alla tre
+   segmenten bytte mått vid varje klick.
+
+   Regeln som ersätter den: valet får ENDAST ändra färg. Samma `font-medium` i
+   båda lägena, samma `border`-BREDD (bara `border-color` byter), samma
+   padding. Ska kanten se tjockare ut är vägen en INSET `box-shadow` — den
+   ritas innanför kanten och ingår inte i boxmodellen, till skillnad från
+   `border-2`. Mätt efteråt: identiska `x/y/width/height` på alla tre
+   segmenten genom alla tre valen.
+
+   BREDDEN: `inline-grid` + `auto-cols-fr` + `w-fit` ger alla tre segmenten
+   exakt det bredaste ordets bredd ("Anmälningsavgift") utan att raden sträcks
+   över hela panelen. Marcus: *"anmälningsavgift och Hela beloppet knapparna
+   måste vara exakt lika breda, annars blir det ingen snygg toggle."* Under
+   `sm` faller raden till en kolumn — fortfarande likbreda, eftersom
+   kolumnbredden är samma fit-content. */
+const KAPSEL_KLASS =
+  'inline-grid w-fit auto-cols-fr grid-flow-row gap-2 rounded-none bg-transparent p-0 sm:grid-flow-col';
+
+const SEGMENT_KLASS = [
+  // Ovalt: husets sekundära knapp, size sm.
+  'min-h-8 rounded-lg border px-3 py-1.5 text-small',
+  'border-(--mm-button-secondary-border) bg-(--mm-button-secondary-bg)',
+  'text-(color:--mm-button-secondary-text)',
+  'not-data-[selected]:data-[hovered]:bg-(--mm-button-secondary-bg-hover)',
+  'contrast-more:border-border-strong',
+  // Valt: intryckt sekundär — tonad platta, mörk kant, dubblerad via en INSET
+  // ring. Ingen viktändring, ingen kantbredd-ändring, ingen padding-ändring.
+  'data-[selected]:border-text data-[selected]:bg-bg-emphasized',
+  'data-[selected]:font-medium data-[selected]:text-text',
+  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text)]',
+].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
   return `${antal} ${antal === 1 ? ett : flera}`;
@@ -192,6 +299,18 @@ export function VariantC({ modell }: { modell: BekraftelsestegModell }) {
 function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const handId = useId();
   const dubblettId = useId();
+  /* BESKEDET EFTER ETT SÄTT-ALLA-TRYCK. Ingen synlig pixel ändras av det —
+     raderna och avstämningen SÄGER redan vad som hände för den som ser dem.
+     Den som inte ser dem hör i stället "6 belopp satta till
+     anmälningsavgiften" ur regionen nedanför knapparna.
+
+     EGEN REGION OCH INTE HUVUDETS STATUSRAD, öppet bokfört som avvikelse mot
+     kortets AC #4-ordalydelse: huvudets rad bär räkningen "N av N
+     inbetalningar markerade", som ett tryck INTE ändrar. Skrev vi beskedet
+     dit hade markeringsräkningen försvunnit — och den är facit-låst form
+     (facit.json § FORMEN). Två regioner annonserar var sin sak; en hade
+     tystat den ena. */
+  const [sattAllaBesked, setSattAllaBesked] = useState('');
   const { rader } = modell;
   const registrerar = modell.fas === 'registrerar';
   const [tryckt, setTryckt] = useState<'registrera' | 'skicka' | null>(null);
@@ -246,6 +365,56 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const registrerbara = bas.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
   const avstamda = useMemo(() => avstamning(markerade), [markerade]);
+  /* Hur många rader varje läge KAN röra. Noll ⇒ segmentet är avstängt: ett
+     läge som inte gör något ska inte gå att välja. `forslag` stängs aldrig av
+     — det är kapselns förval och måste alltid gå att återvända till. */
+  const lagesTraffar = useMemo(
+    () => new Map(LAGEN.map((v) => [v.lage, antalILage(kvar, v.lage)])),
+    [kvar],
+  );
+  const aktivtLage = aktivtBeloppslage(modell.aktivGenvag);
+  const valjLage = (lage: Beloppslage) => {
+    /* BESKEDET RÄKNAR DE RADER SOM FAKTISKT ÄNDRAS, inte de läget rör.
+       Väljer hon `Förslag` när varje rad redan bär sitt förslag flyttar sig
+       ingenting, och "0 belopp satta" hade varit ett sämre svar än att säga
+       det rakt ut. */
+    const antal = antalAndradeILage(kvar, lage);
+    const besked = LAGEN.find((v) => v.lage === lage)?.besked ?? '';
+    modell.sattBeloppslage(lage);
+    setSattAllaBesked(
+      antal === 0
+        ? `Alla belopp stod redan på ${besked}.`
+        : `${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`,
+    );
+  };
+  /* EN MARKERING UNDER ETT ÖVERSKRIVANDE LÄGE ÄNDRAR ETT BELOPP, OCH DET SKA
+     HÖRAS. Läget är en levande regel (varv 5): markerar Lotta en rad mitt i
+     "Hela beloppet" kommer raden in med hela beloppet i stället för sitt
+     förslag. Den seende ser talet byta i kortet och i avstämningen; en
+     skärmläsare hörde ingenting alls — bocken annonseras som "markerad" och
+     beloppsändringen var tyst. Beskedet skrivs i blockets EGNA
+     `role="status"`-region (samma som sätt-alla-trycken använder), inte i
+     huvudets statusrad, av samma skäl som där: huvudets rad bär den
+     facit-låsta räkningen "N av N inbetalningar markerade".
+
+     TRE VILLKOR, alla nödvändiga. Bara `avgift`/`allt` — `forslag` ÄR radens
+     eget förval, så ett besked där hade beskrivit en ändring som normalt inte
+     sker (orkestrerarens avgränsning; kanten där en rad avmarkerats under
+     `allt` och markeras om under `forslag` annonseras därmed inte). Bara en
+     MARKERING, aldrig en avmarkering, som inte rör beloppet. Och bara när
+     talet FAKTISKT skiljer sig från radens nuvarande — `beloppForNyMarkerad`
+     returnerar radens kandidat även när den redan står där, och "satt till
+     1 000 kr" om en rad som redan visar 1 000 kr är brus, inte information. */
+  const markeraRad = (rad: BekraftelseRad, markerad: boolean) => {
+    const nytt = markerad && aktivtLage !== 'forslag' ? beloppForNyMarkerad(rad, aktivtLage) : null;
+    if (nytt !== null && nytt !== rad.belopp) {
+      const etikett = LAGEN.find((v) => v.lage === aktivtLage)?.etikett ?? '';
+      setSattAllaBesked(
+        `${rad.inkorg.namn} markerad, beloppet satt till ${nytt} kr enligt ${etikett}.`,
+      );
+    }
+    modell.sattRadMarkerad(rad.nyckel, markerad);
+  };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
   // sjönk "10 inbetalningar 12 000 kr" rad för rad under körningen (mätt).
   const summering = useMemo(() => summera(bas), [bas]);
@@ -359,7 +528,13 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
               <ul className={LISTA_KLASS}>
                 {grupp.rader.map((rad) => (
-                  <MarkerbartKort key={rad.nyckel} rad={rad} modell={modell} frusen={registrerar} />
+                  <MarkerbartKort
+                    key={rad.nyckel}
+                    rad={rad}
+                    modell={modell}
+                    vidMarkering={markeraRad}
+                    frusen={registrerar}
+                  />
                 ))}
               </ul>
             </div>
@@ -420,6 +595,126 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
       {/* ═══ AVSTÄMNINGEN OCH HANDLINGEN — Hem-vyns helbreddsknapp under listan ═══ */}
       {kvar.length > 0 && (
         <div className="flex flex-col gap-3">
+          {/* ═══ SÄTT ALLA BELOPP — ETT BLOCK UNDER LISTAN (TASK-402.8) ═════
+              PLATSEN (varv 1, Marcus 2026-09-06): *"jag vill ha dem under
+              listan, inte över … Listan ska vara i fokus direkt när hon
+              kommer till bulkregistreringen."* Blocket står sist av det som
+              rör raderna, precis före avstämningen det påverkar.
+
+              FORMEN (varv 2, Marcus på granskningsservern samma dag): *"Jag
+              tror 'sätt alla belopp' måste få ett eget block/ruta och passa
+              snyggare in i sidans design. Det ser inte snyggt ut nu."* Varv 1
+              lade en naken rad — etikett plus två knappar — mellan sista
+              gruppkortet och avstämningen. Den bar ingen av sidans former och
+              hörde därför visuellt ingenstans.
+
+              HUSETS PANELFORM, INTE EN NY: `rounded-2xl bg-bg-muted p-4` är
+              `FilterRad`s utfällda panel (`primitives/FilterRad.tsx`, den
+              enda andra panelen i appen som bär kontroller och inte
+              innehåll), och `bg-bg-muted` + `rounded-2xl` +
+              `contrast-more:border-border-strong` är dessutom exakt
+              `LISTA_KLASS` ovan. Blocket ligger i en behållare UTAN
+              horisontell padding, alltså kant i kant med gruppernas
+              `-mx-4`-omslag — samma vänster- och högerkant, samma radie,
+              samma botten.
+
+              LUFTEN ÄR MÄTT, INTE ÖGONMÄTT (och prövas exakt i
+              `bekraftelsesteget-formen-fore-stampeln.staging.test.ts`
+              § "blocket ligger under listan …", som fäller på annat än
+              `{ over: 16, under: 24 }`): 16 px OVANFÖR, alltså gruppernas
+              inbördes rytm (listsektionens `gap-4`) — `-mt-2` är det som gör
+              det talet, eftersom rot-sektionens `gap-6` annars ger 24 px och
+              blocket ska ligga TÄTARE än så; det hör ihop med listan ovanför.
+              Och 24 px NEDÅT till avstämningen (behållarens `gap-3` plus
+              blockets `mb-3`), varv 3 — Marcus: *"Skapa påtagligt mer luft
+              mellan sätt alla belopp-rutan och summeringsraderna nedanför."*
+              Varv 2:s 12 px var avstämningens INTERNA rytm och band ihop
+              blocket med summeringen; 24 px säger att de är två skilda saker.
+              (Denna rad påstod fram till slutvarvet fortfarande "12 px ned"
+              — varv 2:s tal, som testet ovan motbevisade i varv 3 utan att
+              kommentaren följde med.)
+
+              RUBRIKEN ÄR INGEN `<h2>`, med avsikt. Sidans h2:er är
+              INNEHÅLLS-avdelningar ("Behöver din hand", eventgrupperna) i
+              `text-lg font-semibold`; detta är en KONTROLL-panel, som
+              `FilterRad` (som inte heller bär någon rubrik). En h2 i
+              `text-body font-medium` hade dessutom sett ut som brödtext i en
+              rubriknivå och gjort dokumentöversikten sämre, inte bättre — på
+              en yta som är facit-låst och ligger hos Marcus för granskning. */}
+          <div
+            /* MÄTPUNKTEN för blockets luft och bredd. `data-testid` och inte
+               ett tillgängligt namn, av samma skäl som sektionens egen krok
+               ovan: ett namn hade gjort behållaren till en landmark i
+               tillgänglighetsträdet. En testid kostar ingenting där. */
+            data-testid="satt-alla-block"
+            className="-mt-2 mb-3 flex flex-col gap-3 rounded-2xl border border-transparent bg-bg-muted p-4 contrast-more:border-border-strong"
+          >
+            <div className="flex flex-col gap-1">
+              <p className="font-medium text-body">Sätt alla belopp</p>
+              {/* HJÄLPTEXTEN SÄGER BÅDA HALVORNA av regeln — vad knappen gör
+                  OCH vad den inte rör. Den andra halvan är den som annars
+                  kostar: en rad i hand-högen ser markerad ut och står kvar
+                  när Lotta trycker, och utan raden läses det som en bugg. */}
+              <p className="text-caption text-text-muted">
+                Skriver över föreslaget belopp på alla markerade rader. Rader som behöver din hand
+                rörs inte.
+              </p>
+            </div>
+            {/* `flex-wrap`: på iPad 820 ryms alla tre segmenten på en rad,
+                men formen får inte bero på det. Vänsterställda i båda
+                fallen. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* KAPSELN (varv 4 + 5). Marcus varv 4: *"när man trycker på
+                  'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte
+                  visa att knappen är aktiv? Hur gör vi detta i appen idag?"*
+                  Husets svar är `ToggleButtonGroup` — periodtoggeln,
+                  vy-växlaren i `EventsList`/`PersonsList`,
+                  Förberedelseskärmen. Varv 5 lade till det tredje läget och
+                  bytte kapselns UTSEENDE mot husets sekundära knapp; SEMANTIKEN
+                  är primitivens (se `SEGMENT_KLASS` ovan för hela
+                  resonemanget och kontrastmätningen).
+
+                  GRUPPNAMNET ÄR "Belopp för markerade rader", inte panelens
+                  synliga rubrik. Med tre poster där en heter `Förslag` hade
+                  "Sätt alla belopp, Förslag" läst som en motsägelse — man
+                  SÄTTER inte ett förslag, man återvänder till det. Namnet
+                  beskriver i stället vad gruppen STYR, och skärmläsaren säger
+                  "Belopp för markerade rader, Förslag, 1 av 3". Den synliga
+                  rubriken står kvar oförändrad; den är inte gruppens
+                  programmatiska etikett, så ingen namn-i-etikett-konflikt
+                  uppstår (WCAG 2.5.3 gäller kontroller vars synliga text ÄR
+                  deras namn). */}
+              <ToggleButtonGroup<Beloppslage>
+                label="Belopp för markerade rader"
+                className={KAPSEL_KLASS}
+                selectedKey={aktivtLage}
+                onSelectionChange={valjLage}
+              >
+                {LAGEN.map((v) => (
+                  <ToggleButton
+                    key={v.lage}
+                    id={v.lage}
+                    size="sm"
+                    className={SEGMENT_KLASS}
+                    /* `forslag` stängs ALDRIG av — det är förvalet och den
+                       enda vägen tillbaka. De två överskrivande lägena stängs
+                       av när ingen markerad rad kan ta dem. */
+                    isDisabled={
+                      registrerar || (v.lage !== 'forslag' && (lagesTraffar.get(v.lage) ?? 0) === 0)
+                    }
+                  >
+                    {v.etikett}
+                  </ToggleButton>
+                ))}
+              </ToggleButtonGroup>
+            </div>
+            {/* Regionen finns FÖRE sitt innehåll och är tom tills något trycks
+                — en live-region som monteras samtidigt som texten annonseras
+                inte tillförlitligt (WAI-ARIA APG § Live Regions). */}
+            <p role="status" className="sr-only">
+              {sattAllaBesked}
+            </p>
+          </div>
           <dl className="flex flex-col gap-1 px-4">
             {avstamda.map((post) => (
               <div key={post.klass} className="flex items-baseline justify-between gap-3">
@@ -564,17 +859,45 @@ function EfterlagetsBlock({
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /**
- * Kortets huvud — avatar · namn (· märke), inkorgens `BetalningsradKort` med
- * EN rad; märket inline efter namnet så alla kort förblir exakt lika höga.
+ * Kortets huvud — avatar · namn, inkorgens `BetalningsradKort` med EN rad.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * [TASK-402.8] PILLSEN ÄR BORTA (Marcus 2026-09-06: *"Pillsen bort, det blir
+ * bra."*)
+ * ═════════════════════════════════════════════════════════════════════════════
+ * "Förfallen" och "Obekräftad" satt här via `RadMarken` (`radfalt.tsx`), i
+ * både ihopfällt och öppet läge och i båda högarna. De hörde aldrig hemma på
+ * DEN HÄR sidan: obekräftad registreras som vanligt och bekräftelsen sköts på
+ * Åtgärds-sidan (grillningens beslut 5), och en passerad deadline ändrar
+ * ingenting i handlingen "registrera det som kommit in". Signalerna bor i
+ * INKORGEN, där Lotta prioriterar — dess markup är egen
+ * (`BetalningsInkorg.tsx` § RadInnehall) och orörd av denna skiva.
+ *
+ * ═════════════════════════════════════════════════════════════════════════════
+ * [TASK-402.8] NAMNET KLIPPS — KORTET FÅR ALDRIG BYTA HÖJD
+ * ═════════════════════════════════════════════════════════════════════════════
+ * Marcus: *"Då måste namnet 'klippas' för INGET får hända med kortet."* Utan
+ * `truncate` radbryter ett långt namn, kortet växer, och listans rytm bryts
+ * mitt i en avstämning mot kontoutdraget.
+ *
+ * `truncate` VID ALLA BREDDER, till skillnad från inkorgens `sm:truncate`:
+ * regeln "kortet byter aldrig höjd" har ingen brytpunkt. `min-w-0` på både
+ * behållaren och namnet är det som gör klippet möjligt — utan den kan en
+ * flex-item inte krympa under sitt innehåll.
+ *
+ * HELA NAMNET FINNS KVAR. Texten är oavkortad i DOM:en, så skärmläsaren läser
+ * den i sin helhet (klippet är rent visuellt); `title` ger den seende samma
+ * text vid hovring. `flex-wrap` är borta med märkena — det fanns bara för att
+ * pillsen skulle kunna falla ned på en egen rad.
  */
 function KortHuvud({ rad, vald }: { rad: BekraftelseRad; vald: boolean }) {
-  const harMarken = rad.inkorg.forfallen || rad.inkorg.obekraftad;
   return (
     <>
       <InitialAvatar namn={rad.inkorg.namn} />
-      <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-        <span className="font-medium text-body">{rad.inkorg.namn}</span>
-        {harMarken && <RadMarken rad={rad} />}
+      <span className="flex min-w-0 flex-1 items-center gap-x-2">
+        <span className="min-w-0 truncate font-medium text-body" title={rad.inkorg.namn}>
+          {rad.inkorg.namn}
+        </span>
         <span className="sr-only">{vald ? 'Markerad' : 'Inte markerad'}</span>
       </span>
     </>
@@ -665,10 +988,18 @@ function RadFormular({
 function MarkerbartKort({
   rad,
   modell,
+  vidMarkering,
   frusen = false,
 }: {
   rad: BekraftelseRad;
   modell: BekraftelsestegModell;
+  /**
+   * Markeringen går via sidan, inte rakt in i modellen, så beskedet om ett
+   * ändrat belopp kan skrivas i blockets `role="status"`-region — den bor i
+   * sidkomponenten och kortet når den inte. Anropet till
+   * `modell.sattRadMarkerad` sker fortfarande, i samma vända.
+   */
+  vidMarkering: (rad: BekraftelseRad, markerad: boolean) => void;
   /** Körningen pågår: kortet står stilla och tar inga tryck (varv 15). */
   frusen?: boolean;
 }) {
@@ -685,7 +1016,7 @@ function MarkerbartKort({
           isSelected={vald}
           isDisabled={frusen}
           onChange={(v) => {
-            modell.sattRadMarkerad(rad.nyckel, v);
+            vidMarkering(rad, v);
             // Avmarkeras ett ÖPPET kort stängs formuläret (Marcus fynd:
             // beloppet försvann annars). Ändringarna behålls.
             if (!v) setOppen(false);

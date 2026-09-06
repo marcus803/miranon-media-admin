@@ -3,9 +3,10 @@ id: TASK-402.8
 title: >-
   Skiva: Bekräftelsestegets form före stämpeln — pillsen bort ur korten, namnet
   klipps, beloppsknapparna Anmälningsavgift/Hela beloppet under listan
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-06 09:24'
+updated_date: '2026-09-06 14:31'
 labels:
   - ready-for-agent
 dependencies:
@@ -22,12 +23,12 @@ Marcus prod-granskning av bekräftelsesteget 2026-09-06 (S121 resume 4, under 40
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pillsen Förfallen och Obekräftad renderas inte i bekräftelsestegets kort, varken ihopfällt eller öppet, inte heller i Behöver-din-hand-högen; inkorgens pills är oförändrade
-- [ ] #2 Ett namn längre än kortets utrymme klipps med ellips på en rad (test med ett 60-teckens namn på desktop 1440 och iPad 820); kortets höjd och övriga element är oförändrade; fullständigt namn nås via title-attribut eller sr-only
-- [ ] #3 Under listan finns 'Sätt alla belopp:' med knapparna Anmälningsavgift och Hela beloppet; ett tryck sätter varje markerad rads belopp till radens egen kandidat (avgiftKvar respektive kvar); rader utan kandidat och Behöver-din-hand-högen rörs inte; avstämningen och summaraden räknar om
-- [ ] #4 Appens förslag per rad står kvar tills en knapp trycks; per-rad-redigering efteråt fungerar som förut; knapparna nås med tangentbord, bär tydliga namn för skärmläsare och trycket annonseras i statusraden; axe-svep utan fel
-- [ ] #5 Nya facit-bilder för de berörda lägena och en AMENDERING-fil i tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/; ariaSnapshot-referenserna omtagna; api-pure-tester täcker sätt-alla-regeln inklusive rad utan kandidat
-- [ ] #6 Marcus har granskat den nya formen mot facit-bilderna på desktop 1440 och iPad 820 (ersätter 402.3 AC #10:s granskning på den gamla formen)
+- [x] #1 Pillsen Förfallen och Obekräftad renderas inte i bekräftelsestegets kort, varken ihopfällt eller öppet, inte heller i Behöver-din-hand-högen; inkorgens pills är oförändrade
+- [x] #2 Ett namn längre än kortets utrymme klipps med ellips på en rad (test med ett 60-teckens namn på desktop 1440 och iPad 820); kortets höjd och övriga element är oförändrade; fullständigt namn nås via title-attribut eller sr-only
+- [x] #3 Under listan finns 'Sätt alla belopp:' med knapparna Anmälningsavgift och Hela beloppet; ett tryck sätter varje markerad rads belopp till radens egen kandidat (avgiftKvar respektive kvar); rader utan kandidat och Behöver-din-hand-högen rörs inte; avstämningen och summaraden räknar om
+- [x] #4 Appens förslag per rad står kvar tills en knapp trycks; per-rad-redigering efteråt fungerar som förut; knapparna nås med tangentbord, bär tydliga namn för skärmläsare och trycket annonseras i statusraden; axe-svep utan fel
+- [x] #5 Nya facit-bilder för de berörda lägena och en AMENDERING-fil i tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/; ariaSnapshot-referenserna omtagna; api-pure-tester täcker sätt-alla-regeln inklusive rad utan kandidat
+- [x] #6 Marcus har granskat den nya formen mot facit-bilderna på desktop 1440 och iPad 820 (ersätter 402.3 AC #10:s granskning på den gamla formen)
 <!-- AC:END -->
 
 ## Definition of Done
@@ -36,3 +37,15 @@ Marcus prod-granskning av bekräftelsesteget 2026-09-06 (S121 resume 4, under 40
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+AC #6 granskad av Marcus på granskningsservern 4173 genom tio formvarv 2026-09-06, desktop + iPad; kvittens verbatim: "Nu är vi klara med bulkregistrerings-sidan också, vi kör på detta." Bockad på Marcus ord.
+
+VARV 2-10 (nio granskningsvarv, alla på blockets UTSEENDE — regeln och placeringen från varv 1 står orörda). 2: eget block i husets panelform (rounded-2xl bg-bg-muted p-4), kant i kant med grupperna, rubrik + hjälptext ("Jag tror 'sätt alla belopp' måste få ett eget block/ruta"). 3: luften under blocket 12 -> 24 px, hjälptexten till Marcus ordalydelse, tredje knapp "Återställ förslagen" ("Skapa påtagligt mer luft ..."). 4: de två knapparna blev husets ToggleButtonGroup ("behöver vi inte visa att knappen är aktiv?"). 5: tre lägen Förslag | Anmälningsavgift | Hela beloppet med Förslag förvalt, varv 3:s ångra-knapp riven (att välja Förslag ÄR återställningen), levande regel för nymarkerade rader med handredigerad rad som undantag, utseendet till husets sekundärknapp, segmenten exakt likbreda ("Togglen behöver ju sitta i något" / "ska liksom se ut som 'sekundär' knappar" / "måste vara exakt lika breda"). 6: valet får ENDAST ändra färg — samma vikt, kantbredd och padding, konturen som inset box-shadow ("när man klickar runt på knapparna så ser de ut att röra sig"). 7: konturen --mm-text -> --mm-text-muted ("lite för mörk grå färg"). 8: guld prövat, --mm-primary-hover på --mm-primary-tint ("Kanske gul/guld?"). 9: guldet rivet, --mm-text-secondary ("Blev sämre. Ta tillbaka den vi hade innan men testa att dämpa den lite mer"). 10: konturen tillbaka till --mm-text, slutform ("om vi går tillbaka till mörkgrå då ... de går färgerna ihop i alla fall").
+
+SLUTVARVET (denna landning). Bas: mergade origin/task/411-markerat-kort-gron-platta — TASK-411 hade vid premiss-passet INTE landat på main (PR #2380 öppen, notisBakgrund saknades i origin/main:src/components/betalningar/RegistreraForm.tsx); den landade som 93c3209a UNDER bygget och min merge-bas e31bcd37 är dess förälder, så innehållet är detsamma och PR-diffen mot main bär inga 410/411-filer. Raden notisBakgrund="vit" på RadFormulars RegistreraForm överlevde mergen, inga konflikter. De åtta ariaSnapshot-referenserna omtagna med --update-snapshots=all (=all krävs, subset-matchning), Ångra-dialogens två byte-identiska; facit.json sha256 uppdaterade för de åtta, godkand orört (null), check-facit.sh exit 0. De fyra test.fixme()-raderna i bekraftelsesteget-promoverings-grind.staging.test.ts borttagna, alla tio lägena levande. Fem amendering-bilder omtagna mot varv 10 (utgångsläget desktop + iPad, Anmälningsavgift, Hela beloppet, Förslag efter handredigering). AMENDERING-filens statusruta borttagen, § 3.1 "Varv 2-10" tillagd med Marcus citat per varv och slutformens mätta mått. Nytt e2e-fall per bredd: segmentens x/y/width/height identiska genom alla tre valen (142,11 x 35,00 px, mätt) — tvåsidigt bevisat, fäller i båda vyporterna med varv 5:s font-semibold återinförd. Api-pure-täckningen för tre-läges-regeln verifierad befintlig (tests/api/bekraftelsesteg-harledningar.test.ts, sattBeloppslage-blocket). Rättad stale prosa: VariantC.tsx sade "12 px ned till avstämningen" (varv 2:s tal) fast e2e-testet mäter 24 px sedan varv 3; riggen-proto-shot.mjs pekade på en borttagen worktree och fick trädet härlett ur sin egen plats plus ett --steg-flöde (klick/fyll/rulla/vänta).
+
+SLUTVARVETS SENA FYND. (1) Att ta bort de fyra test.fixme-raderna återaktiverade ett DORMANT race i promoverings-grindens oppna()-hjälpare: page.evaluate(Date.now) + clock.pauseAt(nu + 500 ms) fäller med "Cannot fast-forward to the past" när de två CDP-anropen tillsammans tar mer än marginalen. Föll på "ipad — körningen pågår" i en körning där desktop-varianten och trettio andra fall var gröna. Marginalen höjd till 2 s (ofarligt: pausen sker FÖRE klicket, alltså innan simuleringens timers finns, och data=fixtur håller useOppnaBetalningar avstängd) — sex omkörningar gröna. (2) Två lesson-fragment lagda i tasks/lessons.d/: fast millisekundmarginal mellan två CDP-anrop är ett lastberoende race [UNIVERSAL], och fullPage-dump ritar ett fixed-element där rullningen råkar stå [UNIVERSAL]. (3) FYND UTANFÖR DENNA PR:s DIFF, ej åtgärdat: tests/e2e/betalningar-inkorg-markera-lage.staging.test.ts "navigation UTANFÖR betalningsfamiljen rensar" är flakig — 2 fällningar av 7 försök, och den fäller i hel-fil-körning även vid låg last (loadavg 23) medan den är 4/4 grön i isolering vid loadavg 25, vilket pekar på ordnings-/tillståndsberoende inom filen snarare än ren last. Filen ligger INTE i denna PR:s diff mot main (den kom med 410/411 som redan landat), BetalningsInkorg.tsx importerar ingenting ur denna diff, och testet besöker bara /mer/betalningar och /event/<id> — aldrig prototyp-routen. Registrerad enligt ADR-053 (blockerar ej, utanför scope), inte fixad här eftersom det hade lagt en orelaterad fil i diffen.
+<!-- SECTION:NOTES:END -->

@@ -424,12 +424,55 @@ async function oppna(
     // tidpunkt i det förflutna ("Cannot fast-forward to the past", mätt), och
     // en fast literal driver ifrån webbläsarens klocka så fort testet tar
     // några sekunder.
+    //
+    // MARGINALEN ÄR 2 s, INTE 500 ms, OCH DET ÄR EN MÄTT RÄTTELSE (TASK-402.8
+    // slutvarvet). Mellan `evaluate` som läser tiden och `pauseAt` som
+    // konsumerar den ligger två CDP-tur-och-retur; tar de tillsammans mer än
+    // marginalen är målpunkten redan passerad och anropet FÄLLER. 500 ms höll
+    // på en tom maskin och sprack på en belastad — `ipad — körningen pågår`
+    // föll på exakt det 2026-09-06, samma körning där desktop-varianten och
+    // trettio andra fall var gröna. Flaket var DORMANT så länge de här fyra
+    // lägena stod `test.fixme`; att ta bort dem gjorde det levande, och en
+    // grind som faller på maskinens humör bryter mot `CONTRIBUTING.md`
+    // § Rött-först lika säkert som ett riktigt fel.
+    //
+    // ATT FRAMÅTSPOLA 2 s ÄR OFARLIGT HÄR, och det är villkorat: pausen sker
+    // FÖRE klicket på Registrera, alltså innan simuleringens 350 ms-timers
+    // ens skapats, och `data=fixtur` håller `useOppnaBetalningar` avstängd
+    // (`enabled: false`) så ingen refetch-timer finns att spola förbi. Flyttas
+    // pausen någonsin till EFTER klicket måste marginalen omprövas — då
+    // spolar den genom körningen den ska frysa.
     const nu = await page.evaluate(() => Date.now());
-    await page.clock.pauseAt(new Date(nu + 500));
+    await page.clock.pauseAt(new Date(nu + 2_000));
   }
   return form;
 }
 
+/**
+ * ═══════════════════════════════════════════════════════════════════════════
+ * ALLA TIO LÄGEN ÄR LEVANDE IGEN (TASK-402.8 slutvarvet, 2026-09-06)
+ * ═══════════════════════════════════════════════════════════════════════════
+ * HISTORIKEN, eftersom den förklarar varför referenserna hoppade nio varv:
+ * åtta av de tio lägena stod `test.fixme` från varv 2 till varv 10. Marcus,
+ * mitt i facit-iterationen av sätt-alla-blocket: *"Angående min iteration på
+ * 'Sätt alla belopp' så måste vi ju inte ta nya bilder och krångla, det gör vi
+ * när iterationerna är klara."* Varje formvarv skrev om samma åtta
+ * referenser, så en omtagning per varv hade kostat en full körning i taget och
+ * producerat en bokföring som var obsolet innan den lästes. De två
+ * Ångra-dialogerna stängdes aldrig av — dialogen renderas i en portal utanför
+ * formens scope och rördes därför inte av blocket — och var levande grind
+ * genom hela iterationen.
+ *
+ * ETT `fixme` OCH INTE ETT RÖTT CI var valet där: `CONTRIBUTING.md`
+ * § Rött-först säger att rött ska betyda EN sak, oväntad regression.
+ *
+ * Marcus kvittens 2026-09-06 avslutade iterationen (*"Nu är vi klara med
+ * bulkregistrerings-sidan också, vi kör på detta."*), och slutvarvet tog om
+ * de åtta med `--update-snapshots=all` — `=all` krävs, eftersom en
+ * aria-snapshot matchar som DELMÄNGD och ett läge som bara FÅTT noder annars
+ * passerar oförändrat och tyst underbeskriver DOM:en. `facit.json`s
+ * `referenser[].sha256` är uppdaterade i samma landning.
+ */
 test.describe('promoverings-grinden — bekräftelsesteget (ADR-103 B4)', () => {
   for (const [namn, viewport] of [
     ['desktop', DESKTOP],
