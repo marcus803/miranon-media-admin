@@ -1876,18 +1876,34 @@ export function BetalningsInkorg() {
           på en tom mängd (den kan betyda "vet inte än" — se hookens
           § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll.
 
-          EXTRA LUFT MOT FILTERKOMPONENTEN (Marcus prod-granskning
-          2026-09-06, S121 resume 4, TASK-410 tillägg): *"lägg mer luft
-          mellan markera-knappen och filtreringskomponenten också."* MÄTT
-          (ej ögonmätt): sektionsroten bär `gap-4` (16 px) mellan ALLA sina
-          direkta barn, alltså även mellan filterblocket och denna rad —
-          samma 16 px som varje annan brytning på sidan. `mt-2` HÄR (+8 px,
-          husets 4 px-skala) höjer BARA denna ENA övergång till 24 px totalt
-          utan att röra sidans övriga rytm — en generell gap-6 på sektionen
-          hade flyttat varje annan brytning på sidan i samma andetag, vilket
-          Marcus aldrig bad om. */}
+          EXTRA LUFT MOT FILTERKOMPONENTEN — TVÅ VARV.
+          VARV 1 (Marcus prod-granskning 2026-09-06, S121 resume 4, TASK-410
+          tillägg): *"lägg mer luft mellan markera-knappen och
+          filtreringskomponenten också."* MÄTT (ej ögonmätt): sektionsroten
+          bär `gap-4` (16 px) mellan ALLA sina direkta barn, alltså även
+          mellan filterblocket och denna rad — samma 16 px som varje annan
+          brytning på sidan. `mt-2` gav +8 px, 24 px totalt.
+
+          VARV 2 (Marcus granskning på granskningsservern, samma dag),
+          ordagrant: *"Jag vill ha mer luft ÖVER markera knappen, luften
+          under är bra som det är nu. Men lite mer över för att visualisera
+          att markeraknappen hör till listorna nedan, inte till
+          filtreringskomponenten."* 24 px räckte alltså inte för att läsa
+          som en TYDLIG gruppgräns — knappen skulle fortfarande kunna läsas
+          som filterpanelens svans. `mt-6` (+24 px, husets 4 px-skala) höjer
+          ÖVERGÅNGEN till 40 px totalt (16 bas + 24 tillägg): en STÖRRE,
+          medvetet väl synlig lucka, matchande samma `mt-6` FilterRad.tsx
+          själv använder mellan sin tratt-rad och sin egen utfällda panel
+          (samma "det här är en annan grupp"-signal, återanvänd i stället
+          för uppfunnen).
+
+          LUFTEN UNDER (mot listan/sökträffarna) RÖRS INTE AV NÅGOTDERA
+          VARVET: den bärs av SAMMA sektions-`gap-4` mot NÄSTA syskon
+          (`{soker ? ... : ...}`-blocket längre ner), och ingen marginal har
+          lagts där — 16 px, oförändrat sedan innan TASK-410, exakt vad
+          Marcus bad att få behålla ("luften under är bra som det är nu"). */}
       {markerbaraIds.length > 0 && (
-        <div className="mt-2 px-4">
+        <div className="mt-6 px-4">
           <MarkeringsAtgardsRad
             aktivt={markering.aktivt}
             antal={markering.antal}
