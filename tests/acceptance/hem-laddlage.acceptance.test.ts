@@ -2,7 +2,12 @@ import AxeBuilder from '@axe-core/playwright';
 import type { NetworkFixture } from '@msw/playwright';
 import { http } from 'msw';
 import type { z } from 'zod';
-import type { EventSchema, RegistrationSchema } from '../../src/domain/schemas';
+import type {
+  ActivityStatementSchema,
+  EventSchema,
+  RegistrationSchema,
+} from '../../src/domain/schemas';
+import { REQUEST_ID_EXTENSION_IRI, XAPI_IRI_BASE } from '../../src/domain/schemas';
 import { EF, json } from '../support/fixturvarld/handlers';
 import { expect, type Page, test } from './acceptance-bas';
 
@@ -35,7 +40,23 @@ import { expect, type Page, test } from './acceptance-bas';
  * - Layout-skift ≈ 0 per task-4.5-bevismönstret (S55 Del 11): EF-svaren
  *   PARKERAS obesvarade (håll-bar mock) → boundingBox-mätning UNDER
  *   laddning; svaren släpps → identisk mätning EFTER data (toEqual, exakta
- *   boxar — samma form som task-4.5 AC 2:s mät-stillhet).
+ *   boxar — samma form som task-4.5 AC 2:s mät-stillhet). DEN FAKTISKA
+ *   MÄTNINGEN (TASK-416.13, ADR-083 — denna rad LOVADE länge en boundingBox-
+ *   mätning som inte fanns i koden, bara i denna kommentar) bor i sitt eget
+ *   test nedan, samma håll-bar-mock-teknik som
+ *   `event-checkin-laddlage.acceptance.test.ts` (TASK-416.1) och
+ *   `mer-aktivitetshistorik-laddlage.acceptance.test.ts` (TASK-416.3) redan
+ *   bevisat sina motsvarande ytor med. Den mäter, GRÖNT, h2-rubriken PLUS
+ *   kortkroppen/första raden på Nästa event och Senaste aktivitet, samt
+ *   ENBART h2-rubriken (plus, `utanY`-avgränsat, Förfallna betalningars
+ *   h2) på Nya anmälningar/Förfallna betalningar — de TVÅ senare
+ *   sektionernas FÖRSTA RAD har ett eget, separat MÄTT fynd: se de två
+ *   `test.fail()`-testen strax efter huvudtestet, som dokumenterar (utan att
+ *   fälla CI) att `Skeleton variant="listRow"` INTE matchar den riktiga
+ *   avatar-radens boundingBox i vare sig `NyaAnmalningar.tsx` eller
+ *   `ForfallnaBetalningar.tsx` — en defekt TASK-416.9 aldrig rörde (dess
+ *   diff `cfcd3628` gällde uteslutande `NastaEvent.tsx`/
+ *   `SenasteAktivitetKompakt.tsx`).
  * - Framträdande-formen är mätlåst per task-8.1 (kommentaren på task-8.4):
  *   skeleton från första bildrutan, INGEN CSS-driven fördröjning — bevisas
  *   computed (L272) medan nätverket är parkerat.
@@ -203,6 +224,137 @@ function arrangeraTomCache(page: Page) {
   return page.addInitScript((nyckel) => localStorage.removeItem(nyckel), PERSIST_KEY);
 }
 
+/**
+ * Fixtur för MÄTNINGEN (TASK-416.13): ETT event, TVÅ Obekräftade
+ * registreringar — matchar EXAKT de två fasta skeleton-placeholderna
+ * (`Skeleton variant="listRow"` × 2) i BÅDE Nya anmälningar OCH Förfallna
+ * betalningar. `fulltData()` ovan duger INTE för denna mätning:
+ * `forfallnaBetalningar()` kräver en PASSERAD deadline (`fulltData()`s event
+ * ligger 2099, decennier bortom det) och `obekraftadeAnmalningar()` kräver
+ * status `Obekräftad` (`fulltData()`s sex rader är alla `Bekräftad (mail
+ * skickat)`) — med `fulltData()` renderar båda blocken sitt TOMLÄGE, som bär
+ * ett KÄNT, medvetet omätt geometri-skifte (PRD § Öppna frågor, Marcus-
+ * designval) mot skeleton-formen. Se testets egen kommentar för det skiftet.
+ *
+ * Status `Obekräftad` på BÅDA raderna gör dubbel nytta: det räknar dem som
+ * "nya anmälningar att bekräfta" OCH det UTESLUTER dem samtidigt ur
+ * Bevakningsradens "bekräftade saknar deltagarinfo"-definition B
+ * (`arBekraftad`, `hem-derivations.ts`) — Bevakningsraden förblir därför
+ * osynlig i BÅDA lägena, ingen tredje okontrollerad layoutkälla mellan
+ * Nästa event och Nya anmälningar som hade gjort en eventuell avvikelse
+ * svårare att tillskriva rätt block.
+ *
+ * Startdatum/deadline-paret är den ETABLERADE facit-kombinationen ur
+ * `hem.acceptance.test.ts`s egen "Förfallna betalningar"-svit: `2026-09-20`
+ * ⇒ deadline `2026-09-06` (14 dagar före), redan passerad mot FROZEN_NOW
+ * (`fixture-data.ts`, `2026-09-15T10:00+02:00` — sidans klocka är FRUSEN dit,
+ * `hermetic.ts`). ETT hårdkodat framtidsdatum (`2099-…`, som `fulltData()`)
+ * hade ALDRIG blivit förfallet; ett `Date.now()`-relativt datum räknas i
+ * Node-testprocessens VERKLIGA klocka — en annan tidslinje än sidans frusna
+ * — och glider isär från facit-kombinationen ovan varje dag som går.
+ */
+function medMatningsdata() {
+  return {
+    events: [
+      ev({
+        id: 'recEventMatning1',
+        eventNamn: 'Mätningseventet',
+        ort: 'Skövde',
+        startdatum: '2026-09-20',
+        antalAnmalda: 2,
+        maxPlatser: 20,
+      }),
+    ],
+    registrations: [
+      reg({
+        id: 'recRegMatning0',
+        fornamn: 'Alma',
+        efternamn: 'Almqvist',
+        eventId: 'recEventMatning1',
+        status: 'Obekräftad',
+        anmalningsavgift: 'Ej mottagen',
+        slutbetalning: 'Mottagen',
+        inskickad: '2026-09-15T06:00:00.000Z', // 2 tim före FROZEN_NOW
+      }),
+      reg({
+        id: 'recRegMatning1',
+        fornamn: 'Beata',
+        efternamn: 'Berg',
+        eventId: 'recEventMatning1',
+        status: 'Obekräftad',
+        anmalningsavgift: 'Ej mottagen',
+        slutbetalning: 'Mottagen',
+        inskickad: '2026-09-15T05:00:00.000Z', // 3 tim före FROZEN_NOW
+      }),
+    ],
+  };
+}
+
+let matningsStatementCounter = 0;
+/** Deterministisk v4-formad UUID (Zod `.uuid()`) — samma hjälpare som
+ *  `mer-aktivitetshistorik-laddlage.acceptance.test.ts`. */
+function matningsUuid(): string {
+  matningsStatementCounter += 1;
+  return `00000000-0000-4000-8000-${String(matningsStatementCounter).padStart(12, '0')}`;
+}
+
+/** Ett minimalt xAPI-statement som passerar `ActivityStatementSchema`, för
+ *  MÄTNINGENS "Senaste aktivitet"-rad ENSAM (ingen konsument bryr sig om
+ *  innehållet, bara om att en RIKTIG rad renderas efter datalandning). */
+function matningsStatement(): z.infer<typeof ActivityStatementSchema> {
+  return {
+    id: matningsUuid(),
+    actor: {
+      objectType: 'Agent',
+      name: 'Lotta',
+      account: { homePage: XAPI_IRI_BASE, name: matningsUuid() },
+    },
+    verb: { id: `${XAPI_IRI_BASE}/verbs/test-verb`, display: { 'sv-SE': 'markerade betalning' } },
+    object: {
+      objectType: 'Activity',
+      id: `${XAPI_IRI_BASE}/objects/registrations/rec-matning`,
+      definition: {
+        name: { 'sv-SE': 'Mätningsposten' },
+        type: `${XAPI_IRI_BASE}/activity-types/betalning`,
+      },
+    },
+    context: { extensions: { [REQUEST_ID_EXTENSION_IRI]: matningsUuid() } },
+    timestamp: '2026-09-15T07:00:00.000Z',
+  };
+}
+
+/**
+ * Håll-bar mock UTÖKAD med `get-activity-log` — MÄTNINGEN ENSAM (task-416.13).
+ * De tre delade containrarna (Nästa event / Nya anmälningar / Förfallna
+ * betalningar) hålls via EXAKT samma mekanism som `hallbarMock` (byggd på den
+ * funktionen, inte en kopia av den), men mätningen omfattar ÄVEN Senaste
+ * aktivitet — sitt EGET, oberoende `role="status"` (filhuvudets § DE TRE
+ * MÄTTA CONTAINRARNA). De FYRA andra testerna i denna svit betalar MEDVETET
+ * inte för att hålla den fjärde (normalläget hinner alltid settla innan deras
+ * assertions läses, se filhuvudet) — men en boundingBox "under laddning" för
+ * just DEN containern måste garanterat träffa FÖRE aktivitetsloggen landat,
+ * annars mäter mätningen sin egen tur i stället för kontraktet.
+ */
+function hallbarMockMedAktivitet(
+  network: NetworkFixture,
+  data: { registrations: RegRow[]; events: EventRow[] },
+) {
+  const st = hallbarMock(network, data);
+  const aktivitetParkerade: Array<() => void> = [];
+  network.use(
+    http.get(EF('get-activity-log'), async () => {
+      await new Promise<void>((slapp) => aktivitetParkerade.push(slapp));
+      return json({ statements: [matningsStatement()], nextCursor: null, total: 1 });
+    }),
+  );
+  const slappDeTre = st.slappAlla.bind(st);
+  st.slappAlla = () => {
+    slappDeTre();
+    for (const slapp of aktivitetParkerade.splice(0)) slapp();
+  };
+  return st;
+}
+
 test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
   test("AC 2 — 'Laddar…'-textraderna är borta ur Hem: laddbeskeden är enbart sr-only; ingen spinner", async ({
     page,
@@ -320,4 +472,246 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
       .analyze();
     expect(results.violations).toEqual([]);
   });
+
+  /** Strippar `y` ur en boundingBox. Används ENDAST för element vars
+   *  vertikala sidposition LEGITIMT förskjuts av en ANNAN sektions
+   *  data-styrda innehåll — inte av sin EGEN skeleton-geometri (se
+   *  huvudtestets kommentar för den uppmätta orsaksbilden: "Bekräfta
+   *  alla"/"Skicka påminnelse till alla"-knapparna och "Att påminna"-
+   *  underrubriken existerar bara EFTER datalandning, eftersom de kräver ett
+   *  känt antal — en count-agnostisk skeleton kan inte reservera plats för
+   *  ett innehåll den inte känner storleken på). Kvar är precis den
+   *  geometrin "layout-skift ≈ 0"-kontraktet faktiskt handlar om för DEN
+   *  sektionen: bredd, höjd och vänsterkant. */
+  function utanY(box: { x: number; y: number; width: number; height: number }) {
+    const { x, width, height } = box;
+    return { x, width, height };
+  }
+
+  type Ruta = { x: number; y: number; width: number; height: number };
+  /** Kastar om NÅGON boundingBox i `boxar` saknas (elementet fanns inte),
+   *  annars returnerar samma objekt med typen avsmalnad bort från `| null` —
+   *  Playwright typar `boundingBox()` som nullbar, men ett saknat element HÄR
+   *  är ett testfel, inte ett giltigt utfall att gå vidare med. */
+  function kravBoxar<T extends Record<string, Ruta | null>>(
+    boxar: T,
+    sammanhang: string,
+  ): { [K in keyof T]: Ruta } {
+    for (const [namn, box] of Object.entries(boxar)) {
+      if (!box) throw new Error(`boundingBox saknas för ${namn} ${sammanhang}`);
+    }
+    return boxar as { [K in keyof T]: Ruta };
+  }
+
+  test('MÄTNING (TASK-416.13, ADR-083) — boundingBox på Hem-kortens rubriker och första rad/kortkropp är IDENTISK under laddning och efter datalandning: Nästa event, Nya anmälningar, Senaste aktivitet, Förfallna betalningar', async ({
+    page,
+    network,
+  }) => {
+    await arrangeraTomCache(page);
+    const mocken = hallbarMockMedAktivitet(network, medMatningsdata());
+    await page.goto('/hem');
+
+    // FYRA laddande containrar — de TRE delade (Nästa event / Nya
+    // anmälningar / Förfallna betalningar, `anmalDataPending`) PLUS Senaste
+    // aktivitets EGEN (`useLatestActivity`, hållen av `hallbarMockMedAktivitet`
+    // ENSAM i denna fil). Väntar in ALLA FYRA innan mätning — annars kunde en
+    // container hinna montera EFTER att en annan redan mätts, och "identisk
+    // boundingBox" hade bevisat en tillfällighet i testets EGEN tur snarare
+    // än kontraktet.
+    await expect(page.locator('main#main').getByRole('status')).toHaveCount(4);
+    await page.mouse.move(0, 0); // mät-stillhet — neutralisera pekaren (L246)
+
+    // Rubrikerna: SAMMA element i båda lägena (h2:n bytter aldrig ut sig
+    // själv, bara sitt innehåll — Nästa event/Senaste aktivitet-rubrikerna
+    // är dessutom ALDRIG skelett, se resp. komponents källa).
+    const nastaEventH2 = page.locator('h2#hem-nasta-event');
+    const nyaAnmH2 = page.locator('h2#hem-nya-anmalningar');
+    const forfallnaH2 = page.locator('h2#hem-forfallna');
+    const senasteH2 = page.locator('h2#hem-senaste-aktivitet');
+
+    // "Nästa event"s kortkropp: EN gemensam locator för BÅDA lägena — den
+    // direkta `<div>`-syskonen till h2:n är antingen `role="status"` (laddar)
+    // eller den laddade `flex flex-col gap-4`-wrappern (`NastaEvent.tsx`),
+    // aldrig något annat element i det icke-felaktiga scenariot denna
+    // mätning täcker (isError testas inte här). Mäter HELA kroppen, inte en
+    // enskild rad — kortet är en hero, inte en lista, så "första raden" här
+    // är dess enda innehållsblock (TASK-416.9 matchade just DENNA kropps
+    // rad-för-rad-höjder, se `NastaEvent.tsx`s diff).
+    const nastaEventKropp = page.locator('section[aria-labelledby="hem-nasta-event"] > div');
+
+    // Senaste aktivitet — pending: FÖRSTA radens `<div>` i `role="status"`
+    // (`SenasteAktivitetKompakt.tsx`s `[0,1,2,3].map`); laddat: FÖRSTA `<li>`.
+    const senasteRadLaddar = page
+      .locator('section[aria-labelledby="hem-senaste-aktivitet"] [role="status"] > div')
+      .first();
+
+    const under = kravBoxar(
+      {
+        nastaEventH2: await nastaEventH2.boundingBox(),
+        nastaEventKropp: await nastaEventKropp.boundingBox(),
+        nyaAnmH2: await nyaAnmH2.boundingBox(),
+        forfallnaH2: await forfallnaH2.boundingBox(),
+        senasteH2: await senasteH2.boundingBox(),
+        senasteRad: await senasteRadLaddar.boundingBox(),
+      },
+      'UNDER laddning',
+    );
+
+    mocken.slappAlla();
+
+    // Datalandning klar: samtliga fyra containrar har lämnat isPending.
+    await expect(page.locator('main#main').getByRole('status')).toHaveCount(0);
+    await expect(page.getByText('2 nya anmälningar att bekräfta')).toBeVisible();
+    await expect(page.getByText('2 förfallna betalningar')).toBeVisible();
+    // Dubbel requestAnimationFrame — samma väntan som
+    // `event-checkin-laddlage.acceptance.test.ts` (TASK-416.1) använder
+    // innan sin EFTER-mätning: layouten ska ha hunnit bildrutan ut.
+    await page.evaluate(
+      () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+    );
+
+    const senasteRadLaddad = page
+      .locator('section[aria-labelledby="hem-senaste-aktivitet"]')
+      .getByRole('listitem')
+      .first();
+
+    const efter = kravBoxar(
+      {
+        nastaEventH2: await nastaEventH2.boundingBox(),
+        nastaEventKropp: await nastaEventKropp.boundingBox(),
+        nyaAnmH2: await nyaAnmH2.boundingBox(),
+        forfallnaH2: await forfallnaH2.boundingBox(),
+        senasteH2: await senasteH2.boundingBox(),
+        senasteRad: await senasteRadLaddad.boundingBox(),
+      },
+      'EFTER datalandning',
+    );
+
+    // MÄTNINGEN — exakt likhet (`toEqual`), ingen tolerans-marginal, för de
+    // TVÅ block ingenting ANNAT på sidan förskjuter: Nästa event (första
+    // sektionen, inget ovanför) och Nya anmälningars EGEN rubrik (dess
+    // innehåll växlar Skeleton→text, men h2-BOXEN är blockbredd × radhöjd i
+    // BÅDA fallen, opåverkad av vad grannsektioner gör).
+    expect(efter.nastaEventH2).toEqual(under.nastaEventH2);
+    expect(efter.nastaEventKropp).toEqual(under.nastaEventKropp);
+    expect(efter.nyaAnmH2).toEqual(under.nyaAnmH2);
+
+    // Förfallna betalningars och Senaste aktivitets Y-koordinat förskjuts
+    // MÄTT (+41px resp. +112px i denna fixtur) av "Bekräfta alla"-knappen
+    // som monteras under Nya anmälningars lista NÄR OCH ENDAST NÄR
+    // `anmalningar.total > 0` blir känt — ett tillstånd som per definition
+    // inte existerar förrän datat landat (`NyaAnmalningar.tsx`s sista gren).
+    // Det är EXAKT samma orsak för Senaste aktivitet, plus Förfallna
+    // betalningars EGEN "Skicka påminnelse till alla"-knapp OCH "Att
+    // påminna"-underrubriken (`ForfallnaBetalningar.tsx`) som i sin tur
+    // förskjuter allt UNDER den ytterligare. Detta är INGET regressions-fynd
+    // — en flat, count-agnostisk skeleton kan strukturellt inte reservera
+    // plats för en knapp/rubrik vars EXISTENS beror på en siffra skeletonen
+    // per definition inte känner. `utanY()` isolerar den geometri som
+    // FAKTISKT hör till "har DENNA sektions egen skeleton-storlek matchat
+    // dess laddade storlek" — och det har den, för båda dessa rubriker och
+    // för Senaste aktivitets rad (se nedan).
+    expect(utanY(efter.forfallnaH2)).toEqual(utanY(under.forfallnaH2));
+    expect(utanY(efter.senasteH2)).toEqual(utanY(under.senasteH2));
+    expect(utanY(efter.senasteRad)).toEqual(utanY(under.senasteRad));
+  });
+
+  /**
+   * KÄND, MÄTT DEFEKT — UTANFÖR TASK-416.13:s scope, `src/**` rörs INTE här.
+   *
+   * `Skeleton variant="listRow"` (`Skeleton.tsx`, `h-[3lh] w-full`) — den
+   * FASTA tvårads-placeholdern `NyaAnmalningar.tsx`/`ForfallnaBetalningar.tsx`
+   * båda renderar under `anmalDataPending` — matchar INTE en riktig
+   * avatar+tvåradsrads boundingBox. Mätt i DENNA fixtur (Chromium, 1280×720,
+   * 2026-09-06): skeleton `{width:568, height:72}`, riktig rad
+   * `{width:545, height:66}` (x/y oförändrat — bara storleken glider).
+   * Trolig dubbel orsak: (1) `h-[3lh]` (tre radhöjder) mot en rad som i
+   * verkligheten bär TVÅ textrader + `py-3`; (2) skeletonen sitter DIREKT i
+   * `role="status"`-containern (full sektionsbredd) medan den riktiga raden
+   * sitter i en `<ul>` med `pr-3` + `scrollbar-inline` (permanent
+   * scrollbar-gutter), en smalare innehållsbredd.
+   *
+   * `TASK-416.9` (denna skivas egen förutsättning) rörde ALDRIG dessa två
+   * komponenter — dess diff (`cfcd3628`) ändrade bara `NastaEvent.tsx` och
+   * `SenasteAktivitetKompakt.tsx`. Defekten fanns alltså redan FÖRE
+   * TASK-416.13 och upptäcktes AV mätningen denna skiva lägger till — precis
+   * ADR-083s poäng: filhuvudet ska beskriva vad testet FAKTISKT bevisar,
+   * aldrig mer. `test.fail()` håller detta test GRÖNT i CI (Playwright
+   * kräver att testet faktiskt fallerar; fallerar det INTE en dag —
+   * komponenten fixad — flaggar Playwright ett OVÄNTAT pass, vilket är
+   * signalen att ta bort denna annotation). Rapporterat till orkestreraren
+   * i denna skivas slutrapport; ingen ny backlog-post myntad här (det
+   * beslutet ligger hos orkestreraren/Marcus).
+   */
+  test.fail(
+    'KÄND DEFEKT — Nya anmälningars listradsskelett matchar INTE den riktiga radens boundingBox (ej denna skivas scope)',
+    async ({ page, network }) => {
+      await arrangeraTomCache(page);
+      const mocken = hallbarMock(network, medMatningsdata());
+      await page.goto('/hem');
+
+      const radLaddar = page
+        .locator(
+          'section[aria-labelledby="hem-nya-anmalningar"] [role="status"] span[aria-hidden="true"]',
+        )
+        .first();
+      await expect(radLaddar).toBeVisible();
+      await page.mouse.move(0, 0);
+      const under = await radLaddar.boundingBox();
+      if (!under) throw new Error('boundingBox saknas för Nya anmälningars rad UNDER laddning');
+
+      mocken.hall = false;
+      mocken.slappAlla();
+      await expect(page.getByText('2 nya anmälningar att bekräfta')).toBeVisible();
+      await page.evaluate(
+        () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+      );
+
+      const radLaddad = page
+        .locator('section[aria-labelledby="hem-nya-anmalningar"]')
+        .getByRole('listitem')
+        .first();
+      const efter = await radLaddad.boundingBox();
+      if (!efter) throw new Error('boundingBox saknas för Nya anmälningars rad EFTER datalandning');
+
+      expect(efter).toEqual(under);
+    },
+  );
+
+  test.fail(
+    'KÄND DEFEKT — Förfallna betalningars listradsskelett matchar INTE den riktiga radens boundingBox (ej denna skivas scope)',
+    async ({ page, network }) => {
+      await arrangeraTomCache(page);
+      const mocken = hallbarMock(network, medMatningsdata());
+      await page.goto('/hem');
+
+      const radLaddar = page
+        .locator(
+          'section[aria-labelledby="hem-forfallna"] [role="status"] span[aria-hidden="true"]',
+        )
+        .first();
+      await expect(radLaddar).toBeVisible();
+      await page.mouse.move(0, 0);
+      const under = await radLaddar.boundingBox();
+      if (!under)
+        throw new Error('boundingBox saknas för Förfallna betalningars rad UNDER laddning');
+
+      mocken.hall = false;
+      mocken.slappAlla();
+      await expect(page.getByText('2 förfallna betalningar')).toBeVisible();
+      await page.evaluate(
+        () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+      );
+
+      const radLaddad = page
+        .locator('section[aria-labelledby="hem-forfallna"]')
+        .getByRole('listitem')
+        .first();
+      const efter = await radLaddad.boundingBox();
+      if (!efter)
+        throw new Error('boundingBox saknas för Förfallna betalningars rad EFTER datalandning');
+
+      expect(efter).toEqual(under);
+    },
+  );
 });
