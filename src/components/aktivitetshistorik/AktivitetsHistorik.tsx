@@ -425,43 +425,81 @@ function AktivitetsRad({
   );
 }
 
-/** Lugnt laddläge (DESIGN-SYSTEM-SPEC §15 — "Laddar…"-textrader och spinners
- * används inte, app-brett). Skeleton-block i listans SLUTGEOMETRI (samma
- * `divide-y`-container som det laddade läget) så inget hoppar när data landar. */
+/**
+ * Lugnt laddläge (DESIGN-SYSTEM-SPEC §15 — "Laddar…"-textrader och spinners
+ * används inte, app-brett). Skeleton-block i listans SLUTGEOMETRI så inget
+ * hoppar när data landar.
+ *
+ * TASK-416.3 — FRAGMENT, inte en enda omslutande `<div>`: sedan FilterRad
+ * monterades även i isPending (komponentens egen kommentar) MÅSTE varje
+ * skeleton-block sitta på samma nivå och avstånd som sin laddade
+ * motsvarighet — statusraden `<p ref={statusRef}>` ("Visar N poster."),
+ * dagsgruppens `<h2>` och listans `divide-y`-kort — annars driver FilterRad
+ * OCH raden isär geometriskt trots att båda nu är monterade i båda
+ * grenarna. MÄTT, inte antaget (håll-bar mock,
+ * `tests/acceptance/mer-aktivitetshistorik-laddlage.acceptance.test.ts`):
+ * utan statusrads-placeholdern och rubrik-platshållaren landade den riktiga
+ * FÖRSTA RADEN 29 px längre ned än skelettets rad (avsaknaden av
+ * statusradens + `<h2>`:ns höjd+mellanrum), och skelettraden själv mätte
+ * 3 px för HÖG (den borttagna `gap-1` nedan — AktivitetsRad.tsx:s motsvarande
+ * textkolumn saknar helt gap mellan sina två rader).
+ */
 function LaddLage() {
   return (
-    <div className="flex flex-col gap-4 px-4" aria-busy="true">
-      <span className="sr-only">Laddar aktivitetshistorik…</span>
-      <Skeleton variant="text" className="w-24 text-small" />
-      <div className="divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4">
-        {[0, 1, 2, 3].map((i) => (
-          <div key={i} className="flex min-h-16 items-center gap-3 py-2.5">
-            <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
-            <div className="flex min-w-0 flex-1 flex-col gap-1">
-              <Skeleton variant="text" className="w-3/5 text-body" />
-              <Skeleton variant="text" className="w-2/5 text-caption" />
-            </div>
-          </div>
-        ))}
+    <>
+      {/* Statusradens plats ("Visar N poster.", `px-4 text-small` i den
+          laddade grenen) — ren geometri-platshållare, ej en egen aria-busy-
+          region (den busy-annonserande sr-only-texten bor i kort-regionen
+          nedan, som förr). */}
+      <div className="px-4">
+        <Skeleton variant="text" className="w-40 text-small" />
       </div>
-    </div>
+      <div className="flex flex-col gap-6 px-4">
+        <div className="flex flex-col gap-2" aria-busy="true">
+          <span className="sr-only">Laddar aktivitetshistorik…</span>
+          {/* Dagsgruppens <h2>-plats. */}
+          <Skeleton variant="text" className="w-24 text-small" />
+          <div className="divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4">
+            {[0, 1, 2, 3].map((i) => (
+              <div
+                key={i}
+                data-testid="aktivitetshistorik-skeleton-rad"
+                className="flex min-h-16 items-center gap-3 py-2.5"
+              >
+                <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <Skeleton variant="text" className="w-3/5 text-body" />
+                  <Skeleton variant="text" className="w-2/5 text-caption" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
 /**
  * Filterraden (TASK-201.8, B-målet) — kategori + event (Select-primitiven,
  * ADR-044) + tidsperiod (ToggleButtonGroup-primitiven). "Ovanför kärnvyns
- * lista" (AC #1) — monterad i den LADDADE grenen tillsammans med `<h1>`
- * (aldrig i den bara isPending/isError-grenen, se
- * `AktivitetsHistorik`-komponentens egen kommentar) och stannar därför
- * monterad genom varje filterbyte (`keepPreviousData`,
- * `useActivityLog.ts`) — ett val i en dropdown tappar aldrig fokus under
- * sig själv (AC #3, tangentbordsvägen).
+ * lista" (AC #1) — monterad i BÅDE isPending- och den laddade grenen
+ * (TASK-416.3: sidkromet renderas i alla querytillstånd, PRD TASK-416 §
+ * Bakgrund — enbart isError-grenen saknar den fortfarande, oförändrat
+ * scope), aldrig unmountad mellan dem. I isPending är HELA raden
+ * `isDisabled` (kontrollerna kan inte styra en lista som inte finns än);
+ * när första hämtningen landar går den över i den laddade grenen med
+ * `isDisabled={false}` och stannar DÄR monterad genom varje efterföljande
+ * filterbyte (`keepPreviousData`, `useActivityLog.ts` — ett filterbyte
+ * sätter `isPending` aldrig till sant igen) — ett val i en dropdown tappar
+ * aldrig fokus under sig själv (AC #3, tangentbordsvägen).
  *
  * Event-dropdownens data delar queryKey med `EventValjare`/`EventsList`
  * (`queryKeys.events.list`) — varm cache vid navigering från Event, kall
- * hämtning vid djuplänk hit; `isDisabled` under tiden (samma golv som
- * EventsList.tsx:s panel-Select under `isPending`).
+ * hämtning vid djuplänk hit; `eventerLaddar` disablar den OBEROENDE av
+ * `isDisabled` (samma golv som EventsList.tsx:s panel-Select under
+ * `isPending`) — de två källorna OR:as (`isDisabled || eventerLaddar`) så
+ * kontrollen förblir spärrad om endera hämtningen ännu pågår.
  *
  * Event-optionens ETIKETT är `eventFilterEtikett` — "Namn · Ort · datum",
  * INTE bar `eventVisningsNamn` (TASK-201.17, fynd ur S105:s QA-vandring: bar
@@ -479,6 +517,7 @@ function FilterRad({
   onTidsperiodChange,
   datumSpann,
   onDatumSpannChange,
+  isDisabled,
 }: {
   kategori: KategoriKey | null;
   onKategoriChange: (varde: KategoriKey | null) => void;
@@ -490,6 +529,10 @@ function FilterRad({
   onTidsperiodChange: (varde: Tidsperiod) => void;
   datumSpann: { start: CalendarDate; end: CalendarDate } | null;
   onDatumSpannChange: (v: { start: CalendarDate; end: CalendarDate } | null) => void;
+  /** TASK-416.3 — sant i isPending: hela raden inert tills kärnvyns data
+   * finns. `false` i den laddade grenen (event-Selecten kan ändå vara
+   * disabled individuellt via `eventerLaddar`, se komponentens filhuvud). */
+  isDisabled: boolean;
 }) {
   /* S106-passet, steg 2 — FILTERRADEN UPPDELAD (Marcus 2026-08-15: tre
    * kontroller på samma rad "ser extremt ihoptryckt ut"). Husets stapling
@@ -502,6 +545,7 @@ function FilterRad({
       <ToggleButtonGroup<Tidsperiod>
         label="Tidsperiod"
         spread
+        isDisabled={isDisabled}
         selectedKey={tidsperiod}
         onSelectionChange={onTidsperiodChange}
       >
@@ -516,6 +560,7 @@ function FilterRad({
         <Select
           label="Kategori"
           size="sm"
+          isDisabled={isDisabled}
           selectedKey={kategori ?? ALLA}
           onSelectionChange={(k) => {
             const varde = k == null || String(k) === ALLA ? null : (String(k) as KategoriKey);
@@ -533,7 +578,7 @@ function FilterRad({
         <Select
           label="Event"
           size="sm"
-          isDisabled={eventerLaddar}
+          isDisabled={isDisabled || eventerLaddar}
           selectedKey={eventId ?? ALLA}
           onSelectionChange={(k) => {
             const varde = k == null || String(k) === ALLA ? null : String(k);
@@ -559,7 +604,7 @@ function FilterRad({
           (ömsesidigt exklusiva, en tidsfiltrering i taget). */}
       <div className="flex flex-col gap-1">
         <span className="font-medium text-small text-text-secondary">Datum</span>
-        <DatumFalt value={datumSpann} onChange={onDatumSpannChange} />
+        <DatumFalt value={datumSpann} onChange={onDatumSpannChange} isDisabled={isDisabled} />
       </div>
     </div>
   );
@@ -767,6 +812,25 @@ export function AktivitetsHistorik() {
         <header className={headerKlass}>
           <h1 className="font-semibold text-3xl">Aktivitetshistorik</h1>
         </header>
+        {/* TASK-416.3 — filterraden monterad ÄVEN i laddläget (PRD TASK-416
+            § Bakgrund: sidkromet i alla querytillstånd, bara listkroppen
+            växlar). `isDisabled` spärrar samtliga kontroller — Lotta kan
+            inte filtrera en lista som ännu inte finns. Identiska props som
+            den laddade grenens FilterRad (utom isDisabled) håller
+            geometrin stabil när isPending går över till laddat. */}
+        <FilterRad
+          kategori={kategori}
+          onKategoriChange={setKategori}
+          eventId={eventId}
+          eventOptions={eventOptions}
+          eventerLaddar={eventerLaddar}
+          onEventChange={setEventId}
+          tidsperiod={tidsperiod}
+          onTidsperiodChange={valjTidsperiod}
+          datumSpann={datumSpann}
+          onDatumSpannChange={valjDatumSpann}
+          isDisabled
+        />
         <LaddLage />
       </div>
     );
@@ -813,7 +877,9 @@ export function AktivitetsHistorik() {
       </header>
 
       {/* Filterraden (AC #1) — OVANFÖR listan, alltid synlig (ingen
-          disclosure/tratt-panel; alla tre kontroller är redan i sikte). */}
+          disclosure/tratt-panel; alla tre kontroller är redan i sikte).
+          isDisabled={false}: kärnvyns data finns (isPending-grenen ovan bar
+          samma rad med isDisabled={true} — se dess kommentar). */}
       <FilterRad
         kategori={kategori}
         onKategoriChange={setKategori}
@@ -825,6 +891,7 @@ export function AktivitetsHistorik() {
         onTidsperiodChange={valjTidsperiod}
         datumSpann={datumSpann}
         onDatumSpannChange={valjDatumSpann}
+        isDisabled={false}
       />
 
       {total === 0 ? (
