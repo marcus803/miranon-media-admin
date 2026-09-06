@@ -158,8 +158,11 @@ const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
    det inte. Det är också husets regel (CLAUDE.md § Design-system: inga
    hårdkodade färger, allt via custom properties).
 
-   DET VALDA SEGMENTETS KONTUR ÄR `--mm-text-secondary`, och steget dit tog
-   fyra varv med Marcus öga som instrument:
+   DET VALDA SEGMENTETS KONTUR ÄR `--mm-text`, och steget dit tog fem varv med
+   Marcus öga som instrument. Landningen är samma svärta som Registrera-
+   knappen, och det är ett MEDVETET val efter att tre dämpningar prövats:
+   *"om vi går tillbaka till mörkgrå då, samma som registrera knappen, de går
+   färgerna ihop i alla fall."*
 
      varv 5–6  `--mm-text`           14,22:1 / 13,31:1  *"för mörk grå färg …
                                      nu har den ju samma färg som registrera
@@ -168,18 +171,21 @@ const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
                                      innan"*
      varv 8    guld (`--mm-primary-hover` på `--mm-primary-tint`)
                                       3,14:1 /  3,10:1  *"Blev sämre"*
-     varv 9    `--mm-text-secondary`  7,25:1 /  6,78:1  ← här
+     varv 9    `--mm-text-secondary`  7,25:1 /  6,78:1  *"Blev sämre"* i sak —
+                                     varv 10 valde bort dämpningen helt
+     varv 10   `--mm-text`           14,22:1 / 13,31:1  ← här, tillbaka till
+                                     varv 6:s värde
 
-   TOLKNINGEN, BOKFÖRD: Marcus sade *"Ta tillbaka den vi hade innan men testa
-   att dämpa den lite mer."* — alltså varv 6:s grå form (fyllning
-   `--mm-bg-emphasized`, kontur i den grå textskalan), men ett steg ljusare än
-   `--mm-text`. Skalan har exakt ett steg mellan varv 6:s val och varv 7:s:
-   `--mm-text-secondary` (neutral-600) ligger mellan `--mm-text` (900) och
-   `--mm-text-muted` (500). Guldet är rivet, kontur och fond.
+   VARFÖR SVÄRTAN ÄR RÄTT TROTS ATT DEN DELAS MED PRIMÄRKNAPPEN: invändningen
+   i varv 7 var att konturen såg ut som Registrera-knappen. Tre dämpningar
+   senare är domen den motsatta — färgerna GÅR IHOP, och en kontur är inte en
+   fyllning: den mörka kanten läser som "vald", inte som "primär handling",
+   eftersom segmentet fortfarande är en outline-knapp med ljus fyllning.
+   Guldet från varv 8 är rivet, kontur och fond.
 
    Golvet är oförändrat: WCAG 1.4.11 kräver 3:1 för tillståndsmarkören mot
    BÅDA angränsande färgerna (panelen och segmentets egen fyllning), och
-   7,25:1 / 6,78:1 klarar det med marginal. Texten (`--mm-text`) mot
+   14,22:1 / 13,31:1 klarar det med bred marginal. Texten (`--mm-text`) mot
    fyllningen ger 13,31:1 mot 4,5-golvet.
 
    INGENTING I BOXMODELLEN ÄNDRAS MELLAN VALT OCH OVALT (varv 6). Marcus:
@@ -215,9 +221,9 @@ const SEGMENT_KLASS = [
   'contrast-more:border-border-strong',
   // Valt: intryckt sekundär — tonad platta, mörk kant, dubblerad via en INSET
   // ring. Ingen viktändring, ingen kantbredd-ändring, ingen padding-ändring.
-  'data-[selected]:border-(--mm-text-secondary) data-[selected]:bg-bg-emphasized',
+  'data-[selected]:border-text data-[selected]:bg-bg-emphasized',
   'data-[selected]:font-medium data-[selected]:text-text',
-  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text-secondary)]',
+  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text)]',
 ].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
