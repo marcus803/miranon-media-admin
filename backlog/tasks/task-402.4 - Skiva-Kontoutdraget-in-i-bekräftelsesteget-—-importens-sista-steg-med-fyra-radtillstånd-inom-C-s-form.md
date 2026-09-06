@@ -3,10 +3,10 @@ id: TASK-402.4
 title: >-
   Skiva: Kontoutdraget in i bekräftelsesteget — importens sista steg med fyra
   radtillstånd inom C:s form
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 02:46'
+updated_date: '2026-09-06 07:10'
 labels:
   - ready-for-agent
 dependencies:
@@ -164,3 +164,9 @@ assertion/text ändrad.
 
 PR:en kvarstår draft, ej armerad.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landad som PR #2365 → main cf9ba0ba (2026-09-06 ~07:40 UTC). AFK-proveniens: S121 resume 3 (Marcus mandat vid paus 3), bygg-agent Opus 5 (bokförd tier-avvikelse) i egen worktree, staplad på #2363 (b360efd5), landad utan rebase efter #2363. CI rött på PR-ytan (Biome: två formatfel över lineWidth 100 i importminne.test.ts och e2e-filen) rättat av fix-agent (6745a797) — byggarens 'biome 0' mättes före sista redigeringen; sidofynd TASK-408 (huvudkatalogens delade node_modules bär Biome 2.5.7 mot lockfilens 2.5.11). Review runda 1 (Sonnet 5, scope b360efd5...6745a797, 19 filer): inga blockerande fynd, ett info/auto-fix (e2e-filen har 8 test, PR-kropp/notes sa 9), risk hög som domänklass (race-vakt + dubblettskydd i betalningsregistreringen) — Marcus GO 2026-09-06 morgon; review-loop-beslut exit 20 → GO; backstopp grön för 6745a797. Levererat: importminne.ts (sessionsbunden överlämning + ren klassning importradsklass, 29 api-pure-fall inkl. negativa), SwishImport.tsx 838 → 428 rader (bekräftelselistan riven, bankimport-parser.ts orörd), kalla=import i routen, importläget i useBekraftelsesteg med bankreferens, 409-väg och importlogg samt vakten korningAger (rättar ett latent fel i 402.3 där ombyggnads-signaturen kunde fyras mitt i en körning), tre nya kortformer i VariantC (osäker, omatchad, redan registrerad), AMENDERING-2026-09-06-importens-radtillstand.md + tre bilder i facit-katalogen och tre i task-402.4-facit-jamforelse/; ny e2e 8 fall ände till ände från fil till registrerade inbetalningar inkl. 409; färghistogram noll nya färger mot facit, kortfyllning 120 px och gap 20 px = facitets tal. Fynd bokförda: raderAttRegistrera utan src-konsument (kvar, testad); vidImporterade i inkorgen riven; facit.json referenser ej utökade (skäl i amenderingen); UUID-fälla i e2e-mocken. Sessionsdok S121 Del 6 §6.7.
+<!-- SECTION:FINAL_SUMMARY:END -->
