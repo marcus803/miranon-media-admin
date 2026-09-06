@@ -70,21 +70,41 @@ function WaitlistRow({ entry }: { entry: WaitlistEntry }) {
 }
 
 /**
+ * Fält-platshållarens ANATOMI matchar `Field`s egen responsiva wrapper
+ * (TASK-416.17 runda 2 — review-fynd PR #2408, samma fynd som `MailLog.tsx`
+ * eftersom `Field` här är byggd identiskt): staplar `dt` ovanpå `dd` under
+ * `sm:` (`flex-col`, två line-boxar) och lägger dem sida vid sida däröver
+ * (`sm:flex-row`, EN line-box). En platshållare med en enda Skeleton-rad
+ * per fält matchade bara desktop-formen — mobilviewporten (375×812) var
+ * OMÄTT och föll: den riktiga raden blir DUBBELT så hög per fält under
+ * 640 px. Denna platshållare bär SAMMA `flex flex-col gap-0.5 sm:flex-row
+ * sm:gap-2`-klasser som `Field` och TVÅ Skeleton-block (dt-/dd-motsvarighet).
+ */
+function FieldSkeleton({ ddWidth }: { ddWidth: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+      <Skeleton variant="text" className="w-20 sm:min-w-32" />
+      <Skeleton variant="text" className={ddWidth} />
+    </div>
+  );
+}
+
+/**
  * Skeletonradens anatomi är IDENTISK med `WaitlistRow` (TASK-416.17 —
  * review-fynd på PR #2397, S123): `InitialAvatar`-cirkeln som ett
  * `size-9 rounded-full`-block (FAST höjd — dominerar radens
  * `items-center`-höjd oavsett ambient textmetrik, precis som den riktiga
  * cirkeln gör), namnet som textblock bredvid (ingen text-storleks-klass —
  * ärver samma ambienta storlek som `<span className="font-medium">`), och
- * EXAKT fyra `pl-12`-indragna platshållarrader för fältlistan (`Field`-
+ * EXAKT fyra `pl-12`-indragna `FieldSkeleton`-rader för fältlistan (`Field`-
  * radernas antal i `WaitlistRow` — samtliga fyra visas alltid, ingen är
  * nullable). Fältraderna ärver `text-small` från samma wrapper-klass som
  * den riktiga `<dl>` bär.
  *
  * Innan denna skiva var raden ETT generiskt `listRow`-block (`h-[3lh]`) —
  * 225 px för lågt vid tre rader jämfört med den riktiga anatomin (avatar +
- * namn + fyra fältrader). Mätt (boundingBox, `toEqual`, ±0 px):
- * `mer-vantelista-laddlage.acceptance.test.ts`.
+ * namn + fyra fältrader). Mätt (boundingBox, `toEqual`, ±0 px, desktop OCH
+ * mobil): `mer-vantelista-laddlage.acceptance.test.ts`.
  */
 function WaitlistSkeletonRow() {
   return (
@@ -97,10 +117,10 @@ function WaitlistSkeletonRow() {
         <Skeleton variant="text" className="w-2/5" />
       </div>
       <div className="flex flex-col gap-0.5 pl-12 text-small">
-        <Skeleton variant="text" className="w-1/3" />
-        <Skeleton variant="text" className="w-1/2" />
-        <Skeleton variant="text" className="w-1/3" />
-        <Skeleton variant="text" className="w-2/5" />
+        <FieldSkeleton ddWidth="w-1/3" />
+        <FieldSkeleton ddWidth="w-1/2" />
+        <FieldSkeleton ddWidth="w-1/3" />
+        <FieldSkeleton ddWidth="w-2/5" />
       </div>
     </div>
   );

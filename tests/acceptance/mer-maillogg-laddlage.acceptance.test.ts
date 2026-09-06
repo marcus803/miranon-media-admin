@@ -27,6 +27,13 @@ import { expect, type Page, test } from './acceptance-bas';
  * `w-full`, se `MailLog.tsx`s isPending-kommentar): `toEqual` jämför HELA
  * boxen (x/y/bredd/höjd) — en smalare placeholder-bredd (t.ex. tidigare
  * `w-28`) hade fällt måttet trots identisk höjd och position.
+ *
+ * RUNDA 2 (review-fynd PR #2408): `Field` (MailLog.tsx) staplar `dt` ovanpå
+ * `dd` under `sm:` (två line-boxar) och lägger dem sida vid sida däröver (en
+ * line-box) — en enda Skeleton-rad per fält matchade bara desktop-formen.
+ * Mobilviewporten 375×812 (samma bredd som `tests/visual/maillogg-visual.
+ * spec.ts`s etablerade `visual-mobile`-projekt) testas därför EXPLICIT här
+ * också, med `FieldSkeleton`s responsiva tvåblocks-anatomi (MailLog.tsx).
  */
 
 type Row = z.infer<typeof MailLogEntrySchema>;
@@ -103,6 +110,44 @@ test.describe('Maillogg — skeletonradens anatomi (TASK-416.17)', () => {
     if (!radLoaded) throw new Error('första listraden saknar boundingBox i laddat läge');
 
     // EXAKT likhet (toEqual) — MÄTNING ÄR LEVERANS, ingen tolerans-marginal.
+    expect(titelLoaded).toEqual(titelPending);
+    expect(radLoaded).toEqual(radPending);
+  });
+
+  test('AC #1/#2 (mobil 375×812) — MÄTNING: boundingBox på rubrik och första listraden är IDENTISK före och efter datalandning', async ({
+    page,
+    network,
+  }) => {
+    // Samma viewport-bredd som `tests/visual/maillogg-visual.spec.ts`s
+    // `visual-mobile`-projekt (375×812) — `Field`s `sm:`-brytpunkt (640 px)
+    // är INTE aktiv här, så dt/dd staplas (två line-boxar per fält) i
+    // stället för att radas (en line-box). Samma testfall, ny viewport.
+    await page.setViewportSize({ width: 375, height: 812 });
+    const slapp = hallbarMock(network, [
+      row({ utskicksNamn: 'Vårnyhetsbrev' }),
+      row({ utskicksNamn: 'Höstkampanj' }),
+      row({ utskicksNamn: 'Vinterbrev' }),
+    ]);
+    await page.goto('/mer/maillogg');
+    await expect(page.getByTestId('maillog-skeleton-rad').first()).toBeVisible();
+
+    const titelPending = await page
+      .getByTestId('maillog-skeleton-titelblock')
+      .locator('span')
+      .first()
+      .boundingBox();
+    const radPending = await boxa(page, 'maillog-skeleton-rad');
+    if (!titelPending) throw new Error('rubrik-skelettet saknar boundingBox i isPending (mobil)');
+
+    slapp();
+    await expect(page.getByRole('heading', { level: 1, name: 'Maillogg' })).toBeVisible();
+    await expect(page.getByText('Vårnyhetsbrev')).toBeVisible();
+
+    const titelLoaded = await page.getByRole('heading', { level: 1 }).boundingBox();
+    const radLoaded = await page.getByRole('listitem').first().boundingBox();
+    if (!titelLoaded) throw new Error('rubriken saknar boundingBox i laddat läge (mobil)');
+    if (!radLoaded) throw new Error('första listraden saknar boundingBox i laddat läge (mobil)');
+
     expect(titelLoaded).toEqual(titelPending);
     expect(radLoaded).toEqual(radPending);
   });

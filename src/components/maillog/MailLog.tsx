@@ -60,22 +60,45 @@ function MailLogRow({ entry }: { entry: MailLogEntry }) {
 }
 
 /**
+ * Fält-platshållarens ANATOMI matchar `Field`s egen responsiva wrapper
+ * (TASK-416.17 runda 2 — review-fynd PR #2408): `Field` staplar `dt` ovanpå
+ * `dd` under `sm:` (`flex-col`, två line-boxar) och lägger dem sida vid sida
+ * däröver (`sm:flex-row`, EN line-box). En platshållare med en enda Skeleton-
+ * rad per fält matchade bara desktop-formen — mobilviewporten (375×812,
+ * samma bredd som `tests/visual/maillogg-visual.spec.ts`s etablerade
+ * `visual-mobile`-projekt) var OMÄTT och föll: den riktiga raden blir
+ * DUBBELT så hög per fält under 640 px. Denna platshållare bär SAMMA
+ * `flex flex-col gap-0.5 sm:flex-row sm:gap-2`-klasser som `Field` och TVÅ
+ * Skeleton-block (dt-/dd-motsvarighet) — stackar identiskt på mobil, radar
+ * identiskt på desktop.
+ */
+function FieldSkeleton({ ddWidth }: { ddWidth: string }) {
+  return (
+    <div className="flex flex-col gap-0.5 sm:flex-row sm:gap-2">
+      <Skeleton variant="text" className="w-20 sm:min-w-32" />
+      <Skeleton variant="text" className={ddWidth} />
+    </div>
+  );
+}
+
+/**
  * Skeletonradens anatomi är IDENTISK med `MailLogRow` (TASK-416.17 —
  * review-fynd på PR #2397, S123): samma yttre klasser (`border-b`/`pb-3`/
  * `gap-1`/`break-inside-avoid`), namnraden som ETT textblock (ingen
  * text-storleks-klass — ärver samma ambienta storlek som den riktiga
- * `<span className="font-medium">`), och EXAKT fyra platshållarrader för
- * fältlistan (`Field`-radernas MAX-antal — bara Segment/filter är nullable,
- * skelettet reserverar platsen ändå: Lugnt laddläge hellre en outnyttjad
- * rad än ett layout-skift vid datalandning). Fältraderna ärver `text-small`
+ * `<span className="font-medium">`), och EXAKT fyra `FieldSkeleton`-rader
+ * för fältlistan (`Field`-radernas MAX-antal — send-email/index.ts sätter
+ * `filterSnapshot` OVILLKORAT (`segmentIds: …`) för varje utskick, så alla
+ * fyra fält är i praktiken TYPRADEN framåt, inte bara ett defensivt
+ * över-antagande — review-fynd PR #2408). Fältraderna ärver `text-small`
  * från samma wrapper-klass som den riktiga `<dl>` bär, i stället för att
  * upprepa storleken på varje `Skeleton` (samma `1lh`-mekanik som
  * `Skeleton.tsx`s filhuvud dokumenterar).
  *
  * Innan denna skiva var raden ETT generiskt `listRow`-block (`h-[3lh]`) —
  * 108 px för lågt vid tre rader jämfört med den riktiga anatomin (namn +
- * upp till fyra fältrader). Mätt (boundingBox, `toEqual`, ±0 px):
- * `mer-maillogg-laddlage.acceptance.test.ts`.
+ * upp till fyra fältrader). Mätt (boundingBox, `toEqual`, ±0 px, desktop OCH
+ * mobil): `mer-maillogg-laddlage.acceptance.test.ts`.
  */
 function MailLogSkeletonRow() {
   return (
@@ -85,10 +108,10 @@ function MailLogSkeletonRow() {
     >
       <Skeleton variant="text" className="w-2/5" />
       <div className="flex flex-col gap-0.5 text-small">
-        <Skeleton variant="text" className="w-3/5" />
-        <Skeleton variant="text" className="w-1/3" />
-        <Skeleton variant="text" className="w-1/4" />
-        <Skeleton variant="text" className="w-1/2" />
+        <FieldSkeleton ddWidth="w-3/5" />
+        <FieldSkeleton ddWidth="w-1/3" />
+        <FieldSkeleton ddWidth="w-1/4" />
+        <FieldSkeleton ddWidth="w-1/2" />
       </div>
     </div>
   );
