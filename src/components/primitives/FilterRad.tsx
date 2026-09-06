@@ -91,23 +91,6 @@ export interface FilterRadProps {
    * "Öppet/stängt är HUR-state").
    */
   defaultOppen?: boolean;
-  /**
-   * En EXTRA ändknapp, EFTER tratten (TASK-412). Utelämnad (normalfallet)
-   * ⇒ raden ser ut precis som förut — den delar tratt-radens `gap-4` men
-   * ändrar ingen befintlig konsuments layout.
-   *
-   * Första konsumenten är inkorgens ⋯-knapp (Marcus prod-granskning
-   * 2026-09-06: *"en rund ikon med tre prickar bredvid filtreringsikonen
-   * (till höger)"*) som öppnar en `Meny` med "Importera kontoutdrag" — men
-   * slotten är generisk (`ReactNode`, inte en typad "meny-knapp"-prop): nästa
-   * konsument kan lägga vad som helst litet och `shrink-0` här utan att
-   * primitiven behöver veta vad.
-   *
-   * ANSVARSGRÄNSEN ÄR KONSUMENTENS: `FilterRad` lägger bara platsen i
-   * rutnätet (samma `gap-4` som mellan `children` och tratten) — mått,
-   * ikon, `aria-label` och handling äger den som skickar in noden.
-   */
-  extraKnapp?: ReactNode;
   className?: string;
 }
 
@@ -242,7 +225,6 @@ export function FilterRad({
   onSkrivUt,
   triggerRef,
   defaultOppen = false,
-  extraKnapp,
   className,
 }: FilterRadProps) {
   // Öppet/stängt är HUR-state (URL-STATE-SPEC §Princip) och ägs internt —
@@ -308,7 +290,6 @@ export function FilterRad({
             {aktiva > 0 ? `, ${aktiva} ${aktiva === 1 ? 'aktivt' : 'aktiva'} filterval` : ''}
           </span>
         </AriaButton>
-        {extraKnapp}
       </div>
       <DisclosurePanel data-testid="filter-panel">
         {/* Tonala kortets form på INRE wrappern (se docblocket): allt

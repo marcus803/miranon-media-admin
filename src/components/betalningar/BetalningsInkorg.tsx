@@ -1,8 +1,8 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, CalendarRange, Clock, Ellipsis, Upload, X } from 'lucide-react';
+import { AlertTriangle, CalendarRange, ChevronsUpDown, Clock, Upload, X } from 'lucide-react';
 import { parseAsString, parseAsStringEnum, useQueryState } from 'nuqs';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import {
   Button as AriaButton,
   Input as AriaInput,
@@ -591,6 +591,10 @@ export function BetalningsInkorg() {
   const [visaImport, setVisaImport] = useState(false);
   const sokRef = useRef<HTMLInputElement>(null);
   const importKnappRef = useRef<HTMLButtonElement>(null);
+  // [TASK-412, femte varvet] Namn-spannets id — samma `aria-labelledby`-
+  // mönster som `EventValjare.tsx`s rubrik-form (`namnId`): triggerns
+  // tillgängliga namn kommer från SPANNET, inte från en separat etikett.
+  const betalningarRubrikId = useId();
   const annonseratRef = useRef(false);
   const idag = useMemo(idagIso, []);
 
@@ -1486,28 +1490,87 @@ export function BetalningsInkorg() {
           rubriken.
 
           ═══ BESLUT 2 (Marcus prod-granskning 2026-09-06, S121 resume 4,
-          TASK-412) — GÄLLANDE FORM ═══
+          TASK-412) — HISTORIK, RIVET AV BESLUT 3 NEDAN ═══
           Marcus, om dialog-formen importen fick (se `<Modal>`-monteringen
           nedan): *"jag vill liksom ha det lite 'renare' upptill."* Knappen
-          är RIVEN ur headern helt — INTE flyttad till filterraden (en
+          var RIVEN ur headern helt — INTE flyttad till filterraden (en
           första idé om det prövades och backades samma session: *"Jag vet
           inte om de där med att flytta sökrutan blir bra när jag tänker
           efter. Jag tror vi kan behålla det som det är MEN vi tar bort
           knappen 'Importera kontoutdrag' och skapar istället en rund ikon
           med tre prickar bredvid filtreringsikonen (till höger) som öppnar
-          vår dropdown där det står 'Importera kontoutdrag'."*). Sökfältet
-          STÅR ALLTSÅ KVAR precis där det var (se `FilterRad`-anropet nedan)
-          — bara headerns knapp+spegel är riven, och en ny ⋯-knapp (`Meny`)
-          landar i FilterRad-radens EGEN nya `extraKnapp`-slot, till höger om
-          tratten (se `FilterRad.tsx` § `extraKnapp`).
+          vår dropdown där det står 'Importera kontoutdrag'."*) — och landade
+          då i `FilterRad`-radens `extraKnapp`-slot, till höger om tratten.
 
-          HEADERN BÄR DÄRFÖR BARA RUBRIKEN NU: ingen knapp, ingen spegel,
-          ingen tre-delad rytm att hålla i synk med `FilterRad.tsx`s
-          trigger-mått. `px-4` (var `pl-4`) — högerkanten har ingen speglings-
-          plikt kvar, så den återgår till samma padding som vänsterkanten,
-          samma idiom som `AnmalningarSida.tsx`s enkla rubrik-header. */}
+          ═══ BESLUT 3 (Marcus, femte varvet samma dag) — GÄLLANDE FORM ═══
+          Två fynd i samma andetag: *"Agenten ändrade storleken på de tre
+          prickarna istället för att ändra storleken på cirkeln som de
+          sitter i vilket var vad jag menade. Ändra tillbaka prickarna …
+          när filterikonen är aktiv så blir den mörkgrå och SER större ut.
+          … Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
+          dropdown (typ som på eventdetalj-sidan)."* ⋯-knappen är ALLTSÅ
+          RIVEN IGEN, den här gången för gott — se `FilterRad.tsx` (hela
+          `extraKnapp`-slotten riven med den, ingen konsument kvar) och
+          `strokeWidth`-fyndet ovan (moot, försvinner med knappen).
+
+          RUBRIKEN "Betalningar" ÄR NU SJÄLV TRIGGERN, i eventväljarens
+          RUBRIK-FORM (`EventValjare.tsx` § "RUBRIK-FORMEN", rad ~344-392):
+          `h1` runt en `AriaButton` (`-mx-2 inline-flex … rounded-lg px-2
+          py-1 text-left hover:bg-bg-emphasized`), chevron 18 px intill
+          texten. SKILLNADEN ÄR MEDVETEN OCH SYNS: eventväljaren BYTER
+          OBJEKT (en `Select` — `SelectValue`/`selectedKey`), den här
+          triggern öppnar sidans ÅTGÄRDER (samma `Meny`/`MenyPost`-primitiv
+          `extraKnapp` använde) — därför `ChevronsUpDown` (samma ikon,
+          samma "det här fäller ut något"-signal) men `Meny`s `etikett`
+          "Åtgärder för Betalningar", inte ett värde-namn. `aria-haspopup`
+          sätts INTE manuellt — `MenuTrigger` (react-aria-components) sätter
+          den automatiskt på sin `Button`-kontext-medvetna barn, samma sätt
+          den redan gjorde det på ⋯-knappen (verifierat: `axe` gav noll fel
+          i sviten som byggde den).
+
+          INGEN BESKRIVNINGSRAD under rubriken (eventväljarens "Byt event"-
+          motsvarighet) — Marcus: *"jag vill ha det rent upptill"*, chevronen
+          ÄR hela signalen. `truncate` (samma nowrap-lås som förlagan) håller
+          rubriken på EN rad ner mot 320 px; menyn öppnar UNDER rubriken utan
+          att skjuta layouten (samma `Popover`-mekanik som ⋯-knappen redan
+          bevisade).
+
+          `importKnappRef` FLYTTAR HIT (från den nu rivna ⋯-knappen):
+          `stangImport` fokuserar den när importytan stängs, oförändrad
+          logik, ny plats.
+
+          HEADERN BÄR ALLTSÅ ÅTER "BARA RUBRIKEN" — men rubriken är nu
+          INTERAKTIV. `px-4` oförändrat sedan BESLUT 2 (ingen spegel-plikt,
+          se det stycket). */}
       <header className="flex flex-col gap-1 px-4">
-        <h1 className="font-semibold text-3xl">Betalningar</h1>
+        <h1 className="min-w-0 font-semibold text-3xl">
+          <Meny
+            etikett="Åtgärder för Betalningar"
+            trigger={
+              <AriaButton
+                ref={importKnappRef}
+                aria-labelledby={betalningarRubrikId}
+                className="-mx-2 inline-flex max-w-[calc(100%+1rem)] items-center gap-1.5 rounded-lg px-2 py-1 text-left hover:bg-bg-emphasized motion-safe:transition-colors"
+              >
+                <span id={betalningarRubrikId} className="block truncate">
+                  Betalningar
+                </span>
+                <ChevronsUpDown
+                  aria-hidden="true"
+                  size={18}
+                  className="shrink-0 text-text-secondary"
+                />
+              </AriaButton>
+            }
+          >
+            <MenyPost
+              ikon={<Upload aria-hidden="true" size={16} />}
+              onAction={() => setVisaImport(true)}
+            >
+              Importera kontoutdrag
+            </MenyPost>
+          </Meny>
+        </h1>
         {/* KÖ-RADEN ERSÄTTER TRE-TALS-RADEN (Marcus 2026-09-01, om
             "5 öppna · 5 förfallna · 0 kvitton i kö"): *"vad betyder det?
             … 5 förfallna hör väl inte hit, det hör väl till
@@ -1596,74 +1659,15 @@ export function BetalningsInkorg() {
              är oförändrade — de skickar inte propen och behåller sitt
              ihopfällda startläge. */
           defaultOppen
-          /* ⋯-KNAPPEN, TILL HÖGER OM TRATTEN (Marcus prod-granskning
-             2026-09-06, S121 resume 4, TASK-412) — se sidhuvudets BESLUT 2
-             för vägen hit (en flytt av sökrutan prövades och backades i
-             samma session). Knappen ÄR en RAW `AriaButton`, inte husets
-             `Button`-primitiv: mått och klasser är BOKSTAVLIGEN kopierade
-             från tratten ovan (`inline-flex shrink-0 items-center
-             justify-center rounded-full p-2.5`, 18 px ikon) eftersom Marcus
-             bad om just det ("samma mått") — knappen har ingen
-             "aktiv"-motsvarighet (tratten färgas när filter är satta; denna
-             öppnar bara en meny, så den bär alltid vilo-tonen).
-             `importKnappRef` FLYTTAR HIT från den rivna header-knappen:
-             `stangImport` fokuserar den när importytan stängs (se
-             `stangImport`s docblock) — samma fokus-kontrakt, ny plats. */
-          extraKnapp={
-            <Meny
-              etikett="Fler val för filtreringen"
-              trigger={
-                <AriaButton
-                  ref={importKnappRef}
-                  aria-label="Fler val för filtreringen"
-                  className="relative inline-flex shrink-0 items-center justify-center rounded-full bg-bg-muted p-2.5 hover:bg-bg-emphasized motion-safe:transition-colors"
-                >
-                  {/* [TASK-412, Marcus granskningsserver 2026-09-06]
-                      *"Ikonen med de tre prickarna ser ut att vara mindre
-                      än filtreringsikonen, de ska vara EXAKT lika stora."*
-
-                      MÄTT (Playwright `getBBox()` på båda SVG:erna, live mot
-                      denna sida, samma `size={18}`): `Filter`-glyfens
-                      TECKENGEOMETRI (inte den 18×18 renderade rutan) är
-                      x=2 y=3 bredd≈20 höjd≈19 av 24 — fyller ~83 % ×~79 % av
-                      sin ruta. `Ellipsis`s tre cirklar (r=1, mittpunkter
-                      y=12) mäter x=4 y=11 bredd=16 höjd=2 av 24 — bara ~8 %
-                      höjd. Lucides `Ellipsis` ÄR geometriskt gles (tre
-                      punkter, ingen fylld form); en bokstavlig höjd-matchning
-                      hade krävt ~4,75× större `size` (≈85 px) — synligt
-                      absurt, och hade dessutom gjort KNAPPEN större än
-                      tratten (padding är fast `p-2.5`, en större `size`
-                      växer knappens innehållsruta och därmed hela cirkeln —
-                      mätt: `size=22` gav en 42×42 px-knapp mot trattens
-                      38×38, `size=20` gav 40×40).
-
-                      LÖSNINGEN HÅLLER `size={18}` (SAMMA renderade SVG-ruta,
-                      SAMMA 38×38 px-knapp som tratten — mätt oförändrat) och
-                      höjer i stället `strokeWidth` från default 2 till 4:
-                      cirklarnas STRECK (inte deras `r`) gör dem visuellt
-                      solida i stället för tunna ringar. Optiskt provat
-                      stegvis mot en verklig rendering (inte gissat):
-                      `strokeWidth=2` (original) → tunt, exakt Marcus
-                      klagomål; `strokeWidth=5` → prickarna vidrör varandra
-                      och smälter ihop (cirkelradie efter streck = r+w/2 =
-                      3,5, avstånd mellan mittpunkter = 7 ⇒ 7=7, exakt
-                      kyssande); `strokeWidth=4` → tydligt fylligare/mörkare,
-                      fortfarande tre SKILDA prickar (radie 3, 1 enhets
-                      luft kvar). Samma optiska korrigering typografi
-                      kallar "optical sizing" — en glesare glyf kompenseras
-                      med extra vikt, inte med större yta. */}
-                  <Ellipsis aria-hidden="true" size={18} strokeWidth={4} className="shrink-0" />
-                </AriaButton>
-              }
-            >
-              <MenyPost
-                ikon={<Upload aria-hidden="true" size={16} />}
-                onAction={() => setVisaImport(true)}
-              >
-                Importera kontoutdrag
-              </MenyPost>
-            </Meny>
-          }
+          /* [TASK-412, femte varvet] ⋯-KNAPPEN ÄR RIVEN (var HÄR, i denna
+             `extraKnapp`-slot) — se sidhuvudets BESLUT 3: Marcus ville
+             prickarnas STORLEK ändrad genom cirkeln de sitter i, inte
+             genom prickarna själva, och bad samtidigt om en annan väg helt
+             ("Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en
+             dropdown"). `FilterRad.tsx`s `extraKnapp`-prop är riven i
+             samma commit (över-engineering-vakten: ingen konsument kvar).
+             Åtgärden bor nu i sidhuvudets rubrik-trigger, se `<header>`
+             ovan. */
           /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
              *"hela listan är för smal, det ska vara lika bred som menybaren.
              Även filtreringskomponenten"*).
@@ -1718,8 +1722,8 @@ export function BetalningsInkorg() {
           `Dialog` (ADR-044) — samma par som Ångra-dialogen i
           `RegistreratNuBlock.tsx`, `SegmentMailCompose.tsx` och
           `AtgardsSida.tsx`. KONTROLLERAT, INTE `DialogTrigger`: öppnaren
-          (⋯-menyns "Importera kontoutdrag", se `FilterRad`-anropets
-          `extraKnapp` ovan) sitter inte bredvid Modalen i JSX-trädet, så
+          (rubrik-triggerns meny "Importera kontoutdrag", se `<header>` ovan
+          § BESLUT 3) sitter inte bredvid Modalen i JSX-trädet, så
           `isOpen={visaImport}`/`onOpenChange` är samma kontrollerade mönster
           som `SegmentMailCompose.tsx`s bekräftelse-modal — `visaImport` var
           redan källan till sanning, bara VISNINGEN är ny.

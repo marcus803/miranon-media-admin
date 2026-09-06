@@ -396,9 +396,11 @@ async function importera(page: Page): Promise<Mockar> {
     timeout: 15_000,
   });
 
-  // [TASK-412] Importen är en DIALOG bakom ⋯-menyn (Marcus prod-granskning
-  // 2026-09-06) — INTE längre en egen knapp i sidhuvudet med en inline-panel.
-  await page.getByRole('button', { name: 'Fler val för filtreringen' }).click();
+  // [TASK-412, femte varvet] Importen är en DIALOG bakom RUBRIK-TRIGGERNS
+  // meny (Marcus: "gör Titeln 'Betalningar' till en dropdown") — INTE
+  // längre en egen knapp i sidhuvudet, och inte längre en separat ⋯-knapp
+  // (den vägen prövades och revs igen samma dag).
+  await page.getByRole('button', { name: 'Betalningar' }).click();
   await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
   const panel = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
   await expect(panel).toBeVisible();
@@ -641,29 +643,31 @@ test.describe('TASK-402.4 — tillgänglighet', () => {
 });
 
 /**
- * TASK-412 — IMPORTEN SOM DIALOG (Marcus prod-granskning 2026-09-06, S121
- * resume 4): en ⋯-knapp bredvid filtreringstratten öppnar en `Meny` vars
- * enda post öppnar importen i husets `Modal`/`Dialog` (ADR-044), i stället
- * för knappen + inline-panelen `TASK-402.4`s svit ovan en gång mätte mot.
+ * TASK-412 — IMPORTEN SOM DIALOG, NÅDD VIA RUBRIK-TRIGGERN (Marcus
+ * prod-granskning 2026-09-06, S121 resume 4, femte varvet samma dag):
+ * *"Ta bort 'Mer-ikonen' och gör Titeln 'Betalningar' till en dropdown
+ * (typ som på eventdetalj-sidan)."* Rubriken "Betalningar" ÄR triggern
+ * (samma `EventValjare.tsx` § "RUBRIK-FORMEN"-anatomi, fast med en `Meny`
+ * i stället för en `Select` — sidan BYTER inget objekt, den öppnar sina
+ * ÅTGÄRDER). En tidigare, nu riven, ⋯-knapp bredvid tratten (fjärde varvet)
+ * testades aldrig i produktion och lämnar inget spår kvar här.
  *
  * AC #3 — fokus IN vid öppning (react-arias `useDialog` fokuserar
  * DIALOG-ELEMENTET självt vid mount, `RegistreratNuBlock.tsx`s docblock
  * citerar samma källa), rubriken ÄR dialogens tillgängliga namn, fokus
- * ÅTER till ⋯-knappen vid stängning, och ett axe-svep av den ÖPPNA dialogen
- * (skilt från sviten ovans svep av STEGET efter överlämningen).
+ * ÅTER till rubrik-triggern vid stängning, och ett axe-svep av den ÖPPNA
+ * dialogen (skilt från sviten ovans svep av STEGET efter överlämningen).
  */
 test.describe('TASK-412 — importen som dialog', () => {
-  test('⋯-menyn öppnar dialogen; fokus in vid öppning, tillbaka vid Escape; axe utan fel', async ({
+  test('rubrik-triggerns meny öppnar dialogen; fokus in vid öppning, tillbaka vid Escape; axe utan fel', async ({
     page,
   }) => {
     await mocka(page);
     await page.goto('/mer/betalningar');
-    await expect(page.getByRole('heading', { level: 1, name: 'Betalningar' })).toBeVisible({
-      timeout: 15_000,
-    });
+    const rubrikTrigger = page.getByRole('button', { name: 'Betalningar' });
+    await expect(rubrikTrigger).toBeVisible({ timeout: 15_000 });
 
-    const flerVal = page.getByRole('button', { name: 'Fler val för filtreringen' });
-    await flerVal.click();
+    await rubrikTrigger.click();
     await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
 
     const dialog = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
@@ -676,14 +680,15 @@ test.describe('TASK-412 — importen som dialog', () => {
     expect(utfall.violations).toEqual([]);
 
     // Escape stänger utan att röra bankminnet (`stangImport` rör bara
-    // `visaImport` + fokus, se dess docblock) och lämnar fokus på ⋯-knappen.
+    // `visaImport` + fokus, se dess docblock) och lämnar fokus på
+    // rubrik-triggern.
     await page.keyboard.press('Escape');
     await expect(dialog).not.toBeVisible();
-    await expect(flerVal).toBeFocused();
+    await expect(rubrikTrigger).toBeFocused();
 
     // En NY öppning startar om i steg 'val' — bevis på att inget av det
     // gamla filvals-tillståndet läckte över stängningen.
-    await flerVal.click();
+    await rubrikTrigger.click();
     await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
     await expect(page.getByRole('dialog', { name: 'Importera kontoutdrag' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Ladda upp fil' })).toBeVisible();
