@@ -168,6 +168,21 @@ const LAGEN: { lage: Beloppslage; etikett: string; besked: string }[] = [
    knapparna ("en primär, syskonet outline"), så kanten bär tillståndet.
    Texten klarar sig med marginal i alla lägen (12,52–13,38:1).
 
+   INGENTING I BOXMODELLEN ÄNDRAS MELLAN VALT OCH OVALT (varv 6). Marcus:
+   *"när man klickar runt på knapparna så ser de ut att röra sig, eller det
+   gör dem, inte okej."* Och de gjorde det: varv 5 gav det valda segmentet
+   `font-semibold`, vilket är BREDARE text. Med `auto-cols-fr` + `w-fit`
+   sätts kolumnbredden av det bredaste segmentets max-content — så fort
+   vikten flyttade sig flyttade hela radens bredd med den, och alla tre
+   segmenten bytte mått vid varje klick.
+
+   Regeln som ersätter den: valet får ENDAST ändra färg. Samma `font-medium` i
+   båda lägena, samma `border`-BREDD (bara `border-color` byter), samma
+   padding. Ska kanten se tjockare ut är vägen en INSET `box-shadow` — den
+   ritas innanför kanten och ingår inte i boxmodellen, till skillnad från
+   `border-2`. Mätt efteråt: identiska `x/y/width/height` på alla tre
+   segmenten genom alla tre valen.
+
    BREDDEN: `inline-grid` + `auto-cols-fr` + `w-fit` ger alla tre segmenten
    exakt det bredaste ordets bredd ("Anmälningsavgift") utan att raden sträcks
    över hela panelen. Marcus: *"anmälningsavgift och Hela beloppet knapparna
@@ -184,9 +199,11 @@ const SEGMENT_KLASS = [
   'text-(color:--mm-button-secondary-text)',
   'not-data-[selected]:data-[hovered]:bg-(--mm-button-secondary-bg-hover)',
   'contrast-more:border-border-strong',
-  // Valt: intryckt sekundär — tonad platta, mörk kant, tyngre text, ingen skugga.
+  // Valt: intryckt sekundär — tonad platta, mörk kant, dubblerad via en INSET
+  // ring. Ingen viktändring, ingen kantbredd-ändring, ingen padding-ändring.
   'data-[selected]:border-text data-[selected]:bg-bg-emphasized',
-  'data-[selected]:font-semibold data-[selected]:text-text data-[selected]:shadow-none',
+  'data-[selected]:font-medium data-[selected]:text-text',
+  'data-[selected]:shadow-[inset_0_0_0_1px_var(--mm-text)]',
 ].join(' ');
 
 function plural(antal: number, ett: string, flera: string): string {
