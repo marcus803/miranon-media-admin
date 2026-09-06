@@ -396,8 +396,11 @@ async function importera(page: Page): Promise<Mockar> {
     timeout: 15_000,
   });
 
-  await page.getByRole('button', { name: 'Importera kontoutdrag' }).click();
-  const panel = page.getByRole('region', { name: 'Importera kontoutdrag' });
+  // [TASK-412] Importen är en DIALOG bakom ⋯-menyn (Marcus prod-granskning
+  // 2026-09-06) — INTE längre en egen knapp i sidhuvudet med en inline-panel.
+  await page.getByRole('button', { name: 'Fler val' }).click();
+  await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+  const panel = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
   await expect(panel).toBeVisible();
 
   await panel.locator('input[type="file"]').setInputFiles({
@@ -634,5 +637,55 @@ test.describe('TASK-402.4 — tillgänglighet', () => {
 
     const utfall = await new AxeBuilder({ page }).include('main').analyze();
     expect(utfall.violations).toEqual([]);
+  });
+});
+
+/**
+ * TASK-412 — IMPORTEN SOM DIALOG (Marcus prod-granskning 2026-09-06, S121
+ * resume 4): en ⋯-knapp bredvid filtreringstratten öppnar en `Meny` vars
+ * enda post öppnar importen i husets `Modal`/`Dialog` (ADR-044), i stället
+ * för knappen + inline-panelen `TASK-402.4`s svit ovan en gång mätte mot.
+ *
+ * AC #3 — fokus IN vid öppning (react-arias `useDialog` fokuserar
+ * DIALOG-ELEMENTET självt vid mount, `RegistreratNuBlock.tsx`s docblock
+ * citerar samma källa), rubriken ÄR dialogens tillgängliga namn, fokus
+ * ÅTER till ⋯-knappen vid stängning, och ett axe-svep av den ÖPPNA dialogen
+ * (skilt från sviten ovans svep av STEGET efter överlämningen).
+ */
+test.describe('TASK-412 — importen som dialog', () => {
+  test('⋯-menyn öppnar dialogen; fokus in vid öppning, tillbaka vid Escape; axe utan fel', async ({
+    page,
+  }) => {
+    await mocka(page);
+    await page.goto('/mer/betalningar');
+    await expect(page.getByRole('heading', { level: 1, name: 'Betalningar' })).toBeVisible({
+      timeout: 15_000,
+    });
+
+    const flerVal = page.getByRole('button', { name: 'Fler val' });
+    await flerVal.click();
+    await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+
+    const dialog = page.getByRole('dialog', { name: 'Importera kontoutdrag' });
+    await expect(dialog).toBeVisible();
+    // Fokus går IN i DIALOGEN (elementet självt, inte första knappen —
+    // react-arias `useDialog`-standard).
+    await expect(dialog).toBeFocused();
+
+    const utfall = await new AxeBuilder({ page }).include('[role="dialog"]').analyze();
+    expect(utfall.violations).toEqual([]);
+
+    // Escape stänger utan att röra bankminnet (`stangImport` rör bara
+    // `visaImport` + fokus, se dess docblock) och lämnar fokus på ⋯-knappen.
+    await page.keyboard.press('Escape');
+    await expect(dialog).not.toBeVisible();
+    await expect(flerVal).toBeFocused();
+
+    // En NY öppning startar om i steg 'val' — bevis på att inget av det
+    // gamla filvals-tillståndet läckte över stängningen.
+    await flerVal.click();
+    await page.getByRole('menuitem', { name: 'Importera kontoutdrag' }).click();
+    await expect(page.getByRole('dialog', { name: 'Importera kontoutdrag' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Ladda upp fil' })).toBeVisible();
   });
 });

@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate } from '@tanstack/react-router';
-import { AlertTriangle, CalendarRange, Clock, X } from 'lucide-react';
+import { AlertTriangle, CalendarRange, Clock, Ellipsis, Upload, X } from 'lucide-react';
 import { parseAsString, parseAsStringEnum, useQueryState } from 'nuqs';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -13,7 +13,17 @@ import {
   SearchField,
 } from 'react-aria-components';
 import { EventValjare } from '@/components/events/EventValjare';
-import { Button, InitialAvatar, MessageBox, SidRam, Skeleton } from '@/components/primitives';
+import {
+  Button,
+  Dialog,
+  InitialAvatar,
+  Meny,
+  MenyPost,
+  MessageBox,
+  Modal,
+  SidRam,
+  Skeleton,
+} from '@/components/primitives';
 import {
   antalAktivaFilter,
   type FilterDimension,
@@ -1462,102 +1472,67 @@ export function BetalningsInkorg() {
         {`${rader.length} kvarvarande betalningar laddade.`}
       </p>
 
-      {/* SIDHUVUDETS HANDLINGSYTA (designfynd 2c): "Importera kontoutdrag" var
-          en ensam strö-knapp mellan segmentväljaren och listan — flyttad hit,
-          bredvid rubriken, samma rad. Knappen göms medan importytan är
-          öppen (oförändrat beteende) — se `visaImport`-villkoret nedan. */}
-      {/* ═══ SIDHUVUDET SPEGLAR FILTERRADENS RUTNÄT (Marcus 2026-09-01) ═══
-          Ordagrant: *"Jag tycker 'Importera kontoutdrag'-knappen ska sitta
+      {/* ═══ SIDHUVUDETS RYTM — BESLUT 1 (designfynd 2c + Marcus 2026-09-01),
+          HISTORIK, RIVET AV BESLUT 2 NEDAN ═══
+          "Importera kontoutdrag" satt först som en ensam strö-knapp mellan
+          segmentväljaren och listan, sedan flyttad hit, bredvid rubriken,
+          med knappen gömd medan importytan var öppen. Marcus samma dag, om
+          linjeringen: *"Jag tycker 'Importera kontoutdrag'-knappen ska sitta
           liksom centrerat på rubrik-raden men kant i kant med sökrutan."*
+          Lösningen var strukturell: headern fick FilterRadens tre-delade
+          rytm (`[innehåll flex-1][gap-4][rund ändknapp]`) med en TOM spegel
+          av trattens mått för att reservera spåret, `pl-4` i stället för
+          `px-4` så högerkanten nådde samma x som filterraden (568 px via
+          dess `-mx-4`), och `items-center` för att dela mittlinje med
+          rubriken.
 
-          VAD SOM VAR FEL, MÄTT I RUTNÄTET (inre kolumn 568 px, se
-          `FilterRad`-anropet nedan för härledningen av det talet):
-            sökrutans högerkant .... x=514   (568 − 16 gap − 38 tratt)
-            trattens högerkant ..... x=568
-            knappens högerkant ..... x=552   ← låg MITT EMELLAN de två
-          Knappen linjerade alltså med ingenting alls. Den satt på
-          `<header px-4>`s innerkant (552), en linje ingen annan yta på sidan
-          bär. Det är den raggade högerkanten Marcus såg.
+          ═══ BESLUT 2 (Marcus prod-granskning 2026-09-06, S121 resume 4,
+          TASK-412) — GÄLLANDE FORM ═══
+          Marcus, om dialog-formen importen fick (se `<Modal>`-monteringen
+          nedan): *"jag vill liksom ha det lite 'renare' upptill."* Knappen
+          är RIVEN ur headern helt — INTE flyttad till filterraden (en
+          första idé om det prövades och backades samma session: *"Jag vet
+          inte om de där med att flytta sökrutan blir bra när jag tänker
+          efter. Jag tror vi kan behålla det som det är MEN vi tar bort
+          knappen 'Importera kontoutdrag' och skapar istället en rund ikon
+          med tre prickar bredvid filtreringsikonen (till höger) som öppnar
+          vår dropdown där det står 'Importera kontoutdrag'."*). Sökfältet
+          STÅR ALLTSÅ KVAR precis där det var (se `FilterRad`-anropet nedan)
+          — bara headerns knapp+spegel är riven, och en ny ⋯-knapp (`Meny`)
+          landar i FilterRad-radens EGEN nya `extraKnapp`-slot, till höger om
+          tratten (se `FilterRad.tsx` § `extraKnapp`).
 
-          LÖSNINGEN ÄR STRUKTURELL, INTE EN MARGINAL: headern får SAMMA
-          tre-delade rytm som filterraden — `[innehåll flex-1][gap-4][rund
-          ändknapp]`. Filterradens ändknapp är tratten; headern har ingen, så
-          den RESERVERAR spåret med en tom spegel av trattens egna mått
-          (`p-2.5` + 18 px ikon — samma klasser som `FilterRad.tsx:254-258`,
-          inte en uträknad pixel). Följden: knappens högerkant hamnar på 514,
-          alltså exakt sökrutans.
+          HEADERN BÄR DÄRFÖR BARA RUBRIKEN NU: ingen knapp, ingen spegel,
+          ingen tre-delad rytm att hålla i synk med `FilterRad.tsx`s
+          trigger-mått. `px-4` (var `pl-4`) — högerkanten har ingen speglings-
+          plikt kvar, så den återgår till samma padding som vänsterkanten,
+          samma idiom som `AnmalningarSida.tsx`s enkla rubrik-header. */}
+      <header className="flex flex-col gap-1 px-4">
+        <h1 className="font-semibold text-3xl">Betalningar</h1>
+        {/* KÖ-RADEN ERSÄTTER TRE-TALS-RADEN (Marcus 2026-09-01, om
+            "5 öppna · 5 förfallna · 0 kvitton i kö"): *"vad betyder det?
+            … 5 förfallna hör väl inte hit, det hör väl till
+            påminnelse-blocket"*. Båda invändningarna håller:
 
-          `pl-4` I STÄLLET FÖR `px-4`: högerkanten måste nå 568 för att
-          speglingen ska gälla, precis som filterraden når dit via sitt
-          `-mx-4`. Vänsterkanten är ORÖRD (16 px) — rubrikens placering var
-          aldrig det Marcus klagade på.
+              • FÖRFALLNA-talet hör till påminnelse-arbetet, som bor i
+                Hem-blocket `ForfallnaBetalningar`. Här var det ett tal utan
+                handling — förfallo-MÄRKET per rad finns kvar och är det som
+                faktiskt hjälper när Lotta prickar av.
+              • ÖPPNA-talet sades redan två gånger till: av listan själv och
+                av filterpanelens "Visar X av Y betalningar".
+              • KVITTON I KÖ var det enda talet som bar något Lotta inte
+                kunde se någon annanstans — men "i kö" är jargong för en
+                jobbmotor hon inte känner till.
 
-          `items-center` (var `items-start`) ÄR "centrerat på rubrik-raden":
-          knappen är `size="sm"` medan rubriken är `text-3xl`, så toppjustering
-          klistrade den i överkant. Nu delar de mittlinje.
-
-          KNAPPEN OCH SPEGELN LIGGER I EN EGEN GRUPP så `flex-wrap` flyttar dem
-          TILLSAMMANS på smal skärm — annars hade spåret kunnat brytas ner på en
-          egen rad och lämnat 38 px tomrum. */}
-      <header className="flex flex-wrap items-center gap-4 pl-4">
-        <div className="flex min-w-0 flex-1 flex-col gap-1">
-          <h1 className="font-semibold text-3xl">Betalningar</h1>
-          {/* KÖ-RADEN ERSÄTTER TRE-TALS-RADEN (Marcus 2026-09-01, om
-              "5 öppna · 5 förfallna · 0 kvitton i kö"): *"vad betyder det?
-              … 5 förfallna hör väl inte hit, det hör väl till
-              påminnelse-blocket"*. Båda invändningarna håller:
-
-                • FÖRFALLNA-talet hör till påminnelse-arbetet, som bor i
-                  Hem-blocket `ForfallnaBetalningar`. Här var det ett tal utan
-                  handling — förfallo-MÄRKET per rad finns kvar och är det som
-                  faktiskt hjälper när Lotta prickar av.
-                • ÖPPNA-talet sades redan två gånger till: av listan själv och
-                  av filterpanelens "Visar X av Y betalningar".
-                • KVITTON I KÖ var det enda talet som bar något Lotta inte
-                  kunde se någon annanstans — men "i kö" är jargong för en
-                  jobbmotor hon inte känner till.
-
-              Raden renderas därför BARA när det finns något i kön, och säger
-              vad som händer i stället för att räkna en datastruktur. Noll
-              kvitton är inget besked; det är frånvaron av ett. */}
-          {sammanfattning.kvittonAttSkicka > 0 && (
-            <p className="text-small text-text-muted">
-              {`${sammanfattning.kvittonAttSkicka} ${
-                sammanfattning.kvittonAttSkicka === 1 ? 'kvitto väntar' : 'kvitton väntar'
-              } på att skickas`}
-            </p>
-          )}
-        </div>
-        {!visaImport && (
-          <div className="flex shrink-0 items-center gap-4">
-            <Button
-              ref={importKnappRef}
-              intent="secondary"
-              emphasis="outline"
-              size="sm"
-              onPress={() => setVisaImport(true)}
-            >
-              {/* TERMEN ÄR "KONTOUTDRAG" (Marcus dom 2026-09-01) — se
-                  `SwishImport.tsx`s `aria-label` för hela skälet. Knappen och
-                  dialogens rubrik bär SAMMA ord, så Lotta känner igen ytan hon
-                  just öppnade. */}
-              Importera kontoutdrag
-            </Button>
-            {/* TRATT-SPÅRET, TOMT. Speglar `FilterRad.tsx`s trigger-knapp
-                (`inline-flex shrink-0 items-center justify-center ... p-2.5`
-                med en 18 px `Filter`-ikon) så att headerns innehållskolumn
-                slutar på SAMMA x som filterradens gör. `aria-hidden` +
-                `pointer-events-none`: rent rutnät, aldrig något att läsa eller
-                träffa. Ändras trattens storlek i primitiven ska denna spegel
-                följa med — den korrespondensen är hela skälet att måtten står
-                som trattens EGNA klasser i stället för som en summa. */}
-            <span
-              aria-hidden="true"
-              className="pointer-events-none inline-flex shrink-0 items-center justify-center p-2.5"
-            >
-              <span className="block size-[18px]" />
-            </span>
-          </div>
+            Raden renderas därför BARA när det finns något i kön, och säger
+            vad som händer i stället för att räkna en datastruktur. Noll
+            kvitton är inget besked; det är frånvaron av ett. */}
+        {sammanfattning.kvittonAttSkicka > 0 && (
+          <p className="text-small text-text-muted">
+            {`${sammanfattning.kvittonAttSkicka} ${
+              sammanfattning.kvittonAttSkicka === 1 ? 'kvitto väntar' : 'kvitton väntar'
+            } på att skickas`}
+          </p>
         )}
       </header>
 
@@ -1622,6 +1597,40 @@ export function BetalningsInkorg() {
              är oförändrade — de skickar inte propen och behåller sitt
              ihopfällda startläge. */
           defaultOppen
+          /* ⋯-KNAPPEN, TILL HÖGER OM TRATTEN (Marcus prod-granskning
+             2026-09-06, S121 resume 4, TASK-412) — se sidhuvudets BESLUT 2
+             för vägen hit (en flytt av sökrutan prövades och backades i
+             samma session). Knappen ÄR en RAW `AriaButton`, inte husets
+             `Button`-primitiv: mått och klasser är BOKSTAVLIGEN kopierade
+             från tratten ovan (`inline-flex shrink-0 items-center
+             justify-center rounded-full p-2.5`, 18 px ikon) eftersom Marcus
+             bad om just det ("samma mått") — knappen har ingen
+             "aktiv"-motsvarighet (tratten färgas när filter är satta; denna
+             öppnar bara en meny, så den bär alltid vilo-tonen).
+             `importKnappRef` FLYTTAR HIT från den rivna header-knappen:
+             `stangImport` fokuserar den när importytan stängs (se
+             `stangImport`s docblock) — samma fokus-kontrakt, ny plats. */
+          extraKnapp={
+            <Meny
+              etikett="Fler val för filtreringen"
+              trigger={
+                <AriaButton
+                  ref={importKnappRef}
+                  aria-label="Fler val"
+                  className="relative inline-flex shrink-0 items-center justify-center rounded-full bg-bg-muted p-2.5 hover:bg-bg-emphasized motion-safe:transition-colors"
+                >
+                  <Ellipsis aria-hidden="true" size={18} className="shrink-0" />
+                </AriaButton>
+              }
+            >
+              <MenyPost
+                ikon={<Upload aria-hidden="true" size={16} />}
+                onAction={() => setVisaImport(true)}
+              >
+                Importera kontoutdrag
+              </MenyPost>
+            </Meny>
+          }
           /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
              *"hela listan är för smal, det ska vara lika bred som menybaren.
              Även filtreringskomponenten"*).
@@ -1665,10 +1674,48 @@ export function BetalningsInkorg() {
 
       {/* [TASK-346.10] Importen ligger FÖRE "Skicka N kvitton", i den ordning
           Lottas lördag faktiskt går: läs banken, bekräfta raderna, skicka
-          kvittona. Triggerknappen bor sedan TASK-346.14 i sidhuvudet
-          (designfynd 2c, se `<header>` ovan) — bara panelen själv monteras
-          här. */}
-      {visaImport && <SwishImport oppna={rader} onStang={stangImport} />}
+          kvittona.
+
+          [TASK-412, Marcus prod-granskning 2026-09-06] IMPORTEN ÄR EN
+          DIALOG, INTE LÄNGRE EN INLINE-PANEL: *"När jag trycker på
+          'Importera kontoutdrag' så kommer den rutan upp nedanför
+          filtreringskomponenten när den är utfälld, det är inte bra. Jag
+          vill istället att när jag trycker 'importera kontoutdrag' så
+          öppnas en dialogruta i husets form."* Husets form är `Modal` +
+          `Dialog` (ADR-044) — samma par som Ångra-dialogen i
+          `RegistreratNuBlock.tsx`, `SegmentMailCompose.tsx` och
+          `AtgardsSida.tsx`. KONTROLLERAT, INTE `DialogTrigger`: öppnaren
+          (⋯-menyns "Importera kontoutdrag", se `FilterRad`-anropets
+          `extraKnapp` ovan) sitter inte bredvid Modalen i JSX-trädet, så
+          `isOpen={visaImport}`/`onOpenChange` är samma kontrollerade mönster
+          som `SegmentMailCompose.tsx`s bekräftelse-modal — `visaImport` var
+          redan källan till sanning, bara VISNINGEN är ny.
+
+          STÄNGNING GÅR ALLTID VIA `stangImport` (Esc, klick utanför —
+          `isDismissable` — eller `SwishImport`s egna Avbryt-knappar): den
+          rör aldrig bankminnet (se `stangImport`s docblock), bara
+          `visaImport`-flaggan och fokus-återgången. ÖVERLÄMNINGEN
+          (`SwishImport.tsx` § ÖVERLÄMNINGEN) NAVIGERAR i stället för att
+          stänga — Modalen avmonteras med sidan när routern byter väg,
+          precis som den gjorde som inline-panel.
+
+          `size="lg"` (36rem/576 px, `max-w-full`): mappningsstegets
+          `Select`-fält (`min-w-64` vardera, `flex-wrap`) och `Input`
+          (`max-w-80`) får plats i EN kolumn utan att tvinga fram radbryt på
+          en bredd som redan ryms bekvämt inom `lg`, och `max-w-full` +
+          Modalens egen `p-4`-marginal håller den innanför varje viewport
+          ner mot mobil (ingen fast bredd kan spränga en 375 px-skärm). */}
+      <Modal
+        isOpen={visaImport}
+        onOpenChange={(oppen) => {
+          if (!oppen) stangImport();
+        }}
+        isDismissable
+      >
+        <Dialog title="Importera kontoutdrag" size="lg">
+          <SwishImport oppna={rader} onStang={stangImport} />
+        </Dialog>
+      </Modal>
 
       {/* ═══════════════════════ GRANSKNINGSBLOCKET (C1) ═══════════════════════
           Marcus dom 2026-09-01, ordagrant: *"När man trycker 'Registrera' så

@@ -272,26 +272,16 @@ export function SwishImport({ oppna, onStang }: Props) {
   const utkastfel = utkast ? mappningsFel(utkast) : null;
 
   return (
-    <section
-      /* TERMEN ÄR "KONTOUTDRAG", INTE "BANKRAPPORT" (Marcus dom 2026-09-01):
-         *"'Importera kontoutdrag' är mer rätt namn på knappen … 'bankrapport'
-         är typiskt dålig svensk översättning av 'bank statement'"*. Han har
-         rätt i sak: "bank statement" heter kontoutdrag på svenska, och
-         "bankrapport" är inget ord Lotta möter i sin internetbank
-         (Gunilla-principen). `aria-label` räknas som UI-text och byts med
-         resten — den ÄR ytans tillgängliga namn. Kodidentifierare och filnamn
-         (`SwishImport`, `bankimport-*`) är orörda: de är inte text Lotta
-         läser. */
-      aria-label="Importera kontoutdrag"
-      className="mx-4 flex flex-col gap-3 rounded border border-border bg-surface p-4"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="font-semibold text-lg">Importera kontoutdrag</h2>
-        <Button intent="ghost" size="sm" onPress={onStang}>
-          Stäng
-        </Button>
-      </div>
-
+    /* [TASK-412] INGEN EGEN LANDMÄRKES-YTA LÄNGRE: komponenten renderas nu
+       UTESLUTANDE inuti `Dialog` (`BetalningsInkorg.tsx`s `<Modal>`-
+       montering), som redan bär den tillgängliga dialogrubriken
+       ("Importera kontoutdrag", `title`-propen, `aria-labelledby`
+       automatiskt) och all sin egen kant/bakgrund/padding/skugga. En egen
+       `<section aria-label="Importera kontoutdrag">` med kant+bakgrund+
+       marginal (den gamla inline-panelens form) hade dubblerat BÅDE namnet
+       (skärmläsaren hör "Importera kontoutdrag" två gånger) OCH boxen (en
+       ruta i rutan). Se `Dialog.tsx` för rubrik-mekaniken. */
+    <div className="flex flex-col gap-3">
       {/* Dold input plus en knapp som klickar den. `hidden` ger display:none,
           alltså varken synlig, tabbstopp eller nåbar för skärmläsaren -
           precis den form react-arias FileTrigger själv renderar. */}
@@ -323,13 +313,22 @@ export function SwishImport({ oppna, onStang }: Props) {
             Ladda ner kontoutdraget för Swish från din bank och välj filen här. Kolumnerna behöver
             bara pekas ut en gång.
           </p>
-          <div>
+          {/* [TASK-412] "Avbryt" FLYTTAR HIT, in i knapparaden — den bodde
+              tidigare i den rivna header-raden ovan (`onStang` samma
+              funktion, samma effekt: `Modal`s `isOpen` går till `false` hos
+              konsumenten). `steg === 'mappning'` hade redan sin egen
+              Avbryt-knapp i sin egen knapprad (se nedan) — samma mönster,
+              nu konsekvent i BÅDA stegen i stället för en delad topp-knapp. */}
+          <div className="flex flex-wrap gap-2">
             <Button intent="primary" emphasis="outline" onPress={valjFil}>
               <Upload aria-hidden size={16} className="shrink-0" />
               {/* *"Byt ut 'Välj rapportfil' till 'Ladda upp fil'"* — och
                   "rapportfil" försvinner därmed ur UI:t helt, i samma andetag
                   som "bankrapport". Ikonen (`Upload`) är oförändrad. */}
               Ladda upp fil
+            </Button>
+            <Button intent="ghost" onPress={onStang}>
+              Avbryt
             </Button>
           </div>
         </div>
@@ -416,7 +415,7 @@ export function SwishImport({ oppna, onStang }: Props) {
           </div>
         </div>
       )}
-    </section>
+    </div>
   );
 }
 
