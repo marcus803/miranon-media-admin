@@ -522,154 +522,187 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
     return boxar as { [K in keyof T]: Ruta };
   }
 
-  test('MÄTNING (TASK-416.13, ADR-083) — boundingBox på Hem-kortens rubriker och första rad/kortkropp är IDENTISK under laddning och efter datalandning: Nästa event, Nya anmälningar, Senaste aktivitet, Förfallna betalningar', async ({
-    page,
-    network,
-  }) => {
-    await arrangeraTomCache(page);
-    const mocken = hallbarMockMedAktivitet(network, medMatningsdata());
-    await page.goto('/hem');
+  /**
+   * VIEWPORT-MATRISEN (review-fynd runda 1, PR #2419, info/auto-fix):
+   * MÄTNINGEN nedan kördes tidigare bara vid Playwrights default
+   * `acceptance`-viewport (1280×720, `devices['Desktop Chrome']`) — noll
+   * `setViewportSize`-anrop. Repot har redan ett etablerat mönster för att
+   * inte lita på en enda bredd för en rad-höjds-/breddlås
+   * (`hem.acceptance.test.ts`s Bevakningsraden-svit, TASK-303, matrisen
+   * `[375, 390, 768, 1280]` px) eftersom truncate/line-height-baserad
+   * geometri i teorin kan bete sig annorlunda vid smalare bredder. ETT TEST
+   * PER BREDD — inte en loop inuti ETT test — av SAMMA skäl TASK-303:s
+   * docblock ger (samma fil, `for (const viewport …) { for (const fall …) {
+   * test(…) } }`-mönstret ovanför): flera `page.goto()` i samma
+   * browser-context riskerar att föregående iterations tillstånd (den
+   * persisterade query-cachen, `arrangeraTomCache`/ADR-072) läcker in i
+   * nästa. Playwright ger varje `test()` ett FÄRSKT context, så en
+   * test-per-bredd tar bort delat tillstånd i stället för att kapprännas
+   * med det.
+   */
+  for (const viewport of [375, 390, 768, 1280]) {
+    test(`${viewport}px — MÄTNING (TASK-416.13, ADR-083) — boundingBox på Hem-kortens rubriker och första rad/kortkropp är IDENTISK under laddning och efter datalandning: Nästa event, Nya anmälningar, Senaste aktivitet, Förfallna betalningar`, async ({
+      page,
+      network,
+    }) => {
+      await page.setViewportSize({ width: viewport, height: 900 });
+      await arrangeraTomCache(page);
+      const mocken = hallbarMockMedAktivitet(network, medMatningsdata());
+      await page.goto('/hem');
 
-    // FYRA laddande containrar — de TRE delade (Nästa event / Nya
-    // anmälningar / Förfallna betalningar, `anmalDataPending`) PLUS Senaste
-    // aktivitets EGEN (`useLatestActivity`, hållen av `hallbarMockMedAktivitet`
-    // ENSAM i denna fil). Väntar in ALLA FYRA innan mätning — annars kunde en
-    // container hinna montera EFTER att en annan redan mätts, och "identisk
-    // boundingBox" hade bevisat en tillfällighet i testets EGEN tur snarare
-    // än kontraktet.
-    await expect(page.locator('main#main').getByRole('status')).toHaveCount(4);
-    await page.mouse.move(0, 0); // mät-stillhet — neutralisera pekaren (L246)
+      // FYRA laddande containrar — de TRE delade (Nästa event / Nya
+      // anmälningar / Förfallna betalningar, `anmalDataPending`) PLUS Senaste
+      // aktivitets EGEN (`useLatestActivity`, hållen av `hallbarMockMedAktivitet`
+      // ENSAM i denna fil). Väntar in ALLA FYRA innan mätning — annars kunde en
+      // container hinna montera EFTER att en annan redan mätts, och "identisk
+      // boundingBox" hade bevisat en tillfällighet i testets EGEN tur snarare
+      // än kontraktet.
+      await expect(page.locator('main#main').getByRole('status')).toHaveCount(4);
+      await page.mouse.move(0, 0); // mät-stillhet — neutralisera pekaren (L246)
 
-    // Rubrikerna: SAMMA element i båda lägena (h2:n bytter aldrig ut sig
-    // själv, bara sitt innehåll — Nästa event/Senaste aktivitet-rubrikerna
-    // är dessutom ALDRIG skelett, se resp. komponents källa).
-    const nastaEventH2 = page.locator('h2#hem-nasta-event');
-    const nyaAnmH2 = page.locator('h2#hem-nya-anmalningar');
-    const forfallnaH2 = page.locator('h2#hem-forfallna');
-    const senasteH2 = page.locator('h2#hem-senaste-aktivitet');
+      // Rubrikerna: SAMMA element i båda lägena (h2:n bytter aldrig ut sig
+      // själv, bara sitt innehåll — Nästa event/Senaste aktivitet-rubrikerna
+      // är dessutom ALDRIG skelett, se resp. komponents källa).
+      const nastaEventH2 = page.locator('h2#hem-nasta-event');
+      const nyaAnmH2 = page.locator('h2#hem-nya-anmalningar');
+      const forfallnaH2 = page.locator('h2#hem-forfallna');
+      const senasteH2 = page.locator('h2#hem-senaste-aktivitet');
 
-    // "Nästa event"s kortkropp: EN gemensam locator för BÅDA lägena — den
-    // direkta `<div>`-syskonen till h2:n är antingen `role="status"` (laddar)
-    // eller den laddade `flex flex-col gap-4`-wrappern (`NastaEvent.tsx`),
-    // aldrig något annat element i det icke-felaktiga scenariot denna
-    // mätning täcker (isError testas inte här). Mäter HELA kroppen, inte en
-    // enskild rad — kortet är en hero, inte en lista, så "första raden" här
-    // är dess enda innehållsblock (TASK-416.9 matchade just DENNA kropps
-    // rad-för-rad-höjder, se `NastaEvent.tsx`s diff).
-    const nastaEventKropp = page.locator('section[aria-labelledby="hem-nasta-event"] > div');
+      // "Nästa event"s kortkropp: EN gemensam locator för BÅDA lägena — den
+      // direkta `<div>`-syskonen till h2:n är antingen `role="status"` (laddar)
+      // eller den laddade `flex flex-col gap-4`-wrappern (`NastaEvent.tsx`),
+      // aldrig något annat element i det icke-felaktiga scenariot denna
+      // mätning täcker (isError testas inte här). Mäter HELA kroppen, inte en
+      // enskild rad — kortet är en hero, inte en lista, så "första raden" här
+      // är dess enda innehållsblock (TASK-416.9 matchade just DENNA kropps
+      // rad-för-rad-höjder, se `NastaEvent.tsx`s diff).
+      const nastaEventKropp = page.locator('section[aria-labelledby="hem-nasta-event"] > div');
 
-    // Senaste aktivitet — pending: FÖRSTA radens `<div>` i `role="status"`
-    // (`SenasteAktivitetKompakt.tsx`s `[0,1,2,3].map`); laddat: FÖRSTA `<li>`.
-    const senasteRadLaddar = page
-      .locator('section[aria-labelledby="hem-senaste-aktivitet"] [role="status"] > div')
-      .first();
+      // Senaste aktivitet — pending: FÖRSTA radens `<div>` i `role="status"`
+      // (`SenasteAktivitetKompakt.tsx`s `[0,1,2,3].map`); laddat: FÖRSTA `<li>`.
+      const senasteRadLaddar = page
+        .locator('section[aria-labelledby="hem-senaste-aktivitet"] [role="status"] > div')
+        .first();
 
-    // Nya anmälningar/Förfallna betalningar — FÖRSTA RADEN (TASK-416.18):
-    // pending: FÖRSTA skeleton-raden (`data-testid`, `NyaAnmalanSkeletonRad`/
-    // `ForfallenSkeletonRad` — se resp. komponents docblock för anatomin);
-    // laddat: FÖRSTA `<li>` i respektive sektions lista (`getByRole('listitem')`,
-    // samma mönster som `senasteRadLaddad` nedan och som
-    // `mer-maillogg-laddlage.acceptance.test.ts`/`mer-vantelista-laddlage.
-    // acceptance.test.ts` redan etablerat för samma skeleton-familj).
-    const nyaAnmRadLaddar = page.getByTestId('nya-anmalningar-skeleton-rad').first();
-    const forfallnaRadLaddar = page.getByTestId('forfallna-skeleton-rad').first();
+      // Nya anmälningar/Förfallna betalningar — FÖRSTA RADEN (TASK-416.18):
+      // pending: FÖRSTA skeleton-raden (`data-testid`, `NyaAnmalanSkeletonRad`/
+      // `ForfallenSkeletonRad` — se resp. komponents docblock för anatomin);
+      // laddat: FÖRSTA `<li>` i respektive sektions lista (`getByRole('listitem')`,
+      // samma mönster som `senasteRadLaddad` nedan och som
+      // `mer-maillogg-laddlage.acceptance.test.ts`/`mer-vantelista-laddlage.
+      // acceptance.test.ts` redan etablerat för samma skeleton-familj).
+      const nyaAnmRadLaddar = page.getByTestId('nya-anmalningar-skeleton-rad').first();
+      const forfallnaRadLaddar = page.getByTestId('forfallna-skeleton-rad').first();
 
-    const under = kravBoxar(
-      {
-        nastaEventH2: await nastaEventH2.boundingBox(),
-        nastaEventKropp: await nastaEventKropp.boundingBox(),
-        nyaAnmH2: await nyaAnmH2.boundingBox(),
-        forfallnaH2: await forfallnaH2.boundingBox(),
-        senasteH2: await senasteH2.boundingBox(),
-        senasteRad: await senasteRadLaddar.boundingBox(),
-        nyaAnmRad: await nyaAnmRadLaddar.boundingBox(),
-        forfallnaRad: await forfallnaRadLaddar.boundingBox(),
-      },
-      'UNDER laddning',
-    );
+      const under = kravBoxar(
+        {
+          nastaEventH2: await nastaEventH2.boundingBox(),
+          nastaEventKropp: await nastaEventKropp.boundingBox(),
+          nyaAnmH2: await nyaAnmH2.boundingBox(),
+          forfallnaH2: await forfallnaH2.boundingBox(),
+          senasteH2: await senasteH2.boundingBox(),
+          senasteRad: await senasteRadLaddar.boundingBox(),
+          nyaAnmRad: await nyaAnmRadLaddar.boundingBox(),
+          forfallnaRad: await forfallnaRadLaddar.boundingBox(),
+        },
+        'UNDER laddning',
+      );
 
-    mocken.slappAlla();
+      mocken.slappAlla();
 
-    // Datalandning klar: samtliga fyra containrar har lämnat isPending.
-    await expect(page.locator('main#main').getByRole('status')).toHaveCount(0);
-    await expect(page.getByText('2 nya anmälningar att bekräfta')).toBeVisible();
-    await expect(page.getByText('2 förfallna betalningar')).toBeVisible();
-    // Dubbel requestAnimationFrame — samma väntan som
-    // `event-checkin-laddlage.acceptance.test.ts` (TASK-416.1) använder
-    // innan sin EFTER-mätning: layouten ska ha hunnit bildrutan ut.
-    await page.evaluate(
-      () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
-    );
+      // Datalandning klar: samtliga fyra containrar har lämnat isPending.
+      await expect(page.locator('main#main').getByRole('status')).toHaveCount(0);
+      await expect(page.getByText('2 nya anmälningar att bekräfta')).toBeVisible();
+      await expect(page.getByText('2 förfallna betalningar')).toBeVisible();
+      // Dubbel requestAnimationFrame — samma väntan som
+      // `event-checkin-laddlage.acceptance.test.ts` (TASK-416.1) använder
+      // innan sin EFTER-mätning: layouten ska ha hunnit bildrutan ut.
+      await page.evaluate(
+        () => new Promise((klar) => requestAnimationFrame(() => requestAnimationFrame(klar))),
+      );
 
-    const senasteRadLaddad = page
-      .locator('section[aria-labelledby="hem-senaste-aktivitet"]')
-      .getByRole('listitem')
-      .first();
-    const nyaAnmRadLaddad = page
-      .locator('section[aria-labelledby="hem-nya-anmalningar"]')
-      .getByRole('listitem')
-      .first();
-    const forfallnaRadLaddad = page
-      .locator('section[aria-labelledby="hem-forfallna"]')
-      .getByRole('listitem')
-      .first();
+      const senasteRadLaddad = page
+        .locator('section[aria-labelledby="hem-senaste-aktivitet"]')
+        .getByRole('listitem')
+        .first();
+      const nyaAnmRadLaddad = page
+        .locator('section[aria-labelledby="hem-nya-anmalningar"]')
+        .getByRole('listitem')
+        .first();
+      const forfallnaRadLaddad = page
+        .locator('section[aria-labelledby="hem-forfallna"]')
+        .getByRole('listitem')
+        .first();
 
-    const efter = kravBoxar(
-      {
-        nastaEventH2: await nastaEventH2.boundingBox(),
-        nastaEventKropp: await nastaEventKropp.boundingBox(),
-        nyaAnmH2: await nyaAnmH2.boundingBox(),
-        forfallnaH2: await forfallnaH2.boundingBox(),
-        senasteH2: await senasteH2.boundingBox(),
-        senasteRad: await senasteRadLaddad.boundingBox(),
-        nyaAnmRad: await nyaAnmRadLaddad.boundingBox(),
-        forfallnaRad: await forfallnaRadLaddad.boundingBox(),
-      },
-      'EFTER datalandning',
-    );
+      const efter = kravBoxar(
+        {
+          nastaEventH2: await nastaEventH2.boundingBox(),
+          nastaEventKropp: await nastaEventKropp.boundingBox(),
+          nyaAnmH2: await nyaAnmH2.boundingBox(),
+          forfallnaH2: await forfallnaH2.boundingBox(),
+          senasteH2: await senasteH2.boundingBox(),
+          senasteRad: await senasteRadLaddad.boundingBox(),
+          nyaAnmRad: await nyaAnmRadLaddad.boundingBox(),
+          forfallnaRad: await forfallnaRadLaddad.boundingBox(),
+        },
+        'EFTER datalandning',
+      );
 
-    // MÄTNINGEN — exakt likhet (`toEqual`), ingen tolerans-marginal, för de
-    // TRE block ingenting ANNAT på sidan förskjuter: Nästa event (första
-    // sektionen, inget ovanför), Nya anmälningars EGEN rubrik (dess
-    // innehåll växlar Skeleton→text, men h2-BOXEN är blockbredd × radhöjd i
-    // BÅDA fallen, opåverkad av vad grannsektioner gör) och Nya anmälningars
-    // EGEN första rad — den sitter DIREKT under h2:n (inget mellanliggande
-    // element i vare sig pending- eller laddat läge, TASK-416.18) och
-    // förskjuts därför inte av "Bekräfta alla"-knappen nedanför den.
-    expect(efter.nastaEventH2).toEqual(under.nastaEventH2);
-    expect(efter.nastaEventKropp).toEqual(under.nastaEventKropp);
-    expect(efter.nyaAnmH2).toEqual(under.nyaAnmH2);
-    expect(efter.nyaAnmRad).toEqual(under.nyaAnmRad);
+      // MÄTNINGEN — exakt likhet (`toEqual`), ingen tolerans-marginal, för de
+      // TRE block ingenting ANNAT på sidan förskjuter: Nästa event (första
+      // sektionen, inget ovanför), Nya anmälningars EGEN rubrik (dess
+      // innehåll växlar Skeleton→text, men h2-BOXEN är blockbredd × radhöjd i
+      // BÅDA fallen, opåverkad av vad grannsektioner gör) och Nya anmälningars
+      // EGEN första rad — den sitter DIREKT under h2:n (inget mellanliggande
+      // element i vare sig pending- eller laddat läge, TASK-416.18) och
+      // förskjuts därför inte av "Bekräfta alla"-knappen nedanför den.
+      expect(efter.nastaEventH2).toEqual(under.nastaEventH2);
+      expect(efter.nastaEventKropp).toEqual(under.nastaEventKropp);
+      expect(efter.nyaAnmH2).toEqual(under.nyaAnmH2);
+      expect(efter.nyaAnmRad).toEqual(under.nyaAnmRad);
 
-    // Förfallna betalningars och Senaste aktivitets Y-koordinat förskjuts
-    // MÄTT (+41px resp. +112px i denna fixtur) av "Bekräfta alla"-knappen
-    // som monteras under Nya anmälningars lista NÄR OCH ENDAST NÄR
-    // `anmalningar.total > 0` blir känt — ett tillstånd som per definition
-    // inte existerar förrän datat landat (`NyaAnmalningar.tsx`s sista gren).
-    // Det är EXAKT samma orsak för Senaste aktivitet, plus Förfallna
-    // betalningars EGEN "Skicka påminnelse till alla"-knapp OCH "Att
-    // påminna"-underrubriken (`ForfallnaBetalningar.tsx`) som i sin tur
-    // förskjuter allt UNDER den ytterligare. Detta är INGET regressions-fynd
-    // — en flat, count-agnostisk skeleton kan strukturellt inte reservera
-    // plats för en knapp/rubrik vars EXISTENS beror på en siffra skeletonen
-    // per definition inte känner. `utanY()` isolerar den geometri som
-    // FAKTISKT hör till "har DENNA sektions egen skeleton-storlek matchat
-    // dess laddade storlek" — och det har den, för dessa rubriker och för
-    // Senaste aktivitets rad.
-    expect(utanY(efter.forfallnaH2)).toEqual(utanY(under.forfallnaH2));
-    expect(utanY(efter.senasteH2)).toEqual(utanY(under.senasteH2));
-    expect(utanY(efter.senasteRad)).toEqual(utanY(under.senasteRad));
+      // Förfallna betalningars och Senaste aktivitets Y-koordinat förskjuts
+      // MÄTT (+41px resp. +112px i denna fixtur) av "Bekräfta alla"-knappen
+      // som monteras under Nya anmälningars lista NÄR OCH ENDAST NÄR
+      // `anmalningar.total > 0` blir känt — ett tillstånd som per definition
+      // inte existerar förrän datat landat (`NyaAnmalningar.tsx`s sista gren).
+      // Det är EXAKT samma orsak för Senaste aktivitet, plus Förfallna
+      // betalningars EGEN "Skicka påminnelse till alla"-knapp OCH "Att
+      // påminna"-underrubriken (`ForfallnaBetalningar.tsx`) som i sin tur
+      // förskjuter allt UNDER den ytterligare. Detta är INGET regressions-fynd
+      // — en flat, count-agnostisk skeleton kan strukturellt inte reservera
+      // plats för en knapp/rubrik vars EXISTENS beror på en siffra skeletonen
+      // per definition inte känner. `utanY()` isolerar den geometri som
+      // FAKTISKT hör till "har DENNA sektions egen skeleton-storlek matchat
+      // dess laddade storlek" — och det har den, för dessa rubriker och för
+      // Senaste aktivitets rad.
+      expect(utanY(efter.forfallnaH2)).toEqual(utanY(under.forfallnaH2));
+      expect(utanY(efter.senasteH2)).toEqual(utanY(under.senasteH2));
+      expect(utanY(efter.senasteRad)).toEqual(utanY(under.senasteRad));
 
-    // Förfallna betalningars FÖRSTA RAD (TASK-416.18) ärver SAMMA
-    // page-nivå-förskjutning som sin egen h2 (ovan) — PLUS en till: den
-    // riktiga raden sitter under "Att påminna"-underrubriken (`<h3
-    // id="hem-forfallna-paminna">`), ett element som INTE existerar i
-    // pending-läget (den flata skeleton-containern har ingen gruppindelning
-    // — antalet grupper är per definition okänt innan datat landat, samma
-    // resonemang som knapparna ovan). Mätt (denna fixtur): 782→877 px, en
-    // TREDJE, egen förskjutning utöver h2:ns +41. `utanY()` isolerar även
-    // här bredd/höjd/vänsterkant — den geometri skeleton-fixen FAKTISKT
-    // bevisar.
-    expect(utanY(efter.forfallnaRad)).toEqual(utanY(under.forfallnaRad));
-  });
+      // Förfallna betalningars FÖRSTA RAD (TASK-416.18) ärver SAMMA
+      // page-nivå-förskjutning som sin egen h2 (ovan) — PLUS en till: den
+      // riktiga raden sitter under "Att påminna"-underrubriken (`<h3
+      // id="hem-forfallna-paminna">`), ett element som INTE existerar i
+      // pending-läget (den flata skeleton-containern har ingen gruppindelning
+      // — antalet grupper är per definition okänt innan datat landat, samma
+      // resonemang som knapparna ovan). Mätt (denna fixtur): 782→877 px, en
+      // TREDJE, egen förskjutning utöver h2:ns +41. `utanY()` isolerar även
+      // här bredd/höjd/vänsterkant — den geometri skeleton-fixen FAKTISKT
+      // bevisar.
+      expect(utanY(efter.forfallnaRad)).toEqual(utanY(under.forfallnaRad));
+
+      // Rapporterbart spår per bredd (samma disciplin som Bevakningsradens
+      // `test.info().annotations.push`, TASK-303): talen syns i Playwrights
+      // rapport i stället för att bara vara en implicit bock.
+      test.info().annotations.push({
+        type: 'skeleton-radgeometri',
+        description: JSON.stringify({
+          viewport,
+          nyaAnmRad: efter.nyaAnmRad,
+          forfallnaRad: efter.forfallnaRad,
+        }),
+      });
+    });
+  }
 });

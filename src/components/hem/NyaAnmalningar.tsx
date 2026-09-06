@@ -26,7 +26,13 @@ import type { useDashboardRegistrations } from './useDashboardData';
  * kortare än kolumnens 42 px och avgör alltså inte radens höjd. Den
  * högerställda platshållaren mot `{relTid}`-spannet är med av samma skäl som
  * `MailLogSkeletonRow`s fyra fält: `inskickad` sätts av varje anmälan
- * (`reg()`-fixturen), så relativ-tid är i praktiken TYPRADEN framåt.
+ * (`reg()`-fixturen), så relativ-tid är i praktiken TYPRADEN framåt. Bär
+ * SAMMA `shrink-0 pl-2 text-caption`-klasser som `{relTid}`-spannet
+ * (rad ~168/179) verbatim, inte bara samma bredd/storlek (review-fynd
+ * runda 1, PR #2419: `pl-2` saknades — utan mätbar effekt på radens EGEN
+ * boundingBox eftersom `flex-1`-namnkolumnen absorberar mellanskillnaden,
+ * men en verklig avvikelse från den pixel-för-pixel-spegling docblocket
+ * ovan påstår).
  *
  * BREDDEN (568→545, 23 px för bred) satt INTE på raden själv: raden är ett
  * block-element utan egen breddklass och stretchar till sin FLEX-förälders
@@ -48,7 +54,7 @@ function NyaAnmalanSkeletonRad() {
         <Skeleton variant="text" className="w-2/5 text-body" />
         <Skeleton variant="text" className="w-1/3 text-caption" />
       </span>
-      <Skeleton variant="text" className="w-16 shrink-0 text-caption" />
+      <Skeleton variant="text" className="w-16 shrink-0 pl-2 text-caption" />
     </div>
   );
 }
