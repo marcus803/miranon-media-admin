@@ -204,12 +204,27 @@ i denna ordning, ALDRIG omvänd:
    npx supabase migration list
    ```
 
-   **Förväntad utdata** (bland ev. andra rader): raden för DENNA PR:s
-   migration visar BÅDE `local` OCH `remote` ifyllda med samma tidsstämpel:
+   **Förväntad utdata** (mätt mot staging, `--output pretty`, samma rader i
+   annan miljö — bland ev. fler rader):
 
    ```text
-   {"local":"20260906165100","remote":"20260906165100","time":"2026-09-06 16:51:00"}
+     Local            | Remote           | Time (UTC)
+    ------------------|------------------|-----------------------
+     ...
+     `20260906165100` | `20260906165100` | `2026-09-06 16:51:00`
    ```
+
+   Raden för DENNA PR:s migration (`20260906165100`) visar samma tidsstämpel
+   i BÅDE `Local`- och `Remote`-kolumnen. **Formatet är CLI-versions-/
+   TTY-beroende, prosaregeln är det bindande facit:** körd interaktivt i
+   Marcus eget terminalfönster (en riktig TTY) ger `supabase migration list`
+   normalt denna tabell utan flaggor; körd icke-interaktivt (pipe, en
+   agent-shell utan TTY) gav SAMMA kommando i denna installation (CLI
+   `2.116.0`) i stället JSON-rader
+   (`{"local":"20260906165100","remote":"20260906165100",...}`) — mätt
+   direkt, inte antaget ur `--help`. Läs kolumnerna/nycklarna oavsett form:
+   det är `local`/`remote`-VÄRDET för `20260906165100` som avgör steget, inte
+   utskriftens format.
 
    **Steget lyckades när:** `local` och `remote` är identiska för
    `20260906165100`. Ett `remote` som saknas eller står tomt (`null`/`""`)
@@ -1077,7 +1092,7 @@ formulerad så att den rör så lite som möjligt.
 
 ### R1 — Migrationen gick fel halvvägs
 
-`migration list` (§ Steg 2) säger exakt vilken av de fyra som applicerades.
+`migration list` (§ Steg 2) säger exakt vilken av de fem som applicerades.
 
 **Säkert att riva ENDAST om ingen av tabellerna bär en rad ännu** (dvs. före
 § Steg 9/15 och innan Lotta registrerat något):
