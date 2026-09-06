@@ -6,6 +6,7 @@ import {
   EVENT_FORMATS_RESPONSE,
   EVENT_NOTES_RESPONSE,
   EVENTS_RESPONSE,
+  OPPNA_BETALNINGAR_RESPONSE,
   PLACES_RESPONSE,
   REGISTRATIONS_RESPONSE,
   resolveActivityLogResponse,
@@ -101,6 +102,15 @@ export const handlers = [
   // check-in var tvunget att äga sin egen `get-attendance`-handler eller
   // riskera `OmockadRequestError`. Se `fixture-data.ts` § ATTENDANCE_RESPONSE.
   http.get(EF('get-attendance'), () => json(ATTENDANCE_RESPONSE)),
+  // Betalningsinkorgens (`BetalningsInkorg.tsx`, `useOppnaBetalningar`) egen
+  // EF — TOM som normalläge, samma resonemang som `get-attendance` ovan
+  // (TASK-416.14 AC #2). FÖRBEREDD INFRASTRUKTUR: Betalningsinkorgen kan inte
+  // navigeras till hermetiskt i DENNA skiva (`playwright.config.ts` hårdkodar
+  // `VITE_FEATURE_BETALNINGAR: 'av'` för acceptance/visual/webblasarbeteende-
+  // dev-servern, se `fixture-data.ts` § OPPNA_BETALNINGAR_RESPONSE för hela
+  // motiveringen) — handlern registreras ändå så EF-kontraktet finns
+  // dokumenterat och kontraktsvakten (nightly) har något att jämföra mot.
+  http.get(EF('hamta-oppna-betalningar'), () => json(OPPNA_BETALNINGAR_RESPONSE)),
   // [TASK-338.3] Räckviddsdialogens Plats-axel läser SAMMA lista som
   // Mer → Platser (`usePlacesList`), så varje öppning av
   // uppladdningsdialogen träffar denna EF. Utan handler faller
