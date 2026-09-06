@@ -15,7 +15,6 @@ import {
 import { EventValjare } from '@/components/events/EventValjare';
 import {
   Button,
-  Dialog,
   InitialAvatar,
   Meny,
   MenyPost,
@@ -1733,12 +1732,17 @@ export function BetalningsInkorg() {
           stänga — Modalen avmonteras med sidan när routern byter väg,
           precis som den gjorde som inline-panel.
 
-          `size="lg"` (36rem/576 px, `max-w-full`): mappningsstegets
-          `Select`-fält (`min-w-64` vardera, `flex-wrap`) och `Input`
-          (`max-w-80`) får plats i EN kolumn utan att tvinga fram radbryt på
-          en bredd som redan ryms bekvämt inom `lg`, och `max-w-full` +
-          Modalens egen `p-4`-marginal håller den innanför varje viewport
-          ner mot mobil (ingen fast bredd kan spränga en 375 px-skärm). */}
+          [TASK-412, TREDJE GRANSKNINGSVARVET] `<Dialog>` FLYTTADE IN I
+          `SwishImport.tsx` SJÄLV — här monteras bara `<Modal>`. Skälet:
+          `actions`-raden och steg-underraden måste känna till `steg`
+          (`'val'`/`'mappning'`), och det tillståndet är internt i
+          `SwishImport`. En `Dialog` byggd HÄR (utanför) hade antingen
+          behövt lyfta `steg` upp i denna komponent (samma stat på två
+          ställen) eller inte kunnat bygga rätt knapprad alls — samma
+          arkitektur som `RegistreratNuBlock.tsx`s `AngraKnapp` och
+          `SegmentMailCompose.tsx`, som båda äger sin EGNA fulla
+          `Dialog`-komposition. Se `SwishImport.tsx`s eget docblock för
+          `size="lg"`-motiveringen (oförändrad, flyttade bara med). */}
       <Modal
         isOpen={visaImport}
         onOpenChange={(oppen) => {
@@ -1746,9 +1750,7 @@ export function BetalningsInkorg() {
         }}
         isDismissable
       >
-        <Dialog title="Importera kontoutdrag" size="lg">
-          <SwishImport oppna={rader} onStang={stangImport} />
-        </Dialog>
+        <SwishImport oppna={rader} onStang={stangImport} />
       </Modal>
 
       {/* ═══════════════════════ GRANSKNINGSBLOCKET (C1) ═══════════════════════

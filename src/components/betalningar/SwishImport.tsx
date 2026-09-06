@@ -1,7 +1,7 @@
 import { useNavigate } from '@tanstack/react-router';
 import { Upload } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Button, Input, MessageBox, Select, SelectItem } from '@/components/primitives';
+import { Button, Dialog, Input, MessageBox, Select, SelectItem } from '@/components/primitives';
 import {
   analyseraFil,
   beraknaSignatur,
@@ -272,150 +272,194 @@ export function SwishImport({ oppna, onStang }: Props) {
   const utkastfel = utkast ? mappningsFel(utkast) : null;
 
   return (
-    /* [TASK-412] INGEN EGEN LANDMÄRKES-YTA LÄNGRE: komponenten renderas nu
-       UTESLUTANDE inuti `Dialog` (`BetalningsInkorg.tsx`s `<Modal>`-
-       montering), som redan bär den tillgängliga dialogrubriken
-       ("Importera kontoutdrag", `title`-propen, `aria-labelledby`
-       automatiskt) och all sin egen kant/bakgrund/padding/skugga. En egen
-       `<section aria-label="Importera kontoutdrag">` med kant+bakgrund+
-       marginal (den gamla inline-panelens form) hade dubblerat BÅDE namnet
-       (skärmläsaren hör "Importera kontoutdrag" två gånger) OCH boxen (en
-       ruta i rutan). Se `Dialog.tsx` för rubrik-mekaniken. */
-    <div className="flex flex-col gap-3">
-      {/* Dold input plus en knapp som klickar den. `hidden` ger display:none,
-          alltså varken synlig, tabbstopp eller nåbar för skärmläsaren -
-          precis den form react-arias FileTrigger själv renderar. */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".csv,.txt,text/csv,text/plain"
-        hidden
-        onChange={(event) => {
-          const fil = event.target.files?.[0];
-          if (fil) void laddaFil(fil);
-        }}
-      />
+    /* [TASK-412, tredje granskningsvarvet — "Kan dialogen göras lite
+       snyggare? Vi har andra dialoger i appen som är liksom snyggare än
+       denna."] KOMPONENTEN ÄGER SIN EGEN `Dialog` NU, i stället för att
+       vara en bar `<div>` någon ANNAN monterar i en `Dialog`. Samma
+       arkitektur som förlagorna (`RegistreratNuBlock.tsx`s `AngraKnapp`,
+       `SegmentMailCompose.tsx`): komponenten som vet vilket STEG den är
+       på är den enda som kan bygga rätt `actions`-rad och rätt
+       steg-underrad för just det läget — en förälder som bara monterar
+       `<Modal><SwishImport/></Modal>` (se `BetalningsInkorg.tsx`) kan inte
+       det utan att känna till `steg` själv.
 
-      {steg === 'val' && (
-        <div className="flex flex-col gap-2">
-          {/* "PER BANK" ÄR STRUKET (Marcus: *"Ta bort 'per bank', de har bara
-              en bank"*). Kvalificeringen beskrev en generalitet koden bär
-              (`bankmappning-minne.ts` sparar faktiskt mappningen per banknamn)
-              men som Lotta aldrig möter — hon har en bank, och "per bank" fick
-              en engångsuppgift att låta som en återkommande.
+       RUBRIKEN GÅR GENOM `title` (blir `text-xl` + `aria-labelledby`,
+       ADR-044) — INGEN egen `<h2>` som konkurrerar. Stegnamnet är i
+       stället en underrad i `text-caption text-text-muted` (se nedan),
+       inte en andra rubriknivå.
 
-              SWISH-HÄNVISNINGEN ÄR KVAR, omskriven till den nya termen: utan
-              den vet Lotta inte VILKEN av bankens filer som avses. Vald
-              formulering: "Ladda ner kontoutdraget för Swish från din bank och
-              välj filen här." — kontoutdrag som huvudord, Swish som
-              bestämning, alltså samma sak hon letar efter i banken. */}
-          <p className="text-small text-text-muted">
-            Ladda ner kontoutdraget för Swish från din bank och välj filen här. Kolumnerna behöver
-            bara pekas ut en gång.
-          </p>
-          {/* [TASK-412] "Avbryt" FLYTTAR HIT, in i knapparaden — den bodde
-              tidigare i den rivna header-raden ovan (`onStang` samma
-              funktion, samma effekt: `Modal`s `isOpen` går till `false` hos
-              konsumenten). `steg === 'mappning'` hade redan sin egen
-              Avbryt-knapp i sin egen knapprad (se nedan) — samma mönster,
-              nu konsekvent i BÅDA stegen i stället för en delad topp-knapp. */}
-          <div className="flex flex-wrap gap-2">
-            <Button intent="primary" emphasis="outline" onPress={valjFil}>
+       STORLEKEN ÄR KONSTANT — `size="lg"` genom BÅDA stegen (`val` och
+       `mappning`) — så dialogen inte hoppar i bredd när Lotta går vidare;
+       bara höjden växer. `lg` (36rem/576px) rymmer mappningsstegets sex
+       `Select`-fält (`min-w-64` vardera) i en kolumn utan att tvinga fram
+       radbryt, och `max-w-full` (Dialog.tsx bas-klass) + `Modal`s egen
+       `p-4`-marginal håller den innanför varje viewport ner mot mobil. */
+    <Dialog
+      title="Importera kontoutdrag"
+      size="lg"
+      aria-description={
+        steg === 'val'
+          ? 'Ladda upp kontoutdraget för Swish från din bank.'
+          : 'Kontrollera vilken kolumn som är vad i filen innan den läses.'
+      }
+      actions={
+        /* KNAPPARNA GÅR GENOM `actions`, ALDRIG SPRIDDA I KROPPEN (samma
+           mönster som `AngraKnapp`/`SegmentMailCompose`s bekräftelse-
+           dialog): Avbryt (ghost) till vänster, den primära handlingen
+           (`intent="primary"`, en per steg) längst till höger.
+
+           EGEN WRAPPER MED `flex-wrap` I STÄLLET FÖR `Dialog.tsx`s bas-rad
+           direkt: primitivens `actions`-behållare är `flex justify-end
+           gap-3` UTAN `flex-wrap` (delas av ~10 konsumenter — en egen
+           bredare ändring hör inte hemma i detta pass). Genom att skicka
+           EN `w-full`-wrapper som SJÄLV bär `flex-wrap` får just denna
+           dialog rätt beteende (raden bryter i stället för att svämma
+           över) utan att röra primitiven eller någon annan konsument —
+           mätt nödvändigt på iPad 820/smal mobil (kravet i denna
+           iteration). */
+        <div className="flex w-full flex-wrap justify-end gap-3">
+          <Button intent="ghost" onPress={onStang}>
+            Avbryt
+          </Button>
+          {steg === 'val' ? (
+            <Button intent="primary" onPress={valjFil}>
               <Upload aria-hidden size={16} className="shrink-0" />
               {/* *"Byt ut 'Välj rapportfil' till 'Ladda upp fil'"* — och
-                  "rapportfil" försvinner därmed ur UI:t helt, i samma andetag
-                  som "bankrapport". Ikonen (`Upload`) är oförändrad. */}
+                  "rapportfil" försvinner därmed ur UI:t helt, i samma
+                  andetag som "bankrapport". Ikonen (`Upload`) är
+                  oförändrad. */}
               Ladda upp fil
             </Button>
-            <Button intent="ghost" onPress={onStang}>
-              Avbryt
-            </Button>
-          </div>
-        </div>
-      )}
-
-      {lasfel !== null && (
-        <MessageBox intent="error" title="Filen kunde inte läsas">
-          {lasfel}
-        </MessageBox>
-      )}
-
-      {steg === 'mappning' && analys && utkast && (
-        // `tabIndex={-1}` + `ref`: fokusmål för `useEffect`-svepet ovan. Se
-        // dess docblock för VARFÖR (a11y-golvet, tidigare oåtgärdat).
-        <div ref={mappningPanelRef} tabIndex={-1} className="flex flex-col gap-3 outline-none">
-          <MessageBox intent="info" title={`Kontrollera mappningen: ${filnamn}`}>
-            {analys.bastaGissning === null
-              ? 'Appen känner inte igen filen. Peka ut vilken kolumn som är vad, en gång, så sparas det till nästa import.'
-              : 'Appen är inte säker på vilken sparad mappning som gäller. Kolumnerna nedan är en GISSNING, förifylld men aldrig tillämpad automatiskt. Kontrollera dem, rätta det som skiljer sig, och bekräfta.'}
-          </MessageBox>
-
-          <Input
-            label="Vilken bank kommer rapporten från?"
-            value={utkast.bank}
-            onChange={(varde) => setUtkast({ ...utkast, bank: varde })}
-            placeholder="Till exempel Nordea"
-            // `mappningsFel` returnerar EN sträng, antingen om banknamnet
-            // eller om en obligatorisk kolumn - aldrig båda. Fältet visar
-            // felet bara när det FAKTISKT gäller banknamnet; ett fel om en
-            // saknad kolumn visas i stället i kolumnlistans egen fotnot
-            // nedan (samma utkastfel, olika plats beroende på VAD det gäller).
-            isInvalid={utkastfel !== null && utkast.bank.trim() === ''}
-            errorMessage={utkast.bank.trim() === '' ? (utkastfel ?? undefined) : undefined}
-            className="max-w-80"
-          />
-
-          <ul className="flex flex-col gap-2">
-            {TRANSAKTIONSFALT.map((falt) => (
-              <li key={falt} className="flex flex-wrap items-center gap-2">
-                <Select
-                  label={FALTETIKETT[falt]}
-                  selectedKey={
-                    utkast.kolumner[falt] === null ? 'ingen' : String(utkast.kolumner[falt])
-                  }
-                  onSelectionChange={(nyckel) =>
-                    setUtkast({
-                      ...utkast,
-                      kolumner: {
-                        ...utkast.kolumner,
-                        [falt]: nyckel === 'ingen' ? null : Number(nyckel),
-                      },
-                    })
-                  }
-                  className="min-w-64"
-                >
-                  <SelectItem id="ingen">Finns inte i filen</SelectItem>
-                  {analys.kolumner.map((kolumn) => (
-                    <SelectItem key={kolumn.index} id={String(kolumn.index)}>
-                      {kolumnEtikett(kolumn.index, kolumn.rubrik, kolumn.exempel)}
-                    </SelectItem>
-                  ))}
-                </Select>
-              </li>
-            ))}
-          </ul>
-
-          {/* Felmeddelandet visas nu av `Input`s egen `FieldError` (kopplad
-              via `aria-describedby`/`aria-invalid`, ADR-046) - se fältet
-              ovan. Ett fel som gäller ENDAST kolumnvalen (bankfältet är
-              ifyllt men ingen kolumn pekar ut beloppet) syns bara här. */}
-          {utkastfel !== null && utkast.bank.trim() !== '' && (
-            <p role="status" className="text-(color:--mm-input-error-text) text-small">
-              {utkastfel}
-            </p>
-          )}
-
-          <div className="flex flex-wrap gap-2">
+          ) : (
             <Button isDisabled={utkastfel !== null} onPress={bekraftaMappning}>
               Läs filen
             </Button>
-            <Button intent="ghost" onPress={onStang}>
-              Avbryt
-            </Button>
-          </div>
+          )}
         </div>
-      )}
-    </div>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {/* STEG-UNDERRADEN — text-caption, ALDRIG en andra rubriknivå (se
+            filhuvudets dockblock ovan). Två steg i DENNA dialog (matchningen
+            sker osynligt i `visaRader` innan navigeringen till
+            bekräftelsesteget, se dess docblock § MATCHNINGEN SKER HÄR). */}
+        <p className="text-caption text-text-muted">
+          {steg === 'val' ? 'Steg 1 av 2 · Välj fil' : 'Steg 2 av 2 · Kontrollera kolumnerna'}
+        </p>
+
+        {/* Dold input plus en knapp som klickar den. `hidden` ger
+            display:none, alltså varken synlig, tabbstopp eller nåbar för
+            skärmläsaren - precis den form react-arias FileTrigger själv
+            renderar. */}
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".csv,.txt,text/csv,text/plain"
+          hidden
+          onChange={(event) => {
+            const fil = event.target.files?.[0];
+            if (fil) void laddaFil(fil);
+          }}
+        />
+
+        {steg === 'val' && (
+          /* "PER BANK" ÄR STRUKET (Marcus: *"Ta bort 'per bank', de har
+             bara en bank"*). Kvalificeringen beskrev en generalitet koden
+             bär (`bankmappning-minne.ts` sparar faktiskt mappningen per
+             banknamn) men som Lotta aldrig möter — hon har en bank, och
+             "per bank" fick en engångsuppgift att låta som en
+             återkommande.
+
+             SWISH-HÄNVISNINGEN ÄR KVAR, omskriven till den nya termen: utan
+             den vet Lotta inte VILKEN av bankens filer som avses. Vald
+             formulering: "Ladda ner kontoutdraget för Swish från din bank
+             och välj filen här." — kontoutdrag som huvudord, Swish som
+             bestämning, alltså samma sak hon letar efter i banken. */
+          <p className="text-body">
+            Ladda ner kontoutdraget för Swish från din bank och välj filen här. Kolumnerna behöver
+            bara pekas ut en gång.
+          </p>
+        )}
+
+        {lasfel !== null && (
+          <MessageBox intent="error" title="Filen kunde inte läsas">
+            {lasfel}
+          </MessageBox>
+        )}
+
+        {steg === 'mappning' && analys && utkast && (
+          // `tabIndex={-1}` + `ref`: fokusmål för `useEffect`-svepet ovan. Se
+          // dess docblock för VARFÖR (a11y-golvet, tidigare oåtgärdat).
+          <div ref={mappningPanelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
+            {/* PLAIN TEXT, INTE `MessageBox` (tredje granskningsvarvet:
+                "MessageBox-notiser bara för fel/varning") — detta är
+                vägledning, inte ett fel eller en varning. `lasfel` ovan är
+                fortsatt en `MessageBox` eftersom den ÄR ett fel. */}
+            <p className="text-body">
+              <strong className="font-semibold">{`Kontrollera mappningen: ${filnamn}. `}</strong>
+              {analys.bastaGissning === null
+                ? 'Appen känner inte igen filen. Peka ut vilken kolumn som är vad, en gång, så sparas det till nästa import.'
+                : 'Appen är inte säker på vilken sparad mappning som gäller. Kolumnerna nedan är en GISSNING, förifylld men aldrig tillämpad automatiskt. Kontrollera dem, rätta det som skiljer sig, och bekräfta.'}
+            </p>
+
+            <Input
+              label="Vilken bank kommer rapporten från?"
+              value={utkast.bank}
+              onChange={(varde) => setUtkast({ ...utkast, bank: varde })}
+              placeholder="Till exempel Nordea"
+              // `mappningsFel` returnerar EN sträng, antingen om banknamnet
+              // eller om en obligatorisk kolumn - aldrig båda. Fältet visar
+              // felet bara när det FAKTISKT gäller banknamnet; ett fel om en
+              // saknad kolumn visas i stället i kolumnlistans egen fotnot
+              // nedan (samma utkastfel, olika plats beroende på VAD det gäller).
+              isInvalid={utkastfel !== null && utkast.bank.trim() === ''}
+              errorMessage={utkast.bank.trim() === '' ? (utkastfel ?? undefined) : undefined}
+              className="max-w-80"
+            />
+
+            <ul className="flex flex-col gap-2">
+              {TRANSAKTIONSFALT.map((falt) => (
+                <li key={falt} className="flex flex-wrap items-center gap-2">
+                  <Select
+                    label={FALTETIKETT[falt]}
+                    selectedKey={
+                      utkast.kolumner[falt] === null ? 'ingen' : String(utkast.kolumner[falt])
+                    }
+                    onSelectionChange={(nyckel) =>
+                      setUtkast({
+                        ...utkast,
+                        kolumner: {
+                          ...utkast.kolumner,
+                          [falt]: nyckel === 'ingen' ? null : Number(nyckel),
+                        },
+                      })
+                    }
+                    className="min-w-64"
+                  >
+                    <SelectItem id="ingen">Finns inte i filen</SelectItem>
+                    {analys.kolumner.map((kolumn) => (
+                      <SelectItem key={kolumn.index} id={String(kolumn.index)}>
+                        {kolumnEtikett(kolumn.index, kolumn.rubrik, kolumn.exempel)}
+                      </SelectItem>
+                    ))}
+                  </Select>
+                </li>
+              ))}
+            </ul>
+
+            {/* Felmeddelandet visas nu av `Input`s egen `FieldError` (kopplad
+                via `aria-describedby`/`aria-invalid`, ADR-046) - se fältet
+                ovan. Ett fel som gäller ENDAST kolumnvalen (bankfältet är
+                ifyllt men ingen kolumn pekar ut beloppet) syns bara här. */}
+            {utkastfel !== null && utkast.bank.trim() !== '' && (
+              <p role="status" className="text-(color:--mm-input-error-text) text-small">
+                {utkastfel}
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
