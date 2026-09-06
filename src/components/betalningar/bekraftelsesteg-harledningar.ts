@@ -86,15 +86,29 @@ export type BekraftelseRad = {
    */
   ejGenomforbar: Beloppsgenvag | null;
   /**
-   * [TASK-402.8 varv 5] LOTTA HAR SKRIVIT BELOPPET PÅ RADEN FÖR HAND.
+   * [TASK-402.8 varv 5] LOTTA HAR SPARAT RADFORMULÄRET (Klar) — RADEN ÄR
+   * HENNES.
    *
-   * Fältet finns för EN sak: en handredigerad rad som avmarkeras och markeras
-   * igen ska behålla sin siffra i stället för att tyst få beloppsläget
-   * påtvingat (`beloppForNyMarkerad`). Utan flaggan går hennes undantag
-   * förlorat vid ett bock-klick hon uppfattar som ofarligt.
+   * ORDALYDELSEN ÄR VIDARE ÄN "skrivit beloppet för hand", och det är den
+   * ärliga beskrivningen av koden: `sattRadVarden` sätter flaggan för HELA
+   * formuläret — betalsätt, betalningsdatum och notering lika mycket som
+   * beloppet. En rad där hon bara bytte betalsätt räknas alltså också som
+   * hennes undantag. Det är avsiktligt (hon har varit inne i raden och sagt
+   * Klar), men docblocket sade tidigare bara "beloppet" och beskrev därmed
+   * ett smalare fält än det som finns.
+   *
+   * Fältet finns för EN sak: en sådan rad som avmarkeras och markeras igen
+   * ska behålla sina värden i stället för att tyst få beloppsläget påtvingat
+   * (`beloppForNyMarkerad`). Utan flaggan går hennes undantag förlorat vid
+   * ett bock-klick hon uppfattar som ofarligt.
    *
    * SÄTTS av `sattRadBelopp`/`sattRadVarden`, NOLLAS av `sattBeloppslage` —
    * ett läge skriver över undantaget, precis som blockets egen text lovar.
+   *
+   * ASYMMETRI, ÖPPET BOKFÖRD: `sattGenvag` (varianternas A/B-genvägar) nollar
+   * INTE flaggan, till skillnad från `sattBeloppslage`. De två har olika
+   * semantik och olika konsumenter — genvägarna rivs med A/B i `TASK-402.6`,
+   * så skillnaden harmoniseras inte här utan försvinner med dem.
    */
   handredigerad: boolean;
   /** Registreringens utfall, satt efter "Registrera N". */

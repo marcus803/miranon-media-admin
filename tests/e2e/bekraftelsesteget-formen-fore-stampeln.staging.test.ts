@@ -506,6 +506,59 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     expect(await beloppFor(steget, 'Anna Avgift')).toBe('2500kr');
   });
 
+  /**
+   * TILLGÄNGLIGHETSGOLV, inte form: en markering under ett överskrivande läge
+   * ÄNDRAR radens belopp, och den ändringen ska höras. Den seende ser talet
+   * byta i kortet och i avstämningen; utan beskedet hör en skärmläsare bara
+   * "markerad" och beloppet flyttar sig tyst.
+   *
+   * BÅDA HALVORNA PRÖVAS. Beskedet ska komma när talet FAKTISKT byter, och
+   * INTE när det står stilla — `beloppForNyMarkerad` returnerar radens
+   * kandidat även när den redan är radens belopp, så utan skillnadsvillkoret
+   * hade varje bock under ett läge annonserat en ändring som inte skedde.
+   */
+  const MARKERINGSBESKED = /markerad, beloppet satt till/;
+
+  test('en markering under Hela beloppet annonseras, och en som inte flyttar talet gör det inte', async ({
+    page,
+  }) => {
+    const steget = await oppna(page, DESKTOP);
+    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
+    const region = steget.getByTestId('satt-alla-block').getByRole('status');
+
+    // ── TALET BYTER: 1 000 (hennes förslag) → 2 500 (hela beloppet) ────────
+    const annasKryss = await vaxlaBock(page, annasKort);
+    await expect(annasKryss).not.toBeChecked();
+    await pill(steget, ALLTPILL).click();
+    await vaxlaBock(page, annasKort);
+    await expect(annasKryss).toBeChecked();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('2500kr');
+    // NBSP i tusentalsavgränsaren (`toLocaleString('sv-SE')`) — `\s` matchar
+    // både den och ett vanligt mellanslag, av samma skäl som `beloppFor`
+    // normaliserar bort all whitespace.
+    await expect(
+      region.filter({
+        hasText: /Anna Avgift markerad, beloppet satt till 2\s500 kr enligt Hela beloppet\./,
+      }),
+    ).toBeAttached();
+
+    // ── TALET STÅR STILL: hennes förslag ÄR avgiften, alltså inget besked ──
+    await pill(steget, AVGIFTSPILL).click();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
+    await vaxlaBock(page, annasKort);
+    await vaxlaBock(page, annasKort);
+    await expect(annasKryss).toBeChecked();
+    expect(await beloppFor(steget, 'Anna Avgift')).toBe('1000kr');
+    /* Regionen bär fortfarande LÄGESBYTETS besked, aldrig ett markerings-
+       besked om en ändring som inte skedde. Talet är två: Anna står på 2 500
+       efter första halvan och det långa namnet likaså, så avgifts-trycket
+       flyttar båda tillbaka till 1 000. (Mätt — den första versionen av raden
+       gissade "Alla belopp stod redan på …", vilket hade varit sant om
+       halvorna körts var för sig.) */
+    await expect(region).toHaveText('2 belopp satta till anmälningsavgiften.');
+    await expect(region.filter({ hasText: MARKERINGSBESKED })).toHaveCount(0);
+  });
+
   test('en handredigerad rad behåller sin siffra när den markeras om', async ({ page }) => {
     const steget = await oppna(page, DESKTOP);
     const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });

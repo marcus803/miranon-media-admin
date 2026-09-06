@@ -157,7 +157,7 @@ export function useBekraftelsesteg(
 
   /**
    * [TASK-402.8] "Sätt alla belopp" — SAMMA rena regel som den skarpa hooken
-   * kallar (`sattAllaBelopp` i `../bekraftelsesteg-harledningar`). Prototypen
+   * kallar (`sattBeloppslage` i `../bekraftelsesteg-harledningar`). Prototypen
    * är granskningsytan Marcus tittar på (`?data=fixtur`), så knapparna måste
    * göra exakt samma sak här som i den skarpa vägen.
    */

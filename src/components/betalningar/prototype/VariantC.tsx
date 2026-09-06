@@ -19,6 +19,7 @@ import {
   type BekraftelseRad,
   type Beloppsklass,
   type Beloppslage,
+  beloppForNyMarkerad,
   blockrader,
   grupperaRader,
   type ObestamdImportrad,
@@ -105,20 +106,6 @@ const KLASS_ORD: Record<Beloppsklass, { ett: string; flera: string }> = {
   saknas: { ett: 'rad utan belopp', flera: 'rader utan belopp' },
 };
 
-/**
- * [TASK-402.8] SÄTT ALLA BELOPP — knapparnas ord, och beskedets.
- *
- * ETIKETTERNA BÄR INGA TAL, med avsikt. "1 000 kr" och "2 500 kr" hade varit
- * en LÖGN på den här sidan: priset är per event OCH per person, så en rad
- * vars deltagare redan betalat 2 000 av 2 500 får 500 av samma knapptryck som
- * ger en annan rad 2 500. Knappen namnger alltså VAD beloppet är, aldrig hur
- * mycket — talet står kvar per rad, där det är sant.
- *
- * TVÅ KNAPPAR OCH INTE EN TOGGEL: valet kan vara osatt (appens förslag står
- * kvar tills hon trycker), och det kan tryckas om efter en per-rad-ändring.
- * Samma skäl `BeloppsgenvagsKnappar` (`radfalt.tsx`) valde vanliga knappar
- * framför en pill-toggel i varianterna A/B.
- */
 /**
  * [TASK-402.8 varv 5] KAPSELNS TRE LÄGEN — ord, besked och utseende.
  *
@@ -378,8 +365,6 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
   const registrerbara = bas.filter(arRegistrerbar);
   const kvitton = registrerbara.filter((r) => r.medKvitto).length;
   const avstamda = useMemo(() => avstamning(markerade), [markerade]);
-  /* Hur många rader varje knapp faktiskt rör. Noll ⇒ knappen är avstängd:
-     en knapp som inte gör något ska inte gå att trycka. */
   /* Hur många rader varje läge KAN röra. Noll ⇒ segmentet är avstängt: ett
      läge som inte gör något ska inte gå att välja. `forslag` stängs aldrig av
      — det är kapselns förval och måste alltid gå att återvända till. */
@@ -401,6 +386,34 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
         ? `Alla belopp stod redan på ${besked}.`
         : `${plural(antal, 'belopp satt', 'belopp satta')} till ${besked}.`,
     );
+  };
+  /* EN MARKERING UNDER ETT ÖVERSKRIVANDE LÄGE ÄNDRAR ETT BELOPP, OCH DET SKA
+     HÖRAS. Läget är en levande regel (varv 5): markerar Lotta en rad mitt i
+     "Hela beloppet" kommer raden in med hela beloppet i stället för sitt
+     förslag. Den seende ser talet byta i kortet och i avstämningen; en
+     skärmläsare hörde ingenting alls — bocken annonseras som "markerad" och
+     beloppsändringen var tyst. Beskedet skrivs i blockets EGNA
+     `role="status"`-region (samma som sätt-alla-trycken använder), inte i
+     huvudets statusrad, av samma skäl som där: huvudets rad bär den
+     facit-låsta räkningen "N av N inbetalningar markerade".
+
+     TRE VILLKOR, alla nödvändiga. Bara `avgift`/`allt` — `forslag` ÄR radens
+     eget förval, så ett besked där hade beskrivit en ändring som normalt inte
+     sker (orkestrerarens avgränsning; kanten där en rad avmarkerats under
+     `allt` och markeras om under `forslag` annonseras därmed inte). Bara en
+     MARKERING, aldrig en avmarkering, som inte rör beloppet. Och bara när
+     talet FAKTISKT skiljer sig från radens nuvarande — `beloppForNyMarkerad`
+     returnerar radens kandidat även när den redan står där, och "satt till
+     1 000 kr" om en rad som redan visar 1 000 kr är brus, inte information. */
+  const markeraRad = (rad: BekraftelseRad, markerad: boolean) => {
+    const nytt = markerad && aktivtLage !== 'forslag' ? beloppForNyMarkerad(rad, aktivtLage) : null;
+    if (nytt !== null && nytt !== rad.belopp) {
+      const etikett = LAGEN.find((v) => v.lage === aktivtLage)?.etikett ?? '';
+      setSattAllaBesked(
+        `${rad.inkorg.namn} markerad, beloppet satt till ${nytt} kr enligt ${etikett}.`,
+      );
+    }
+    modell.sattRadMarkerad(rad.nyckel, markerad);
   };
   // Summan ur ögonblicksbilden, inte ur modellens levande rader — annars
   // sjönk "10 inbetalningar 12 000 kr" rad för rad under körningen (mätt).
@@ -515,7 +528,13 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               <GruppRubrik namn={grupp.eventNamn} datum={grupp.eventStartdatum} />
               <ul className={LISTA_KLASS}>
                 {grupp.rader.map((rad) => (
-                  <MarkerbartKort key={rad.nyckel} rad={rad} modell={modell} frusen={registrerar} />
+                  <MarkerbartKort
+                    key={rad.nyckel}
+                    rad={rad}
+                    modell={modell}
+                    vidMarkering={markeraRad}
+                    frusen={registrerar}
+                  />
                 ))}
               </ul>
             </div>
@@ -621,21 +640,7 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
               `FilterRad` (som inte heller bär någon rubrik). En h2 i
               `text-body font-medium` hade dessutom sett ut som brödtext i en
               rubriknivå och gjort dokumentöversikten sämre, inte bättre — på
-              en yta som är facit-låst och ligger hos Marcus för granskning.
-
-              ETIKETTEN BÄRS AV VARJE KNAPPS EGET NAMN, inte av ett
-              `role="group"`. Tre skäl, i den ordningen: en gruppetikett
-              annonseras inte tillförlitligt av alla skärmläsare, så
-              "Anmälningsavgift, knapp" hade kunnat läsas helt utan sitt
-              sammanhang; `aria-label` ger i stället varje knapp hela
-              meningen, med den synliga texten inuti sig (WCAG 2.5.3 Label in
-              Name); och ett `fieldset`/`legend`-par — som Biomes
-              `useSemanticElements` föreslår för `role="group"` — är fel både
-              semantiskt (gruppen bär två HANDLINGAR, inga formulärfält) och i
-              layout (en `legend` renderas som fieldsettens caption och blir
-              aldrig en flex-item). Förlagan `BeloppsgenvagsKnappar`
-              (`radfalt.tsx`) kom undan med ett fieldset just för att dess
-              legend var `sr-only`. */}
+              en yta som är facit-låst och ligger hos Marcus för granskning. */}
           <div
             /* MÄTPUNKTEN för blockets luft och bredd. `data-testid` och inte
                ett tillgängligt namn, av samma skäl som sektionens egen krok
@@ -655,8 +660,9 @@ function BulkC({ modell }: { modell: BekraftelsestegModell }) {
                 rörs inte.
               </p>
             </div>
-            {/* `flex-wrap`: på iPad 820 ryms båda knapparna på en rad, men
-                formen får inte bero på det. Vänsterställda i båda fallen. */}
+            {/* `flex-wrap`: på iPad 820 ryms alla tre segmenten på en rad,
+                men formen får inte bero på det. Vänsterställda i båda
+                fallen. */}
             <div className="flex flex-wrap items-center gap-2">
               {/* KAPSELN (varv 4 + 5). Marcus varv 4: *"när man trycker på
                   'Anmälningsavgift' eller 'Hela beloppet' behöver vi inte
@@ -982,10 +988,18 @@ function RadFormular({
 function MarkerbartKort({
   rad,
   modell,
+  vidMarkering,
   frusen = false,
 }: {
   rad: BekraftelseRad;
   modell: BekraftelsestegModell;
+  /**
+   * Markeringen går via sidan, inte rakt in i modellen, så beskedet om ett
+   * ändrat belopp kan skrivas i blockets `role="status"`-region — den bor i
+   * sidkomponenten och kortet når den inte. Anropet till
+   * `modell.sattRadMarkerad` sker fortfarande, i samma vända.
+   */
+  vidMarkering: (rad: BekraftelseRad, markerad: boolean) => void;
   /** Körningen pågår: kortet står stilla och tar inga tryck (varv 15). */
   frusen?: boolean;
 }) {
@@ -1002,7 +1016,7 @@ function MarkerbartKort({
           isSelected={vald}
           isDisabled={frusen}
           onChange={(v) => {
-            modell.sattRadMarkerad(rad.nyckel, v);
+            vidMarkering(rad, v);
             // Avmarkeras ett ÖPPET kort stängs formuläret (Marcus fynd:
             // beloppet försvann annars). Ändringarna behålls.
             if (!v) setOppen(false);
