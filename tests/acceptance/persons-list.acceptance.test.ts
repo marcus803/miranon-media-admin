@@ -201,6 +201,128 @@ test.describe('Personer-listan (TASK-286.2 — förladdat register, sök i klien
 
     expect(results.violations).toEqual([]);
   });
+
+  /**
+   * [TASK-416.5] SKELETONRADENS ANATOMI = DEN LADDADE RADENS ANATOMI, MÄTT.
+   *
+   * Rapport D §4 #5 (S123) mätte ~110 px drift över tio rader mellan
+   * skeleton- och laddad rad (`py-3` + egen `gap-1` + `text-small` på rad 2,
+   * ingen avatar-cirkel, mot `py-2.5` + `mt-1` + `text-caption` + `size-9`-
+   * avataren). Beviset är detsamma som husets övriga geometri-tester (AC #3
+   * ovan): DOM-mätt `getBoundingClientRect`, aldrig en klass-diff — en
+   * regression som återinför `gap-1` eller fel typografi fäller detta test
+   * på HÖJDEN, inte på ett snapshot av klassnamn. Räknarraden (859 skelett,
+   * 985–995 laddad) mäts på samma sätt: dess PLACERING (x, y) ska stå still
+   * när skelettet ersätts av den riktiga raden.
+   *
+   * FÖRBEFINTLIG KANT, MÄTT OCH REGISTRERAD (INTE ÅTGÄRDAD HÄR — utanför
+   * denna skivas scope): fabrikens default `senasteInteraktion: null` ger
+   * radens tredje textrad `<span className="mt-1 truncate text-caption">`
+   * bara ett enda mellanslag som innehåll (HÖJDLÅSET, PersonsList.tsx
+   * ~1074–1099). `truncate` sätter `white-space: nowrap`, och ett mellanslag
+   * som är BÅDE start- och slutkant av sin egen radbox trimmas bort helt av
+   * CSS Text-modulens whitespace-kollaps — spannet mäts då till 0 px höjd i
+   * stället för sin `text-caption`-radbox (18 px), och den laddade radens
+   * höjd krymper från avsedda ~85 px till 67 px. Bas-filtret garanterar i
+   * skarpt läge att varje person har en interaktion (samma kommentar,
+   * PersonsList.tsx ~1096–1098), så mätningen här sker mot en rad med
+   * VERKLIGT interaktionsinnehåll — radens AVSEDDA anatomi, inte mot en
+   * obesläktad kant-bugg i höjdlåset.
+   */
+  test('AC #1/#2 (TASK-416.5) — skeletonradens höjd matchar den laddade radens, räknarraden byter aldrig position', async ({
+    page,
+    network,
+  }) => {
+    // Endast FÖRSTA raden (sorteringens "Person 00") behöver ett riktigt
+    // interaktionsvärde — det är den enda raden testet mäter.
+    const registerMedInteraktion = REGISTRET.map((p, i) =>
+      i === 0
+        ? { ...p, senasteInteraktion: 'Anmälde sig till RIM 1 i Skövde', dagarSedanSenaste: 3 }
+        : p,
+    );
+    network.use(
+      http.get(EF('get-persons'), async () => {
+        await delay(1500);
+        return json({ persons: registerMedInteraktion });
+      }),
+    );
+
+    await page.goto('/personer');
+
+    const yta = page.getByTestId('personer-yta');
+    const skelettContainer = yta.locator('[aria-busy="true"]');
+    await expect(skelettContainer).toBeVisible();
+
+    // Skeleton-radens rect — FÖRSTA raden i divide-y-blocket (852–884).
+    const skelettRad = skelettContainer.locator('.divide-y > div').first();
+    await expect(skelettRad).toBeVisible();
+    const skelettRadRect = await skelettRad.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { hojd: r.height, bredd: r.width };
+    });
+
+    // Avatar-cirkeln — `.size-9` är unikt PER RAD (Pill:en bär `rounded-full`
+    // men aldrig `size-9`), så selectorn träffar bara initial-cirkeln.
+    const skelettAvatarRect = await skelettRad
+      .locator('.size-9')
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { hojd: r.height, bredd: r.width };
+      });
+
+    // Räknarradens skeleton — enda `span[aria-hidden]` som är DIREKT barn
+    // till busy-containern (avatar-/text-skeletonen ligger under
+    // `.divide-y`, ett steg längre ned).
+    const skelettRaknareRect = await skelettContainer
+      .locator('> span[aria-hidden="true"]')
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, hojd: r.height };
+      });
+
+    await expect(page.getByText(`Visar 50 av ${REGISTER_ANTAL} personer.`)).toBeVisible();
+
+    const laddadRad = page.getByRole('list', { name: 'Personer' }).getByRole('listitem').first();
+    const laddadRadRect = await laddadRad.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      return { hojd: r.height, bredd: r.width };
+    });
+    const laddadAvatarRect = await laddadRad
+      .locator('.size-9')
+      .first()
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { hojd: r.height, bredd: r.width };
+      });
+    const laddadRaknareRect = await page
+      .getByText(`Visar 50 av ${REGISTER_ANTAL} personer.`)
+      .evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        return { x: r.x, y: r.y, hojd: r.height };
+      });
+
+    // AC #1 — DOM-mätt, ±0 px.
+    expect(Math.round(skelettRadRect.hojd)).toBe(Math.round(laddadRadRect.hojd));
+    expect(Math.round(skelettAvatarRect.hojd)).toBe(Math.round(laddadAvatarRect.hojd));
+    expect(Math.round(skelettAvatarRect.bredd)).toBe(Math.round(laddadAvatarRect.bredd));
+
+    // AC #2 — räknarradens PLACERING (x, y) identisk; höjden likaså (båda
+    // `text-small`, en textrad).
+    expect(Math.round(skelettRaknareRect.x)).toBe(Math.round(laddadRaknareRect.x));
+    expect(Math.round(skelettRaknareRect.y)).toBe(Math.round(laddadRaknareRect.y));
+    expect(Math.round(skelettRaknareRect.hojd)).toBe(Math.round(laddadRaknareRect.hojd));
+
+    test.info().annotations.push({
+      type: 'matning',
+      description:
+        `TASK-416.5: skeletonrad ${skelettRadRect.hojd.toFixed(1)}×${skelettRadRect.bredd.toFixed(1)} px ` +
+        `vs laddad rad ${laddadRadRect.hojd.toFixed(1)}×${laddadRadRect.bredd.toFixed(1)} px; ` +
+        `avatar ${skelettAvatarRect.bredd.toFixed(1)}×${skelettAvatarRect.hojd.toFixed(1)} vs ${laddadAvatarRect.bredd.toFixed(1)}×${laddadAvatarRect.hojd.toFixed(1)} px; ` +
+        `räknarraden x=${skelettRaknareRect.x.toFixed(1)}→${laddadRaknareRect.x.toFixed(1)}, y=${skelettRaknareRect.y.toFixed(1)}→${laddadRaknareRect.y.toFixed(1)}, höjd ${skelettRaknareRect.hojd.toFixed(1)}→${laddadRaknareRect.hojd.toFixed(1)}.`,
+    });
+  });
 });
 
 /**

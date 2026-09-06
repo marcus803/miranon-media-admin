@@ -854,22 +854,35 @@ export function PersonsList() {
       <div className="flex flex-col gap-4" data-testid="personer-yta">
         {searchField}
         {bokstavsrad}
-        <div role="status" aria-busy="true" className="flex flex-col gap-4">
+        {/* [TASK-416.5] Räknarradens platshållare bär nu räknarradens EGNA
+            klasser (`px-4`, i en `gap-2`-container mot listan under) i
+            stället för `gap-4` och flush-vänster — annars hoppar räknaren
+            i sidled OCH listan flyttas i höjdled när den riktiga raden
+            (985–995) tar dess plats. */}
+        <div role="status" aria-busy="true" className="flex flex-col gap-2">
           <span className="sr-only">Laddar personer…</span>
-          <Skeleton variant="text" className="w-40 text-small" />
+          <Skeleton variant="text" className="w-40 px-4 text-small" />
           <div className="divide-y divide-border rounded-2xl border border-transparent bg-bg-muted px-4 contrast-more:border-border-strong">
             {SKELETON_NAMNBREDD.map((bredd, i) => (
               <div
                 // biome-ignore lint/suspicious/noArrayIndexKey: fast skeleton-rad, ingen identitet
                 key={i}
-                className="flex items-center gap-3 py-3"
+                // [TASK-416.5] Radens anatomi är nu IDENTISK med den laddade
+                // raden (1052–1057): `relative flex items-center gap-3
+                // py-2.5`, avatar-cirkel `size-9` som skeleton, textkolumnen
+                // UTAN gap (radavståndet kommer av typografins line-height +
+                // `mt-1` på rad 3, exakt som `namn`/`contact`/`senasteInteraktion`
+                // gör i den laddade raden) — inte en egen `gap-1` som gav
+                // ~110 px drift över tio rader (rapport D §4 #5, S123).
+                className="relative flex items-center gap-3 py-2.5"
               >
-                <div className="flex min-w-0 flex-1 flex-col gap-1">
-                  <div className="text-body">
+                <Skeleton variant="text" className="size-9 shrink-0 rounded-full" />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Skeleton variant="text" className={`${bredd} text-body`} />
                   </div>
-                  <Skeleton variant="text" className="w-3/5 text-small" />
-                  <Skeleton variant="text" className="w-2/5 text-caption" />
+                  <Skeleton variant="text" className="w-3/5 text-caption" />
+                  <Skeleton variant="text" className="mt-1 w-2/5 text-caption" />
                 </div>
                 {/* Chevronens plats reserveras (18 px) utan att rita en
                     affordans till en rad som ännu inte finns. */}
