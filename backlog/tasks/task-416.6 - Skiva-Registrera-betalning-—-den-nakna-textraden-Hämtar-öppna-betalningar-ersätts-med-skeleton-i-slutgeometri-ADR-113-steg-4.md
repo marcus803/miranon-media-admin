@@ -3,10 +3,10 @@ id: TASK-416.6
 title: >-
   Skiva: Registrera betalning — den nakna textraden Hämtar öppna betalningar
   ersätts med skeleton i slutgeometri (ADR-113 steg 4)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 19:16'
+updated_date: '2026-09-06 19:31'
 labels:
   - ready-for-agent
 dependencies: []

@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:23'
+updated_date: '2026-09-06 19:47'
 labels:
   - ready-for-agent
 dependencies: []
@@ -34,3 +35,9 @@ Källa: rapport D §6, §8 (S123). tests/support/mat-cls.ts är en riktig CLS-m�
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+REVIEW-RUNDA 2 (PR #2426, Opus, 2026-09-06): konvergerad, 3 info i ny prosa bokförda här utan kodändring: (1) mat-cls.ts lasAvClsSumma-docblocket påstår att page.evaluate inte kan returnera undefined — playwright-core serialiserar undefined ({v:'undefined'}); null-sentinelen är ett val, inte ett krav. (2) Engångskontraktet och fail-closed-uppräkningen nämner 'hård omnavigering mitt i en mätning'/'dokumentet ersatt' som skyddade fall — vid riktig navigering får det nya dokumentet ett färskt window (vakten hjälper inte, lasAvClsSumma läser 0 utan att kasta); luckan är latent (inga anropare) och ska namnges öppet. (3) hallbarCheckin saknar förlagans startvärmnings-undantag för get-registrations (eventId-gren) — fungerar eftersom allt släpps samtidigt, men 'samma form som förlagan' ska nyanseras. ÖPPET FÖR MARCUS: AC #1–#3 är felställda mot instrumentet (sid-CLS blind för listkroppen; Betalningsinkorgen kräver TASK-409; kontraktsvakten bor i nightly) — DoD #1 kan inte uppfyllas utan beslut om AC-texterna; grinden skyddar sidkromets stabilitet, radgeometrin bärs av *-laddlage-filernas boundingBox-tester.
+<!-- SECTION:NOTES:END -->
