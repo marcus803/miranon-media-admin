@@ -137,20 +137,23 @@ Utöver diagnosen, tre saker specifika för denna driftsättning:
 
    `git status --short` tomt; de två SHA:erna identiska.
 
-2. **De fyra migrationsfilerna finns på disk** (de tre första landade med
-   `TASK-346.3`, PR `#2147`; den fjärde — `20260901111500_inbetalning_notering.sql`
-   — landar med promoverings-PR:n `fix/hem-betalningskort-marcus-iteration`
-   och finns alltså på disk först EFTER att den PR:en är mergad till `main`,
-   inte i dagsläget):
+2. **De fem migrationsfilerna finns på disk** (de tre första landade med
+   `TASK-346.3`, PR `#2147`; den fjärde —
+   `20260901111500_inbetalning_notering.sql` — landade med promoverings-PR:n
+   `fix/hem-betalningskort-marcus-iteration`; den femte —
+   `20260906165100_inbetalning_kvitto_avbojt.sql` — landar med TASK-367
+   (PR `#2416`, "kvitto att skicka" härlett ur Postgres) och finns alltså på
+   disk först EFTER att DEN PR:en är mergad till `main`, inte i dagsläget):
 
    ```bash
    ls supabase/migrations/20260830195728_betalningsdomanen_inbetalningar_kvitton.sql \
       supabase/migrations/20260830195900_jobbmotorn_ko_cron_jobbtabeller.sql \
       supabase/migrations/20260830200100_purga_testrader_sentineler.sql \
-      supabase/migrations/20260901111500_inbetalning_notering.sql
+      supabase/migrations/20260901111500_inbetalning_notering.sql \
+      supabase/migrations/20260906165100_inbetalning_kvitto_avbojt.sql
    ```
 
-   Alla fyra listas. Saknas en: `main` är inte fast-forwardad tillräckligt
+   Alla fem listas. Saknas en: `main` är inte fast-forwardad tillräckligt
    långt — kör `git fetch` + `git merge --ff-only origin/main` innan du
    fortsätter.
 
@@ -172,6 +175,59 @@ Utöver diagnosen, tre saker specifika för denna driftsättning:
 
    Detta ÄR värdet `jobbmotor_anon_nyckel` ska bära i § Steg 4 — samma
    nyckel, inte en ny.
+
+## Inkrementell deploy när flödet redan är i prod
+
+Denna runbook är skriven för FÖRSTAGÅNGSDRIFTSÄTTNINGEN (Steg 1–16 nedan).
+Betalningsflödet har varit LIVE i prod sedan 2026-09-02 (S113/S115), så en
+efterföljande skiva som bara lägger till en kolumn eller ändrar en Edge
+Function — TASK-367 (PR `#2416`, "kvitto att skicka" härlett ur Postgres,
+migration `20260906165100_inbetalning_kvitto_avbojt.sql`) är det första
+exemplet — kör INTE hela sextonstegs-sekvensen. Den behöver bara tre steg,
+i denna ordning, ALDRIG omvänd:
+
+1. **Migrationen i prod först.** Samma `supabase db push`-mönster som
+   `supabase/migrations/README.md` beskriver (`echo "" | npx supabase link
+   --project-ref <prod-ref>` följt av `npx supabase db push`) — Marcus eget
+   terminalfönster, ALDRIG via `!`-prefixet (samma skäl som § Prod-EF-deploy
+   i `CLAUDE.md`: en hängning eller ett SIGKILL mitt i lämnar katalogen
+   länkad mot prod).
+2. **EF-deployen därefter**, `scripts/fas4-prod-deploy.sh --deploya`
+   (allowlistens samtliga funktioner, ~12 min) — TASK-367 rör
+   `registrera-inbetalning` och `hamta-oppna-betalningar`; batchen tar även
+   med `get-event-attachments` (TASK-416.12), obesläktad men väntande i
+   samma allowlist.
+3. **Klienten är fri** — Vercel bygger och deployar `main` automatiskt, ingen
+   manuell handling.
+
+**Varför ordningen är låst hitåt, inte bara en vanesak:** `hamta-oppna-
+betalningar` filtrerar `.eq('kvitto_avbojt', false)` och `registrera-
+inbetalning` skriver `kvitto_avbojt: !medKvitto` till en kolumn som INTE
+finns i prod förrän steg 1 kört. Deployas EF:erna FÖRE migrationen svarar
+PostgREST `42703 undefined_column` (läsvägen) respektive `PGRST204`
+(skrivvägen) på båda funktionerna — Postgres-felet blir `mapErrorToResponse`
+→ HTTP 500, och HELA betalningsinkorgen (inte bara den nya sektionen) och
+HELA registreringsvägen slutar fungera tills migrationen kommit ikapp.
+
+**Mellanläget migration-i-prod/EF-fortfarande-gammal är ofarligt** (steg 1
+klart, steg 2 inte påbörjat än): den gamla `registrera-inbetalning` skriver
+aldrig till `kvitto_avbojt` (kolumnen har `default false`, och ett `insert`
+utan kolumnen i sin lista lämnar den på defaultvärdet), och den gamla
+`hamta-oppna-betalningar` frågar aldrig efter den. En overifierad, extra
+kolumn ingen kod läser eller skriver är bara en oanvänd kolumn — samma
+princip `_shared/betalningar-db.ts`s `INBETALNING_KOLUMNER`-docblock redan
+slår fast ("en applicerad kolumn som ingen EF ännu läser är bara en oanvänd
+kolumn").
+
+**Mellanläget klient-ny/EF-fortfarande-gammal är ALLTID ofarligt**, oavsett
+var i sekvensen Vercel råkar hinna före EF-deployen (Vercel bygger på varje
+push till `main`, oberoende av när Marcus kör `--deploya`): den GAMLA
+`registrera-inbetalning` läser body-fält EXPLICIT (`body?.anmalanRecordId`,
+`body?.belopp`, `body?.betalsatt`, …) utan `...body`-spread och utan ett
+strict-schema som avvisar okända nycklar — en klient som redan skickar
+`medKvitto` mot den icke-uppdaterade funktionen får fältet TYST IGNORERAT.
+Det finns alltså inget farligt fönster åt det hållet; risken sitter
+uteslutande i EF-FÖRE-migration-riktningen ovan.
 
 ## Ordningen — och varför den är just denna
 
