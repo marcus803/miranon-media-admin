@@ -7,6 +7,23 @@ och projektet följer [Semantic Versioning 2.0.0](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added — Bulkregistrering av inbetalningar: bekräftelsesteget med tre matare (Session 121, 2026-09-04 → 2026-09-06)
+
+- **Bekräftelsesteget** på Mer → Betalningar → Registrera: markerade rader grupperade per event, beloppet som öppnar inkorgens formulär, avstämning mot kontoutdraget, "Registrera N inbetalningar" och "Registrera och skicka N kvitton" med resultatet ritat en gång, fallerade rader kvar med "Försök igen", Ångra i dialog (TASK-402.3, PR #2362; prototyp #2325)
+- **Tre matare:** inkorgens markera-läge med räknare, Rensa och Esc (TASK-402.1, PR #2363) · kontoutdragsimportens sista steg flyttat in i bekräftelsesteget med de fyra radtillstånden säker/osäker/omatchad/dubblett (TASK-402.4, PR #2365) · Åtgärds-sidans "Registrera inbetalning för N markerade" (TASK-402.5, PR #2364)
+- **"Sätt alla belopp"** som egen panel under listan: regeln `Förslag | Anmälningsavgift | Hela beloppet` som tre lika breda sekundära knappar med markerat val, levande för nymarkerade rader; pillsen Förfallen/Obekräftad borta ur stegets kort, långa namn klipps (TASK-402.8, PR #2378)
+
+### Changed — Betalningsinkorgen efter Marcus prod-granskning (Session 121, 2026-09-06)
+
+- **Filterraden är utfälld från start**, med mer luft mellan filterpanelen och Markera-knappen (TASK-410, PR #2379)
+- **Markerade kort bär hela den gröna plattan** som bekräftelsesteget och eventdetaljer; success-notisen "Inget att betala" i ett grönt kort har vit botten, grön kontur och grön ikon, medan anmälan, Åtgärds-panelen och personkortet behåller den gröna notisen (TASK-411, PR #2380)
+- **"Importera kontoutdrag" öppnar en dialog i husets form** och nås via rubriken "Betalningar", som är sidans åtgärdsmeny; sidhuvudet bär bara rubriken och räkneraden (TASK-412, PR #2383)
+
+### Infrastructure — Staging-jobbets tak, CORS-mönster och demoläget (Session 121)
+
+- Post-merge-jobbet Staging (API + E2E) har 20 minuters tak i stället för 12, efter att sviten passerat taket med 402-skivorna (TASK-404, PR #2370)
+- ADR-132: demoläget byggs med staging som maskinrum bakom en dörr i prod-appens Mer-meny; PRD TASK-414 med sju skivor. Vercels PR-förhandsvisningar bygger mot prod (TASK-415) — staging-vägen beslutad, kodstödet (TASK-415.1, PR #2388) parkerat tills previews har egen domän
+
 ### Changed — Fem fynd ur Marcus egen användning, stämplade i webbläsaren (Session 120, 2026-09-04 → 2026-09-05)
 
 - **Mer → Anmälningar-raden leder till anmälans sida** i stället för eventets gamla Anmälda-lista; den gamla ytan är riven (TASK-389, PR #2313)
