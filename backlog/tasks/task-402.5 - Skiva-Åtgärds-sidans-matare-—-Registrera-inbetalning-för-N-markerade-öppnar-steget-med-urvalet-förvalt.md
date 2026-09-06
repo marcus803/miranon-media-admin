@@ -3,10 +3,10 @@ id: TASK-402.5
 title: >-
   Skiva: Åtgärds-sidans matare — 'Registrera inbetalning för N markerade' öppnar
   steget med urvalet förvalt
-status: In Progress
+status: Done
 assignee: []
 created_date: '2026-09-05 19:02'
-updated_date: '2026-09-06 01:33'
+updated_date: '2026-09-06 07:01'
 labels:
   - ready-for-agent
 dependencies:
@@ -60,3 +60,9 @@ Testet bevisar "markeringen kvar" MEKANISKT för round-trippen: `AtgardsSida` sa
 
 Inga. Premiss-passet höll: `081a2e95` var faktisk head vid checkout, PR #2362 draft/OPEN/MERGEABLE mot main, `.env.development`s `VITE_FEATURE_BETALNINGAR=pa` bekräftat oförändrat av e2e-webServern, `Bekraftelesteget.tsx`s `ids`-kontrakt (kommaseparerade anmälnings-record-ID:n, samma nyckel som `PanelBetalningar`) bekräftat via läsning, INTE antaget.
 <!-- SECTION:NOTES:END -->
+
+## Final Summary
+
+<!-- SECTION:FINAL_SUMMARY:BEGIN -->
+Landad som PR #2364 → main 8f8c5ff7 (2026-09-06 ~07:10 UTC). AFK-proveniens: S121 resume 3 (Marcus mandat vid paus 3), bygg-agent Sonnet 5 i egen worktree, staplad på #2362 (081a2e95), landad utan rebase efter #2362. Review runda 1 (Sonnet 5): risk låg, AC #1–#6 håller med kedjan spårad ner i mapRegistration() och registrera-inbetalning-EF:en (ingen bekräftelseväg finns i flödet); ett info/ask-user (den nya knappens dynamiska räkning saknar egen aria-live medan filens Mottagare-räknare bär mönstret) avgjort på mandatet: armerad som den är — Mottagare-räknarens live-region annonserar redan samma händelse, en andra hade gett dubbel uppläsning per markering; review-loop-beslut exit 20 → mandatbeslut bokfört i S121 Del 6 §6.6; backstopp grön för e27e4907. Levererat: knappen 'Registrera inbetalning för N markerade' i AtgardsSida.tsx:s betalningsblock på befintlig mottagare-markering, härledningen anmalningsIdsCsv (anmälnings-record-ID:n), navigation till /mer/betalningar/registrera?ids=…; e2e i tests/e2e/atgarder-kvitto.staging.test.ts: ids exakt fixturens tio, ariaSnapshot byte-identisk mot 402.3:s utgångsläge-referens, Erik Holm (obekräftad) registrerad med 0 anrop på send-action-email, tillbaka-pilen med markeringen kvar, axe 0. PanelBetalningar.tsx orörd (AC #4). Öppet fynd (byggaren, ej kort): AC #3 täcker inte scenariot där basens spegel hinner uppdateras före tillbaka-trycket. Sessionsdok S121 Del 6 §6.6.
+<!-- SECTION:FINAL_SUMMARY:END -->
