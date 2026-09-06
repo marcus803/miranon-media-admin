@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-05 21:05'
-updated_date: '2026-09-06 07:09'
+updated_date: '2026-09-06 07:21'
 labels:
   - ready-for-human
 dependencies: []
@@ -21,7 +21,7 @@ Mätt 2026-09-05 (S121 resume 3): post-merge-körningen 33989193147 på main 5c7
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [x] #1 Per-fil-väggklocka för tests/e2e/*.staging.test.ts ur jobbloggen 33989193147 attempt 2 (playwright --reporter=json eller loggens tidsstämplar) bokförd i kortet, sorterad fallande
+- [ ] #1 Per-fil-väggklocka för tests/e2e/*.staging.test.ts ur jobbloggen 33989193147 attempt 2 (playwright --reporter=json eller loggens tidsstämplar) bokförd i kortet, sorterad fallande
 - [ ] #2 Beslut fattat och verkställt (höjt tak, delad svit eller flytt till fixturvärlden) med commit-SHA; post-merge-körningen efter verkställandet grön med marginal ≥ 3 min mot taket
 - [x] #3 TASK-383 korsrefererad eller sammanslagen; inget dubbelt kort
 <!-- AC:END -->
@@ -115,4 +115,6 @@ riktningen för att få ner sviten från grunden — flyttar betalningsfamiljens
 promoveringsgrind till `tests/visual/` och minskar därmed staging-e2e-ytan.
 Delning av sviten i flera jobb är ett alternativt vägval, inte utforskat här.
 Båda är Marcus beslut, inte verkställda i denna skiva.
+
+RUNDA 2 2026-09-06 07:21 UTC: AC #1 urbockad — per-fil-mätning gick inte att få ur CI-loggen (reportern dot); per-steg-mätningen kvarstår i notes som delbevis, AC #1 öppen tills en körning med json-reporter eller artefakt finns (kan lösas i TASK-409).
 <!-- SECTION:NOTES:END -->
