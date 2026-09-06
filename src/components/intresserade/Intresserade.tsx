@@ -52,6 +52,19 @@ import { queryKeys } from '@/queries/keys';
  * — inte prototypfilens dåvarande eget namn. */
 const YTANS_ANKARE = 'intresserade-yta';
 
+/** Sökradens ankare (TASK-416.8 AC #2) — samma `data-testid`-konvention som
+ * `YTANS_ANKARE`: ett attribut, ingen ny DOM-nod eller ARIA-roll, syns
+ * aldrig i `ariaSnapshot`. Låter mätningen (boundingBox) peka på EXAKT
+ * samma nod oavsett vilken av de tre grenarna (laddläge/fel/laddat) som
+ * renderar den delade `sokRad`-konstanten. */
+const SOKRAD_ANKARE = 'intresserade-sokrad';
+
+/** Listkroppens ankare (TASK-416.8 AC #2) — sätts på BÅDA representationerna
+ * (skeleton-radernas wrapper i laddläget, `<ul>` i laddat läge) så
+ * `:scope > *`-barnet (första raden, skeleton respektive verklig) kan mätas
+ * med samma selector oavsett tillstånd. */
+const LISTKROPP_ANKARE = 'intresserade-listkropp';
+
 /** Sorteringslägen — konvergensens (b): interaktion (serverns ordning) | namn. */
 type Sortering = 'interaktion' | 'namn';
 
@@ -201,6 +214,42 @@ export function Intresserade() {
 
   const sidRam = <SidRam to="/mer" tillbakaEtikett="Tillbaka till Mer" />;
 
+  /** [TASK-416.8] Sökraden — EN delad JSX-nod, monterad byte-identisk i
+   * laddläge, fel-läge OCH laddat läge (PRD TASK-416s regel: sidkromet
+   * renderas i ALLA query-tillstånd, bara datakroppen växlar). Fram till
+   * denna skiva fanns raden bara i det laddade läget (S123 rapport D §4
+   * #8, read-only-audit mot `29a3c16d`) — 62 px desktop / 130 px mobil
+   * saknades i de andra två grenarna, vilket flyttade listan när datan
+   * landade. Att dela SAMMA konstant (i stället för att skriva av
+   * markupen tre gånger) är det som garanterar identisk boundingBox —
+   * se Final Summary för de uppmätta talen. */
+  const sokRad = (
+    <div
+      data-testid={SOKRAD_ANKARE}
+      className="flex flex-col gap-3 px-4 sm:flex-row sm:items-end sm:justify-between"
+    >
+      <label className="flex w-full max-w-xs flex-col gap-1">
+        <span className="text-small text-text-muted">Sök intresserad</span>
+        <input
+          type="search"
+          value={sok}
+          onChange={(e) => setSok(e.target.value)}
+          placeholder="Namn eller e-post"
+          className="rounded-lg border border-border-strong/40 bg-bg px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
+        />
+      </label>
+      <Select
+        label="Sortera efter"
+        selectedKey={sortering}
+        onSelectionChange={(k) => setSortering(k as Sortering)}
+        className="shrink-0 sm:w-56"
+      >
+        <SelectItem id="interaktion">Senaste interaktion</SelectItem>
+        <SelectItem id="namn">Namn A till Ö</SelectItem>
+      </Select>
+    </div>
+  );
+
   if (!laddat) {
     return (
       <section className="flex flex-col gap-6">
@@ -210,17 +259,34 @@ export function Intresserade() {
           role="status"
           aria-live="polite"
           aria-busy="true"
-          className="flex flex-col gap-4 px-4"
+          // gap-6 (INTE gap-4, som stod här innan denna skiva) — samma
+          // avstånd som det laddade lägets container nedan. Padding flyttad
+          // FRÅN containern till varje barn (px-4), likaså speglat av det
+          // laddade läget, så `sokRad`s EGEN `px-4` inte dubbleras (32 px i
+          // stället för 16). Utan denna justering hade sökraden monterats
+          // på fel Y-position mot sin egen plats i laddat läge — se Final
+          // Summary för boundingBox-talen som bevisar att det INTE händer.
+          className="flex flex-col gap-6"
         >
           <span className="sr-only">Laddar intresserade…</span>
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-1 px-4">
             <Skeleton variant="text" className="w-40 text-3xl" />
             <Skeleton variant="text" className="w-32 text-small" />
           </div>
-          <div className="flex flex-col gap-3">
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
-            <Skeleton variant="listRow" />
+          {sokRad}
+          {/* h-20 (80 px, INTE variantens generiska 3lh = 72 px): mätt mot
+              `KonvergensRad`s faktiska höjd (avatar + tre textrader olika
+              typografiskala + `pb-3` + kantlinje summerar till 80 px, inte
+              tre generiska line-boxar) — samma etablerade mönster som
+              `PersonDetail.tsx`/`EventDetail.tsx`/`AnmalanDetail.tsx`s
+              `h-XX`-överskrivningar av `listRow`-varianten. Utan denna rad
+              växer VARJE rad 8 px vid datalandning och skjuter alla rader
+              under den nedåt — boundingBox-beviset (TASK-416.8 AC #2) i
+              Final Summary visar 72→80 px innan denna rad fanns. */}
+          <div data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
+            <Skeleton variant="listRow" className="h-20" />
+            <Skeleton variant="listRow" className="h-20" />
+            <Skeleton variant="listRow" className="h-20" />
           </div>
         </div>
       </section>
@@ -229,12 +295,15 @@ export function Intresserade() {
 
   if (isError) {
     return (
-      <section className="flex flex-col gap-4">
+      <section className="flex flex-col gap-6">
         {sidRam}
-        <div data-testid={YTANS_ANKARE} className="px-4">
-          <MessageBox intent="error" title="Kunde inte hämta intresserade">
-            {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
-          </MessageBox>
+        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-6">
+          {sokRad}
+          <div className="px-4">
+            <MessageBox intent="error" title="Kunde inte hämta intresserade">
+              {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
+            </MessageBox>
+          </div>
         </div>
       </section>
     );
@@ -286,34 +355,14 @@ export function Intresserade() {
           </p>
         </header>
 
-        <div className="flex flex-col gap-3 px-4 sm:flex-row sm:items-end sm:justify-between">
-          <label className="flex w-full max-w-xs flex-col gap-1">
-            <span className="text-small text-text-muted">Sök intresserad</span>
-            <input
-              type="search"
-              value={sok}
-              onChange={(e) => setSok(e.target.value)}
-              placeholder="Namn eller e-post"
-              className="rounded-lg border border-border-strong/40 bg-bg px-3 py-2 text-body focus-visible:outline-2 focus-visible:outline-focus-ring focus-visible:outline-offset-2"
-            />
-          </label>
-          <Select
-            label="Sortera efter"
-            selectedKey={sortering}
-            onSelectionChange={(k) => setSortering(k as Sortering)}
-            className="shrink-0 sm:w-56"
-          >
-            <SelectItem id="interaktion">Senaste interaktion</SelectItem>
-            <SelectItem id="namn">Namn A till Ö</SelectItem>
-          </Select>
-        </div>
+        {sokRad}
 
         {synliga.length === 0 ? (
           <p className="px-4 text-small text-text-muted">
             {sok.trim() ? 'Inga träffar på sökningen.' : 'Inga intresserade än.'}
           </p>
         ) : (
-          <ul className="flex flex-col gap-3 px-4">
+          <ul data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
             {synliga.map((person) => (
               <KonvergensRad key={person.id} person={person} />
             ))}

@@ -298,6 +298,64 @@ test.describe('Intresserade-vy (Fas 6e L1 L3 — LÄS-vy via get-leads, promover
     await expect(page.getByRole('heading', { level: 1, name: 'Intresserade' })).toBeVisible();
   });
 
+  /**
+   * TASK-416.8 AC #2 — "Mätning är leverans": sökraden fanns tidigare bara i
+   * det laddade läget (S123 rapport D §4 #8) — listan hoppade `~62 px`
+   * desktop / `~130 px` mobil när datan landade. Denna skiva monterar
+   * SAMMA `sokRad`-nod (`data-testid=intresserade-sokrad`) i alla tre
+   * grenar och flyttar `px-4` från containern ned till varje barn — detta
+   * testet bevisar att den flytten faktiskt håller boundingBox konstant
+   * över hela laddläge → laddat läge-övergången, inte bara att elementet
+   * FINNS i båda. `manualRelease` (samma mönster som "loading-state är
+   * tillgängligt" ovan) gör fönstret deterministiskt i stället för att
+   * racea en cold-chunk lazy-load.
+   */
+  test('sökraden och första listraden — boundingBox oförändrad över laddläge → laddat läge (TASK-416.8 AC #2)', async ({
+    page,
+    network,
+  }) => {
+    const release = mockLeads(network, [row()], { manualRelease: true });
+    await page.goto('/mer/intresserade');
+
+    const sokRad = page.getByTestId('intresserade-sokrad');
+    const forstaRaden = page.getByTestId('intresserade-listkropp').locator(':scope > *').first();
+
+    await expect(page.getByText('Laddar intresserade…')).toBeVisible();
+    const sokRadFore = await sokRad.boundingBox();
+    const forstaRadenFore = await forstaRaden.boundingBox();
+    if (!sokRadFore || !forstaRadenFore) {
+      throw new Error('sökraden/första listraden saknar boundingBox i laddläget');
+    }
+
+    release();
+    await expect(page.getByRole('heading', { level: 1, name: 'Intresserade' })).toBeVisible();
+
+    const sokRadEfter = await sokRad.boundingBox();
+    const forstaRadenEfter = await forstaRaden.boundingBox();
+    if (!sokRadEfter || !forstaRadenEfter) {
+      throw new Error('sökraden/första listraden saknar boundingBox i laddat läge');
+    }
+
+    // x/y/bredd ska vara EXAKT identiska — samma DOM-nod (sokRad), samma
+    // containerbredd, ingen datadriven textbredd inblandad. Höjden får
+    // skilja EN pixel (submålspixel-avrundning i olika renderingspass, inte
+    // ett layout-skift) men aldrig mer.
+    // Mätt (1280×720, TASK-416.8 Final Summary): sokRad {x:356,y:209,
+    // width:568,height:67} FÖRE och EFTER, byte-identiskt. Första raden
+    // {x:372,y:300,width:536,height:80} FÖRE och EFTER — höjden krävde
+    // `h-20` på skeleton-varianten (se Intresserade.tsx-kommentaren vid
+    // `LISTKROPP_ANKARE`); utan den var FÖRE-höjden 72 (variantens
+    // generiska 3lh), en 8 px avvikelse denna skiva stänger.
+    expect(sokRadEfter.x).toBeCloseTo(sokRadFore.x, 0);
+    expect(sokRadEfter.y).toBeCloseTo(sokRadFore.y, 0);
+    expect(sokRadEfter.width).toBeCloseTo(sokRadFore.width, 0);
+    expect(Math.abs(sokRadEfter.height - sokRadFore.height)).toBeLessThanOrEqual(1);
+
+    expect(forstaRadenEfter.x).toBeCloseTo(forstaRadenFore.x, 0);
+    expect(forstaRadenEfter.y).toBeCloseTo(forstaRadenFore.y, 0);
+    expect(forstaRadenEfter.width).toBeCloseTo(forstaRadenFore.width, 0);
+  });
+
   test('axe 0 violations på TOM vy', async ({ page, network }) => {
     mockLeads(network, []);
     await page.goto('/mer/intresserade');
