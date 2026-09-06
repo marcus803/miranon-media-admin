@@ -55,8 +55,11 @@ och var Marcus tar vid.
    ```
 
    Förväntat: `20260830195728`, `20260830195900`, `20260830200100`,
-   `20260901111500` visar `local` **och** `remote` ifyllda (se § Steg 2 för
-   fullständig utdata).
+   `20260901111500`, `20260906165100` visar `local` **och** `remote` ifyllda
+   (se § Steg 2 för fullständig utdata). Denna femradiga lista gäller
+   FÖRSTAGÅNGSSEKVENSEN ovan (§ Steg 1–7); en inkrementell skiva som TASK-367
+   kör bara sin EGEN, senaste migration för sig — se § "Inkrementell deploy
+   när flödet redan är i prod" nedan.
 3. **Prod-basens fält + priser + backfill:** § Steg 11–13. Förutsättningen
    för allt annat: de nio fälten i tabellen i § Steg 11 måste finnas INNAN
    backfillen (§ Steg 13) kan hitta ett enda pris.
@@ -192,6 +195,38 @@ i denna ordning, ALDRIG omvänd:
    terminalfönster, ALDRIG via `!`-prefixet (samma skäl som § Prod-EF-deploy
    i `CLAUDE.md`: en hängning eller ett SIGKILL mitt i lämnar katalogen
    länkad mot prod).
+
+   **Kvitto — kör INNAN steg 2 får påbörjas, aldrig ur `db push`s exit 0
+   ensamt** (samma disciplin som § Steg 2 nedan: "Bekräfta att objekten
+   faktiskt finns, aldrig ur exit 0 ensamt"):
+
+   ```bash
+   npx supabase migration list
+   ```
+
+   **Förväntad utdata** (bland ev. andra rader): raden för DENNA PR:s
+   migration visar BÅDE `local` OCH `remote` ifyllda med samma tidsstämpel:
+
+   ```text
+   {"local":"20260906165100","remote":"20260906165100","time":"2026-09-06 16:51:00"}
+   ```
+
+   **Steget lyckades när:** `local` och `remote` är identiska för
+   `20260906165100`. Ett `remote` som saknas eller står tomt (`null`/`""`)
+   betyder att `db push` antingen kördes mot fel länkat projekt eller
+   misslyckades halvvägs — **steg 2 får inte påbörjas**: en `--deploya` mot
+   den kolumnen ännu inte i prod är exakt övergången denna sektions "Varför
+   ordningen är låst"-stycke varnar för (`42703`/`PGRST204` → HTTP 500 på
+   hela betalningsinkorgen och hela registreringsvägen).
+
+   **Om kvittot saknas:** kontrollera `cat supabase/.temp/project-ref` —
+   står den INTE på prod-refen länkade `db push` aldrig mot rätt projekt och
+   ska köras om efter en ny `echo "" | npx supabase link --project-ref
+   <prod-ref>`. Står refen rätt men `remote` ändå saknas: `db push`
+   misslyckades under körningen — läs hela dess utskrift (inte bara raderna
+   du kände igen, samma regel som § Steg 2), rätta felet, och kör om
+   `npx supabase db push` följt av en NY `migration list`-kontroll innan
+   `--deploya` någonsin körs.
 2. **EF-deployen därefter**, `scripts/fas4-prod-deploy.sh --deploya`
    (allowlistens samtliga funktioner, ~12 min) — TASK-367 rör
    `registrera-inbetalning` och `hamta-oppna-betalningar`; batchen tar även
@@ -272,7 +307,7 @@ prod-referensen. Läs den raden varje gång.
 
 ## Steg 2 — Applicera migrationerna
 
-**Detta är INTE en scopad push av bara dessa fyra filer.** `db push` applicerar
+**Detta är INTE en scopad push av bara dessa fem filer.** `db push` applicerar
 VARJE migration som ännu inte är registrerad som applicerad i prod — om andra
 PRD:er landat migrationer på `main` sedan senaste prod-driftsättningen
 applicerar de OCKSÅ. Läs hela listan `db push` skriver ut, inte bara raderna
@@ -291,15 +326,16 @@ Applying migration 20260830195728_betalningsdomanen_inbetalningar_kvitton.sql...
 Applying migration 20260830195900_jobbmotorn_ko_cron_jobbtabeller.sql...
 Applying migration 20260830200100_purga_testrader_sentineler.sql...
 Applying migration 20260901111500_inbetalning_notering.sql...
+Applying migration 20260906165100_inbetalning_kvitto_avbojt.sql...
 ```
 
 och i EXAKT den ordningen (tidsstämpel-sorterat, `20260830195728` <
-`20260830195900` < `20260830200100` < `20260901111500` — ordningen är
-bindande: se `supabase/migrations/README.md` § Betalningsdomänen för
-varför).
+`20260830195900` < `20260830200100` < `20260901111500` <
+`20260906165100` — ordningen är bindande: se `supabase/migrations/README.md`
+§ Betalningsdomänen för varför).
 
 **Steget lyckades när:** andra `migration list` visar `local` **och**
-`remote` ifyllda för alla fyra versionerna. Bekräfta att objekten faktiskt
+`remote` ifyllda för alla fem versionerna. Bekräfta att objekten faktiskt
 finns, aldrig ur exit 0 ensamt:
 
 ```bash
@@ -318,7 +354,7 @@ avvikelsen om du ser en, den är en bra sak att ha bokförd.
 avvikelse mot stagings `0.20.3` per exakt samma resonemang som ovan; `pgmq`
 och `pg_cron` omättes inte separat i det passet.
 
-**Om det inte lyckades:** `migration list` säger exakt vilken av de fyra som
+**Om det inte lyckades:** `migration list` säger exakt vilken av de fem som
 gick igenom. Se § Rullbakåt R1 — läs den innan du river något, kvitton är
 append-only och tabellerna kan bära verkliga rader så fort steg 9–10 är
 körda.
