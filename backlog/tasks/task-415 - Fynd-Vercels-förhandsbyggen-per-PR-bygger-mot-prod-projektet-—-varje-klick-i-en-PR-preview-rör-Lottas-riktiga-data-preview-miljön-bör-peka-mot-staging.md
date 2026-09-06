@@ -3,10 +3,10 @@ id: TASK-415
 title: >-
   Fynd: Vercels förhandsbyggen per PR bygger mot prod-projektet — varje klick i
   en PR-preview rör Lottas riktiga data; preview-miljön bör peka mot staging
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-06 10:45'
-updated_date: '2026-09-06 11:10'
+updated_date: '2026-09-06 11:17'
 labels:
   - ready-for-human
 dependencies: []
@@ -37,4 +37,6 @@ Mätt 2026-09-06 (S121 resume 4, ADR-132:s verifiering a, fork-agenten): PR #237
 
 <!-- SECTION:NOTES:BEGIN -->
 RESEARCH-PASS LANDAT 2026-09-06: docs/research/pr-forhandsvisningar-och-backend-branschmonster-2026-09-06.md. Rekommendation: väg (a) — Preview-target i Vercel pekar mot staging via tre miljövariabler (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_FEATURE_BETALNINGAR) för target Preview; mätt att en Vercel-variabel vinner över incheckad .env.production (Vite 8.2.2 loadEnv, skarpt byggt: bundeln bär exakt en host). Kräver i staging en EGEN mönster-variabel för preview-origins (cors.ts, Supabases egen rekommendation https://*-<team-slug>.vercel.app/**), inte en breddning av den portlåsta CORS_ALLOWED_ORIGINS. RÄTTELSE av kortets riskbild: Vercel Deployment Protection är PÅ (preview-URL ger 302 till vercel.com/sso-api) — previews är inte publika; risken är förväxling hos den som bjuds in, inte läckage. Mät FÖRE verkställande varför previews fungerar mot prod i dag (är prods CORS-lista bredare?) och pröva mönstret mot både commit- och gren-adressformen. Väg (b) flyttar bara CORS-problemet och dubblar byggen; (c) faller. Sidofynd: cors.ts sätter inte Vary: Origin; ingen grind bevisar att ett förhandsbygge saknar prod-hosten (check-staging-bundle.sh vaktar bara ett håll).
+
+Marcus GO 2026-09-06 på väg (a): 'Ja, kör staging-vägen om det är vad du rekommenderar och om det är det som är branschledarmönstret.' Skivor 415.1–415.3 mintade.
 <!-- SECTION:NOTES:END -->
