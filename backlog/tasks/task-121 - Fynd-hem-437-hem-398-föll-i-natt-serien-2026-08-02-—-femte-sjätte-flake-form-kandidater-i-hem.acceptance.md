@@ -6,6 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-08-02 07:51'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []
@@ -42,3 +43,9 @@ Rådata: docs/research/task-79-flake-baslinje-2026-08-02-data/(resultat|serie).j
 - [ ] #3 CI grön per jobb på pushad commit
 - [ ] #4 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+NY INSTANS (S123, 2026-09-06): testet 'dagar-kvar-formens tre exakta texter: Idag / 1 dag kvar / N dagar kvar' (tests/acceptance/hem.acceptance.test.ts:313) föll 2 av 3 körningar mot ren baseline i bygg-agenten för TASK-416.9 (PR #2397), grönt isolerat. Samma familj som kortets hem:437/hem:398. Rådata: agentens rapport i sessionsdok S123 Del 3 § Avvikelser. Ingen fix gjord; karaktäriseringen per AC #1 kvarstår.
+<!-- SECTION:NOTES:END -->

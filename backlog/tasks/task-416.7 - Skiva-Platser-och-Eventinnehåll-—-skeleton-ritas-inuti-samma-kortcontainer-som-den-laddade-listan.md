@@ -3,10 +3,10 @@ id: TASK-416.7
 title: >-
   Skiva: Platser och Eventinnehåll — skeleton ritas inuti samma kortcontainer
   som den laddade listan
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 14:15'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

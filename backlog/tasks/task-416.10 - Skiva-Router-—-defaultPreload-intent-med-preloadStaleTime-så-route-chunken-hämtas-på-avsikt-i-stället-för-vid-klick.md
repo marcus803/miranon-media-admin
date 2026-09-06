@@ -3,10 +3,10 @@ id: TASK-416.10
 title: >-
   Skiva: Router — defaultPreload intent med preloadStaleTime, så route-chunken
   hämtas på avsikt i stället för vid klick
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:22'
-updated_date: '2026-09-06 14:53'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

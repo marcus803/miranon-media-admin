@@ -3,10 +3,10 @@ id: TASK-416.13
 title: >-
   Skiva: hem-laddlage-testet — filhuvudet lovar en boundingBox-mätning som inte
   finns; lägg till mätningen (ADR-083)
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:23'
-updated_date: '2026-09-06 15:50'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []

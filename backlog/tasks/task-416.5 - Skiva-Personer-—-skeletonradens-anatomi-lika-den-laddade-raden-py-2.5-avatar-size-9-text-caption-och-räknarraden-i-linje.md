@@ -3,10 +3,10 @@ id: TASK-416.5
 title: >-
   Skiva: Personer — skeletonradens anatomi lika den laddade raden (py-2.5,
   avatar size-9, text-caption) och räknarraden i linje
-status: To Do
+status: Done
 assignee: []
 created_date: '2026-09-06 13:21'
-updated_date: '2026-09-06 14:42'
+updated_date: '2026-09-06 17:07'
 labels:
   - ready-for-agent
 dependencies: []
