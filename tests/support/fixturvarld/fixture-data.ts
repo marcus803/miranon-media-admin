@@ -15,6 +15,7 @@
  * Persondata är FIKTIV (inga verkliga deltagare) men realistisk i form,
  * så baselines visar vyerna som de SKA se ut.
  */
+import type { OppnaBetalningar } from '../../../src/domain/schemas';
 
 /** Fruset "nu": tisdag 2026-09-15 kl 10:00 svensk sommartid (explicit offset —
  *  parsas identiskt på Mac och linux-CI, aldrig via plattformens lokala zon). */
@@ -478,6 +479,35 @@ export const EVENT_ATTACHMENTS_RESPONSE = { attachments: [] } as const;
  * test som behöver riktiga deltagande-rader äger sin egen `network.use()`.
  */
 export const ATTENDANCE_RESPONSE = { attendance: [] } as const;
+
+/**
+ * `hamta-oppna-betalningar`-svaret (TASK-416.14, betalningsinkorgens EF —
+ * `BetalningsInkorg.tsx`, `src/data/betalningar/useBetalningar.ts`). TOM som
+ * NORMALLÄGE, samma resonemang som `ATTENDANCE_RESPONSE` ovan.
+ *
+ * ANVÄNDS INTE ÄNNU AV NÅGOT ACCEPTANCE-TEST I DENNA SKIVA, ÖPPET SAGT: Inkorgens
+ * ROUTE (`/mer/betalningar`) `beforeLoad`-omdirigerar när `betalningarPa()` är
+ * falskt, och den shared acceptance/visual/webblasarbeteende-dev-servern
+ * hårdkodar `VITE_FEATURE_BETALNINGAR: 'av'` (`playwright.config.ts`, kommentaren
+ * vid raden) — verifierat empiriskt (TASK-416.14, spike-navigering landade på
+ * `/mer` i stället för `/mer/betalningar`). Att slå på flaggan där hade öppnat
+ * `JobbLyssnare`s Realtime-WebSocket för VARJE autentiserad acceptance-sida
+ * (samma docblock), och fixturvärlden saknar ännu en riktig WS-mock för den
+ * kanalen (se `tests/support/fixturvarld/websocket-vakt.ts` § MÄTT, EJ ANTAGET,
+ * och den pågående, ej landade `task/409-hermetisk-betalningsvarld`-grenen).
+ * Handlern registreras ändå (AC #2, TASK-416.14) som förberedd infrastruktur åt
+ * den dag flagg-/WS-frågan är löst — kompileringsledet (denna konstants form)
+ * ÄR verifierat mot `OppnaBetalningar` via `satisfies` nedan (review-runda 1,
+ * FYND 1: föregående version av detta stycke PÅSTOD samma sak utan att någon
+ * `satisfies`/typannotering fanns — `npm run typecheck` kunde alltså aldrig
+ * ha fällt en formdrift. Bryt medvetet `forfallna` till en sträng lokalt för
+ * att se felet: `tsc` fäller det, se kortets notes för den körningen).
+ * RUNTIME-beteendet är overifierat i denna PR.
+ */
+export const OPPNA_BETALNINGAR_RESPONSE = {
+  betalningar: [],
+  forfallna: 0,
+} satisfies OppnaBetalningar;
 
 /**
  * `get-places`-svaret (TASK-309.7, ADR-125 § 7) — den GLOBALA platslistan
