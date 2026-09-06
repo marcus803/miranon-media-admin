@@ -7,6 +7,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 09:25'
+updated_date: '2026-09-06 09:51'
 labels:
   - ready-for-agent
 dependencies: []
@@ -21,10 +22,10 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Inkorgens markerade kort bär samma bakgrund som bekräftelsestegets och eventdetaljernas markerade kort (mätt token/hex bokfört i kortet); kanten oförändrad
-- [ ] #2 Success-notisen i det öppna kortet har vit bakgrund, grön kontur runt om och grön ikon; kontrasttalen mot vitt bokförda; övriga MessageBox-konsumenter oförändrade (primitiven och de globala tokens orörda)
-- [ ] #3 Kommentarblocket för --mm-betalningskort-markerad-bg i components.css beskriver både 2026-09-01-beslutet och Marcus omprövning 2026-09-06 med skälet
-- [ ] #4 Befintliga acceptans-/visual-tester gröna; ett test eller en bild täcker notisen i ett markerat kort; eventuell facit-bild för bekräftelsesteget som visar notisen amenderad, annars bokfört att ingen gör det
+- [x] #1 Inkorgens markerade kort bär samma bakgrund som bekräftelsestegets och eventdetaljernas markerade kort (mätt token/hex bokfört i kortet); kanten oförändrad
+- [x] #2 Success-notisen i det öppna kortet har vit bakgrund, grön kontur runt om och grön ikon; kontrasttalen mot vitt bokförda; övriga MessageBox-konsumenter oförändrade (primitiven och de globala tokens orörda)
+- [x] #3 Kommentarblocket för --mm-betalningskort-markerad-bg i components.css beskriver både 2026-09-01-beslutet och Marcus omprövning 2026-09-06 med skälet
+- [x] #4 Befintliga acceptans-/visual-tester gröna; ett test eller en bild täcker notisen i ett markerat kort; eventuell facit-bild för bekräftelsesteget som visar notisen amenderad, annars bokfört att ingen gör det
 <!-- AC:END -->
 
 ## Definition of Done
@@ -33,3 +34,9 @@ Marcus prod-granskning 2026-09-06 (S121 resume 4, QA-vandringen TASK-402.7 påb�
 - [ ] #2 Rörd fil-klass lokala grindar gröna (L147)
 - [ ] #3 Inga orelaterade filer i diffen (path-scopad add)
 <!-- DOD:END -->
+
+## Implementation Notes
+
+<!-- SECTION:NOTES:BEGIN -->
+Divergens mot uppdraget (ADR-086, verifierad mot disk 2026-09-06): uppdraget påstod 'Ikonens färg är redan --mm-success — verifiera'. FALSKT: Ikon (CircleCheck) i RegistreraForm.tsx rad ~790 hade INGEN egen färgklass och ärvde MessageBox-containerns --mm-messagebox-body-text (= --mm-text, neutral mörk, INTE grön). Åtgärdat: Ikon får text-(color:--mm-messagebox-success-text) villkorat på intent==='success'. Kontraster omräknade med script (WCAG-formel, sRGB relativ luminans): #606b57 mot #ffffff (notisens nya botten) = 5,62:1; #606b57 mot #f0fdf4 (kortets platta, oförändrad hex sedan 2026-09-01) = 5,37:1. Båda ≥ 3:1-golvet (WCAG 1.4.11). contrast-more kontrollerad: MessageBox-primitivens contrast-more:border (full intent-färg) är oförändrad av mina ändringar — ingen ny contrast-more-gren behövdes. Facit-bild-kontroll (ADR-102): tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/ har FEM kanoniska facit-bilder (facit-bekraftelsesteget{,-pagar,-efter,-efter-skicka,-angra}.png; k02-k19 är enligt manifestets EGEN text 'mellanled, inte facit'). Visuellt verifierat facit-bekraftelsesteget-efter.png: Gunnar Falks felrad visar en RÖD textrad ('Beloppet kunde inte sparas. Försök igen.'), INGEN MessageBox/notisruta. Ingen av de fem facit-bilderna visar ett öppet formulär med utfallsrutan synlig (manifestets egen beskrivning bekräftar: utgångsläge/pågår/efter/efter-skicka/ångra-dialog — ingen 'öppen rad'-vy). SLUTSATS: ingen AMENDERING behövs, bokfört att ingen facit-bild visar notisen. Implementation: --mm-betalningskort-markerad-bg pekar nu på var(--mm-success-bg) (var color-mix 50%). RegistreraForm.tsx: MessageBox className och Ikon className är villkorade på intent==='success' (bg-(--mm-surface) resp. text-(color:--mm-messagebox-success-text)); warning/info-boxar oförändrade. Kommentarblock uppdaterade i components.css (BESLUT 1/BESLUT 2) och i BetalningsInkorg.tsx (två ställen som refererade den gamla 'svagare tint'-motiveringen). Nytt test: tests/e2e/betalningar-inkorg-markerat-kort-notis.staging.test.ts (mäter computed background-color/border-color på kortet och notisen samt ikonens color).
+<!-- SECTION:NOTES:END -->

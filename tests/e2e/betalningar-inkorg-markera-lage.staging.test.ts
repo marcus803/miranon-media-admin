@@ -350,6 +350,33 @@ async function slaPaMarkeraLaget(page: Page): Promise<void> {
   await expect(page.locator(LIVE)).toBeAttached();
 }
 
+/**
+ * TASK-410 — Marcus prod-fynd (S121 resume 4): ihopfälld som förut lät
+ * Markera-knappen stå ensam på egen rad, vilket "ser konstigt ut". Utfälld
+ * som default löser det utan att röra togglingen (tratten stänger/öppnar
+ * fortfarande som förut).
+ */
+test.describe('TASK-410 — filterraden utfälld som default (AC #1)', () => {
+  test('filterpanelen är synlig direkt vid besök, utan klick på tratt-knappen', async ({
+    page,
+  }) => {
+    await mocka(page);
+    await oppnaInkorgen(page);
+
+    // Utfälld ⇒ sr-only-namnet säger "Dölj filter" och panelen är synlig
+    // UTAN att någon tryckt på tratten.
+    await expect(page.getByRole('button', { name: /^Dölj filter/ })).toBeVisible();
+    await expect(page.getByTestId('filter-panel')).toBeVisible();
+    await expect(page.getByTestId('filter-typ')).toBeVisible();
+
+    // Dölj filter fungerar som förut — togglingen är oförändrad, bara
+    // start-läget flyttades.
+    await page.getByRole('button', { name: /^Dölj filter/ }).click();
+    await expect(page.getByRole('button', { name: /^Visa filter/ })).toBeVisible();
+    await expect(page.getByTestId('filter-panel')).toBeHidden();
+  });
+});
+
 test.describe('TASK-402.1 — markera-lägets form (AC #1)', () => {
   test('åtgärdsradens STRUKTUR är identisk med eventdetaljens batch-bar, mätt i DOM', async ({
     page,
@@ -489,7 +516,8 @@ test.describe('TASK-402.1 — markeringen över sök och filter (AC #2, #3)', ()
     await expect(page.locator(LIVE)).toHaveText('1 markerade');
 
     // Filtrera på Typ = Utbildning ⇒ bara Betakursens rad syns.
-    await page.getByRole('button', { name: /Visa filter/ }).click();
+    // Filterraden är UTFÄLLD SOM DEFAULT sedan TASK-410 (Marcus prod-fynd
+    // S121) — ingen "Visa filter"-klick behövs längre för att nå panelen.
     await page.getByTestId('filter-typ').getByRole('button').click();
     await page.getByRole('option', { name: 'Utbildning' }).click();
     await expect(inkorgensKryss(page)).toHaveCount(1);
