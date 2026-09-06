@@ -1827,9 +1827,20 @@ export function BetalningsInkorg() {
           stället för att stå aktivt mot ingenting"); här är det uttryckt i
           renderingen i stället, eftersom inkorgens hook aldrig får nollställa
           på en tom mängd (den kan betyda "vet inte än" — se hookens
-          § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll. */}
+          § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll.
+
+          EXTRA LUFT MOT FILTERKOMPONENTEN (Marcus prod-granskning
+          2026-09-06, S121 resume 4, TASK-410 tillägg): *"lägg mer luft
+          mellan markera-knappen och filtreringskomponenten också."* MÄTT
+          (ej ögonmätt): sektionsroten bär `gap-4` (16 px) mellan ALLA sina
+          direkta barn, alltså även mellan filterblocket och denna rad —
+          samma 16 px som varje annan brytning på sidan. `mt-2` HÄR (+8 px,
+          husets 4 px-skala) höjer BARA denna ENA övergång till 24 px totalt
+          utan att röra sidans övriga rytm — en generell gap-6 på sektionen
+          hade flyttat varje annan brytning på sidan i samma andetag, vilket
+          Marcus aldrig bad om. */}
       {markerbaraIds.length > 0 && (
-        <div className="px-4">
+        <div className="mt-2 px-4">
           <MarkeringsAtgardsRad
             aktivt={markering.aktivt}
             antal={markering.antal}
