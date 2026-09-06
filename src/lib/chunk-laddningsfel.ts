@@ -102,21 +102,49 @@
  * denna moduls egen kanal:
  *
  * En misslyckad PRELOAD kan aldrig nå `defaultErrorComponent`/`SectionError`
- * — dubbelt skyddat, källäst `@tanstack/router-core`
- * `dist/esm/load-client.js` och `@tanstack/react-router`
- * `dist/esm/link.js`: (1) `preloadClientRoute` fångar varje fel som
- * `executeClientLane` kastar (inkl. en trasig chunk-import) i sin egen
- * `try/catch`, loggar med `console.error` och returnerar UTAN att kasta
- * vidare — felet lämnar aldrig funktionen; (2) `Link.js`s anropsplats lägger
- * ändå ett eget skyddsnät ovanpå: `router.preloadRoute(_options).catch((err)
- * => { … console.warn(preloadWarning); })`. Ingen route-match sätts någonsin
- * till `"error"` av en preload, så `SectionError` kan strukturellt inte
- * renderas av detta. Det enda som läcker ut är Vites egna window-event
+ * — men INTE av det skäl en tidigare version av detta stycke påstod. Rättat
+ * efter review-grindens runda 1 (TASK-416.10), källäst rad för rad mot den
+ * INSTALLERADE `@tanstack/router-core` 1.171.27,
+ * `dist/esm/load-client.js`:
+ *
+ * (1) Chunk-avvisningen fångas redan INUTI `createLoaderTask` (rad ~373):
+ * `chunkFailure = waitFor(Promise.resolve().then(() =>
+ * loadRouteChunk(...)), signal).then(() => void 0, (cause) => ...
+ * normalizeLaneError(router, lane, route, cause, options))` konverterar
+ * rejektionen till ett RESOLVAT värde. `preloadClientRoute`s (rad 1028)
+ * yttre `try/catch` (rad 1058) triggas alltså ALDRIG av en chunk-import som
+ * fallerar — `executeClientLane` kastar inget för det fallet, den resolvar
+ * med ett felresultat som `reduceLane` sedan läser.
+ *
+ * (2) `reduceLane` (rad 477) tar emot det felresultatet, och dess `install()`
+ * (rad 519) SÄTTER faktiskt `match.status = 'error'` (rad 522) på
+ * preloadens egen `matches`-array. En tidigare version av detta stycke
+ * påstod motsatsen ("ingen route-match sätts någonsin till error av en
+ * preload") — det var bokstavligt fel; mutationen sker.
+ *
+ * (3) Den verkliga anledningen `SectionError` ändå aldrig renderas: den
+ * muterade `matches`-arrayen är en SPEKULATIV kopia som ALDRIG PUBLICERAS.
+ * `preloadClientRoute` avslutar i sin `finally` (rad 1048–1053) med enbart
+ * `transferMatchResources(router, matches)` + `controller.abort()` — aldrig
+ * `commitMatches`/`publishMatches`/`router.stores.setMatches`, de enda
+ * ställena som skriver till `router.stores.matches` (rad
+ * 708/740–744/769/846/895/1257) och därmed de enda som får
+ * `Outlet`/`Match` att rendera en ny status. Utan den publiceringen ser
+ * React-trädet aldrig den satta `"error"`-statusen — det är
+ * PUBLICERINGEN som saknas för en preload, inte mutationen av matchen.
+ *
+ * `Link.js`s anropsplats lägger ändå ett eget skyddsnät ovanpå:
+ * `router.preloadRoute(_options).catch((err) => { … console.warn(preloadWarning); })`
+ * — ett bälte-och-hängslen mot en ANNAN felklass (t.ex. ett synkront
+ * kastat fel innan chunk-hämtningen ens hinner starta), inte mekanismen som
+ * skyddar chunk-fallet, vilket (3) redan gör strukturellt.
+ *
+ * Slutsatsen står fast: det enda som läcker ut är Vites egna window-event
  * (`vite:preloadError`), som `handlePreloadError` dispatchar OVILLKORLIGT
  * innan den (icke-refererade) `throw err` — och det är exakt den kanal denna
  * modul redan lyssnar på. En misslyckad hover-preload visar alltså
  * `ChunkBanner` NÅGOT TIDIGARE än förut (innan Lotta ens hunnit klicka) —
- * samma varning, samma väg, ingen ny felyta.
+ * samma varning, samma kanal, ingen ny felyta.
  *
  * LAGERGRÄNSEN är window-eventet, exakt som i `app-uppdatering.ts`: denna fil
  * vet allt om Vites preload-helper och ingenting om React; UI-lagret vet att

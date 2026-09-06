@@ -6,7 +6,7 @@ title: >-
 status: To Do
 assignee: []
 created_date: '2026-09-06 13:22'
-updated_date: '2026-09-06 14:27'
+updated_date: '2026-09-06 14:53'
 labels:
   - ready-for-agent
 dependencies: []
@@ -96,4 +96,42 @@ uteslutande src/router.ts + src/lib/chunk-laddningsfel.ts) ·
 chunk-laddningsfel-testerna (webblasarbeteende 11 + acceptance 2): 13/13
 gröna · e2e-navigering (tests/e2e/shell.staging.test.ts, chromium-authenticated,
 9 tester inkl. tab-navigation DoD 1+9): 9/9 gröna
+
+## Runda 2 — review-grindens fynd (warning + 2 info), åtgärdade
+
+**Warning (rättad):** chunk-laddningsfel.ts:s docblock (~rad 105) påstod fel
+mekanism för varför en preload-error aldrig når SectionError. Källäst
+@tanstack/router-core 1.171.27 load-client.js rad för rad (samma version
+granskaren läste): (1) chunk-rejektionen fångas redan INUTI createLoaderTask
+(rad ~373, konverteras till resolvat värde) — preloadClientRoutes yttre
+catch (rad 1058) triggas ALDRIG av det; (2) reduceLane/install() (rad
+519-534) SÄTTER faktiskt match.status='error' på preloadens lokala
+matches-array — den gamla texten ("ingen route-match sätts någonsin till
+error") var bokstavligt fel; (3) den verkliga anledningen: matches-arrayen
+är en SPEKULATIV kopia som ALDRIG PUBLICERAS — preloadClientRoute avslutar
+i sin finally (rad 1048-1053) med transferMatchResources + controller.abort()
+utan commitMatches/publishMatches/stores.setMatches (de enda ställena som
+skriver till router.stores.matches, rad 708/740-744/769/846/895/1257).
+Slutsatsen (kan inte nå SectionError) håller — mekanismen är omskriven med
+exakta radreferenser.
+
+**Info 1 (brasklapp tillagd):** mätningen (55-57 ms, 304-svar 2-3 ms) är ett
+VARMT dev-server-scenario (lokal HTTP-cache). Kall CDN/webbläsarcache efter
+en färsk deploy kan ta väsentligt längre — mekanismen (hämtning startar på
+hover, inte klick) håller ändå. defaultPendingMs (1000) är oförändrad; en
+kall produktionshämtning som närmar sig den tröskeln kan fortfarande visa
+Sidbytesindikatorn. Brasklappen är tillagd i PR-kroppen.
+
+**Info 2 (regressionsvakt tillagd):** nytt test
+tests/api/router-preload-defaults.test.ts (api-pure, ingen DOM) — läser
+src/router.ts som text och låser mot `defaultPreload: 'intent',` +
+`defaultPreloadStaleTime: 0,`. Importerar INTE router.ts direkt, samma
+etablerade mönster som personregister-farskhet.test.ts § 3 (routeTree.gen.ts
+drar in hela app-komponentträdet, vilket api-pure inte kan ladda).
+TVÅSIDIGT BEVISAT i byggsessionen: defaultPreload tillfälligt satt till
+false gav rött test (toContain föll), återställning gav grönt igen.
+
+Grindar efter fix: typecheck 0 · biome 0 · check-langa-streck 0 (323 filer)
+· nya testet grönt (tvåsidigt bevisat) · chunk-laddningsfel-testerna
+(webblasarbeteende 11/11 + acceptance 2/2) gröna.
 <!-- SECTION:NOTES:END -->
