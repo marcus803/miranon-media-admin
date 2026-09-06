@@ -1615,6 +1615,13 @@ export function BetalningsInkorg() {
           totalt={rader.length}
           enhet={BETALNINGS_ENHET}
           triggerRef={filterKnappRef}
+          /* Marcus prod-granskning 2026-09-06 (TASK-410): ihopfälld som
+             förut ledde till en ensam Markera-knapp på egen rad, vilket såg
+             fel ut. Utfälld som default löser det; övriga FilterRad-
+             konsumenter (AktivitetsHistorik, EventsList, AnmalningarSida)
+             är oförändrade — de skickar inte propen och behåller sitt
+             ihopfällda startläge. */
+          defaultOppen
           /* SAMMA BREDD SOM LISTAN OCH MENYBAREN (Marcus dom 2026-09-01:
              *"hela listan är för smal, det ska vara lika bred som menybaren.
              Även filtreringskomponenten"*).
@@ -1820,9 +1827,36 @@ export function BetalningsInkorg() {
           stället för att stå aktivt mot ingenting"); här är det uttryckt i
           renderingen i stället, eftersom inkorgens hook aldrig får nollställa
           på en tom mängd (den kan betyda "vet inte än" — se hookens
-          § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll. */}
+          § SANERINGEN). En Markera-knapp i en tom inkorg vore en död kontroll.
+
+          EXTRA LUFT MOT FILTERKOMPONENTEN — TVÅ VARV.
+          VARV 1 (Marcus prod-granskning 2026-09-06, S121 resume 4, TASK-410
+          tillägg): *"lägg mer luft mellan markera-knappen och
+          filtreringskomponenten också."* MÄTT (ej ögonmätt): sektionsroten
+          bär `gap-4` (16 px) mellan ALLA sina direkta barn, alltså även
+          mellan filterblocket och denna rad — samma 16 px som varje annan
+          brytning på sidan. `mt-2` gav +8 px, 24 px totalt.
+
+          VARV 2 (Marcus granskning på granskningsservern, samma dag),
+          ordagrant: *"Jag vill ha mer luft ÖVER markera knappen, luften
+          under är bra som det är nu. Men lite mer över för att visualisera
+          att markeraknappen hör till listorna nedan, inte till
+          filtreringskomponenten."* 24 px räckte alltså inte för att läsa
+          som en TYDLIG gruppgräns — knappen skulle fortfarande kunna läsas
+          som filterpanelens svans. `mt-6` (+24 px, husets 4 px-skala) höjer
+          ÖVERGÅNGEN till 40 px totalt (16 bas + 24 tillägg): en STÖRRE,
+          medvetet väl synlig lucka, matchande samma `mt-6` FilterRad.tsx
+          själv använder mellan sin tratt-rad och sin egen utfällda panel
+          (samma "det här är en annan grupp"-signal, återanvänd i stället
+          för uppfunnen).
+
+          LUFTEN UNDER (mot listan/sökträffarna) RÖRS INTE AV NÅGOTDERA
+          VARVET: den bärs av SAMMA sektions-`gap-4` mot NÄSTA syskon
+          (`{soker ? ... : ...}`-blocket längre ner), och ingen marginal har
+          lagts där — 16 px, oförändrat sedan innan TASK-410, exakt vad
+          Marcus bad att få behålla ("luften under är bra som det är nu"). */}
       {markerbaraIds.length > 0 && (
-        <div className="px-4">
+        <div className="mt-6 px-4">
           <MarkeringsAtgardsRad
             aktivt={markering.aktivt}
             antal={markering.antal}
