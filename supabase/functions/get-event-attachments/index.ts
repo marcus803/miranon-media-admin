@@ -139,18 +139,29 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   return out;
 }
 
-/** Batch-hämta record-ID:n ur Bilagor via chunkad `OR(RECORD_ID()=…)`. */
+/**
+ * Batch-hämta record-ID:n ur Bilagor via chunkad `OR(RECORD_ID()=…)`.
+ *
+ * [TASK-416.12] Chunkarna hämtas PARALLELLT (`Promise.all`) i stället för i
+ * en sekventiell for-loop — de är oberoende anrop (olika `RECORD_ID()`-
+ * mängder, samma tabell/fält), och `ids.length` styrs av eventets EGNA
+ * Bilagor-länk (`ATTACHMENTS_LINK_FIELD`), i praktiken högst några få
+ * chunkar (`ATTACHMENTS_BATCH_SIZE = 50`) — långt under P4:s 5 req/s-tak
+ * (docs/reference/airtable-constraints.md). Union-ordningen spelar ingen
+ * roll: resultatet dedupliceras på record-ID och sorteras på `Skapad`
+ * längre ned i anropskedjan.
+ */
 async function fetchAttachmentsByRecordIds(ids: readonly string[]): Promise<AirtableRow[]> {
-  const out: AirtableRow[] = [];
-  for (const idChunk of chunk(ids, ATTACHMENTS_BATCH_SIZE)) {
-    const filterByFormula = `OR(${idChunk.map((rid) => `RECORD_ID()='${rid}'`).join(',')})`;
-    const records = (await fetchFromAirtable(BILAGOR_TABLE, {
-      filterByFormula,
-      fields: ATTACHMENT_FIELDS,
-    })) as AirtableRow[];
-    out.push(...records);
-  }
-  return out;
+  const chunks = await Promise.all(
+    chunk(ids, ATTACHMENTS_BATCH_SIZE).map((idChunk) => {
+      const filterByFormula = `OR(${idChunk.map((rid) => `RECORD_ID()='${rid}'`).join(',')})`;
+      return fetchFromAirtable(BILAGOR_TABLE, {
+        filterByFormula,
+        fields: ATTACHMENT_FIELDS,
+      }) as Promise<AirtableRow[]>;
+    }),
+  );
+  return chunks.flat();
 }
 
 /**
@@ -264,8 +275,19 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // 1) Eventraden — ETT single-get. null = 404 (ärver get-event/get-event-notes-kontraktet).
-    const eventRecord = await fetchAirtableRecord(EVENTPLANERING_TABLE, eventId);
+    // 1) Eventraden OCH mängd (b) — DE GEMENSAMMA KANDIDATERNA — parallellt.
+    //    [TASK-416.12] `fetchGemensammaKandidater()` beror inte på eventraden
+    //    (den hämtar `Räckvidd ≠ Event` oavsett event), så den startas HÄR
+    //    i stället för att vänta på att eventraden svarat — samma union som
+    //    förut, bara startad tidigare. Priset: på 404-vägen (eventet finns
+    //    inte) har kandidat-anropet redan avfyrats och kastas; det svarar
+    //    inte kandidat-svaret utan bara hindrar att event-uppslaget blockerar
+    //    kandidat-hämtningen i onödan (P4-avvägning, mätt liten fixturmängd).
+    //    null = 404 (ärver get-event/get-event-notes-kontraktet).
+    const [eventRecord, kandidater] = await Promise.all([
+      fetchAirtableRecord(EVENTPLANERING_TABLE, eventId),
+      fetchGemensammaKandidater(),
+    ]);
     if (!eventRecord) {
       return new Response(JSON.stringify({ error: 'Event not found' }), {
         status: 404,
@@ -292,15 +314,9 @@ Deno.serve(async (req) => {
       platsIds: lasPlatsIds(eventRecord.fields[EVENT_PLATS_FIELD]),
     };
 
-    // 3) UNIONEN av TVÅ mängder — parallellt (oberoende Airtable-anrop,
-    //    ingen delad state). Mängd (b) hämtas ALLTID: till skillnad från
-    //    TASK-275.2:s formel-matchning är den inte villkorad av att eventet
-    //    har en Kursfamilj — ett event UTAN familj kan mycket väl matcha en
-    //    plats-bunden eller axellös gemensam bilaga.
-    const [egna, kandidater] = await Promise.all([
-      attachmentIds.length > 0 ? fetchAttachmentsByRecordIds(attachmentIds) : [],
-      fetchGemensammaKandidater(),
-    ]);
+    // 3) Mängd (a) — eventets EGNA bilagor. `kandidater` (mängd b) hämtades
+    //    redan i steg 1, parallellt med eventraden — se resonemanget där.
+    const egna = attachmentIds.length > 0 ? await fetchAttachmentsByRecordIds(attachmentIds) : [];
 
     // 4) MATCHNINGEN I KOD (ADR-057: i EF/_shared, aldrig i klienten) —
     //    varje kandidat prövas mot eventets tre axlar av den rena
