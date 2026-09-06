@@ -100,3 +100,16 @@ Forensiska fynd (Session 19 förarbets-pass):
   API-docs i env-drive-refaktorn.
 - **T4:** Schema-sync-disciplin staging↔prod (kadens + mekanism) detaljeras
   separat.
+
+## Updates
+
+### 2026-09-06 — Staging får en ANDRA roll: demots maskinrum (ADR-132)
+
+[ADR-132](ADR-132-demolaget-staging-som-maskinrum-bakom-dorr-i-prod-appen.md)
+låter Lottas demoläge köra mot staging-projektet — samma Edge Functions,
+kvittoserie, Airtable-bas och mailspärr — bakom en dörr i prod-appens
+Mer-meny. Rollen som långlivad prod-spegel för verifiering står orörd; det
+som tillkommer är en fast, svep-undantagen demofixtur, en nattlig
+återställning (`aterstall-demo`) och demoappens origin i
+`CORS_ALLOWED_ORIGINS`. Branching-avvisningen ovan omprövas INTE (research
+§ 11 fynd 5): en gren som demobackend vore en tredje roll och en egen ADR.
