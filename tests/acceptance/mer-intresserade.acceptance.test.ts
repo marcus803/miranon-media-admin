@@ -115,6 +115,41 @@ function mockLeads(
   return release;
 }
 
+/**
+ * En FLAGGSTYRD mock (INTE ett räkneverk): varje anrop ger 404 tills testet
+ * uttryckligen kallar den returnerade `tillatLyckasHadanefter()`, DÄREFTER
+ * lyckas VARJE anrop. Modellerar en riktig `isError → laddat`-övergång
+ * utan sidladdning — den enda REALISTISKA vägen dit i denna komponent
+ * (ingen "försök igen"-knapp finns). Mekanismen: TanStack Querys
+ * `refetchOnWindowFocus` (global default, `src/router.ts`) räknar en fråga
+ * utan lyckad data som ALLTID stale (`query-core`s `isStaleByTime`:
+ * `if (this.state.data === undefined) return true`), så nästa
+ * fönster-fokus hämtar om — oavsett `staleTime`.
+ *
+ * FLAGGA, INTE RÄKNEVERK (empiriskt tvunget, diagnostiserat under bygget):
+ * ett räkneverk som svarar 404 på "anrop #1" och lyckas därefter fångade
+ * ALDRIG en stabil fel-vy — sidladdningen ensam gör FYRA `get-leads`-anrop
+ * innan UI:t hinner stabiliseras (ADR-112 startvärmningen prefetchar SAMMA
+ * frågenyckel parallellt med komponentens egen `useQuery`-montering, plus
+ * minst en omhämtning eftersom en fråga utan lyckad data alltid räknas som
+ * stale på mount). Ett hårdkodat "N" hade varit skört mot precis den sortens
+ * ändring i värmnings-/prefetch-lagret denna PRD redan rör. Flaggan gör
+ * testet oberoende av EXAKT hur många interna anrop som föregår
+ * stabiliseringen: alla misslyckas tills testet självt bestämmer att de ska
+ * lyckas.
+ */
+function mockLeadsFelarTillsFlaggat(network: NetworkFixture, rows: Row[]): () => void {
+  let lyckas = false;
+  network.use(
+    http.get(EF('get-leads'), () =>
+      lyckas ? json({ intresserade: rows, nextCursor: null }) : json({ error: 'x' }, 404),
+    ),
+  );
+  return () => {
+    lyckas = true;
+  };
+}
+
 test.describe('Intresserade-vy (Fas 6e L1 L3 — LÄS-vy via get-leads, promoverad B3-form)', () => {
   test('roster renderas: primär/sekundär rad + aktivitetsrad + hämtnings-pill; fokus → <h1>', async ({
     page,
@@ -360,6 +395,73 @@ test.describe('Intresserade-vy (Fas 6e L1 L3 — LÄS-vy via get-leads, promover
     // `LISTKROPP_ANKARE`): x/y/width var redan identiska FÖRE `h-20`-fixen
     // eftersom bredden styrs av containern, inte av innehållet.
     expect(Math.abs(forstaRadenEfter.height - forstaRadenFore.height)).toBeLessThanOrEqual(1);
+  });
+
+  /**
+   * Review-grinden runda 1 (TASK-416.8, Marcus mandat): `sokRad` monterades
+   * tidigare i TRE separata `return`-grenar där den hamnade på OLIKA
+   * barn-index (isPending 2/4, isError 0/2, laddat 2/4). Reacts keyless
+   * reconciliation matchar barn POSITIONELLT — DOM-identitet (fokus +
+   * skriven text) bevarades alltså bara för isPending→laddat, inte för
+   * isPending→isError eller isError→laddat. Skriver Lotta i sökfältet när
+   * källan faller under laddningen tappas fokus och inmatningen.
+   *
+   * Fixat genom att göra HELA komponenten till ETT returträd med `sokRad`
+   * på en FAST syskon-position (se `Intresserade.tsx`s enda `return`).
+   * Dessa två test bevisar båda övergångarna runda 1s test inte täckte.
+   */
+  test('fokus + skriven text i sökfältet överlever isPending → isError (TASK-416.8 runda 2)', async ({
+    page,
+    network,
+  }) => {
+    const release = mockLeads(network, [], { status: 404, manualRelease: true });
+    await page.goto('/mer/intresserade');
+
+    await expect(page.getByText('Laddar intresserade…')).toBeVisible();
+
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök intresserad' });
+    await sokfalt.fill('Anna');
+    await expect(sokfalt).toBeFocused();
+
+    release();
+    await expect(page.getByRole('alert')).toBeVisible();
+
+    // SAMMA DOM-nod bevarad genom övergången — inte en ny, tom `<input>`.
+    await expect(sokfalt).toBeFocused();
+    await expect(sokfalt).toHaveValue('Anna');
+  });
+
+  test('fokus + skriven text i sökfältet överlever isError → laddat (TASK-416.8 runda 2)', async ({
+    page,
+    network,
+  }) => {
+    const tillatLyckasHadanefter = mockLeadsFelarTillsFlaggat(network, [
+      row({ namn: 'Anna Andersson', email: 'anna@example.se' }),
+    ]);
+    await page.goto('/mer/intresserade');
+
+    await expect(page.getByRole('alert')).toBeVisible();
+
+    // "Anna" — MATCHAR den mockade raden ("Anna Andersson"). Ett omatchat
+    // sökord (testet skrev tidigare "Bo") filtrerar bort raden när datan
+    // landar och testet läser fel symptom ("Inga träffar på sökningen.")
+    // som om övergången misslyckats, trots att fokus/DOM-identitet var
+    // intakt hela vägen.
+    const sokfalt = page.getByRole('searchbox', { name: 'Sök intresserad' });
+    await sokfalt.fill('Anna');
+    await expect(sokfalt).toBeFocused();
+
+    tillatLyckasHadanefter();
+    // Utlöser TanStack Querys refetchOnWindowFocus (se `mockLeadsFelarTillsFlaggat`
+    // ovan för mekanismen) — den enda realistiska vägen isError → laddat.
+    await page.evaluate(() => window.dispatchEvent(new Event('visibilitychange')));
+
+    await expect(page.getByRole('heading', { level: 1, name: 'Intresserade' })).toBeVisible();
+    await expect(page.getByText('Anna Andersson')).toBeVisible();
+
+    // SAMMA DOM-nod bevarad genom övergången — inte en ny, tom `<input>`.
+    await expect(sokfalt).toBeFocused();
+    await expect(sokfalt).toHaveValue('Anna');
   });
 
   test('axe 0 violations på TOM vy', async ({ page, network }) => {

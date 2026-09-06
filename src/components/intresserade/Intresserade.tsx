@@ -214,15 +214,20 @@ export function Intresserade() {
 
   const sidRam = <SidRam to="/mer" tillbakaEtikett="Tillbaka till Mer" />;
 
-  /** [TASK-416.8] Sökraden — EN delad JSX-nod, monterad byte-identisk i
-   * laddläge, fel-läge OCH laddat läge (PRD TASK-416s regel: sidkromet
-   * renderas i ALLA query-tillstånd, bara datakroppen växlar). Fram till
-   * denna skiva fanns raden bara i det laddade läget (S123 rapport D §4
-   * #8, read-only-audit mot `29a3c16d`) — 62 px desktop / 130 px mobil
-   * saknades i de andra två grenarna, vilket flyttade listan när datan
-   * landade. Att dela SAMMA konstant (i stället för att skriva av
-   * markupen tre gånger) är det som garanterar identisk boundingBox —
-   * se Final Summary för de uppmätta talen. */
+  /** [TASK-416.8, HÄRDAD RUNDA 2] Sökraden — EN delad JSX-nod monterad på
+   * EN FAST POSITION i EN ENDA returträdet nedan (inte tre separata
+   * `return`, som runda 1 skrev det). Skälet är inte stilistiskt:
+   * review-grinden (runda 1, Marcus mandat) visade att `sokRad`s
+   * position bland sina syskon skilde sig mellan grenarna
+   * (isPending index 2/4, isError index 0/2, laddat index 2/4) — Reacts
+   * keyless reconciliation matchar barn POSITIONELLT, så DOM-identitet
+   * (och därmed webbläsarfokus + otippad text i sökfältet) bevarades
+   * bara för isPending→laddat, inte för isPending→isError eller
+   * isError→laddat. Ett `key`-lapp hade dolt symptomet utan att laga
+   * orsaken; ETT returträd med `sokRad` på en FAST plats bland sina
+   * syskon (se det enda returträdet nedan) tar bort problemet
+   * strukturellt — sokRad jämförs alltid mot sig själv, oavsett vilket
+   * tillstånd grannarna representerar. */
   const sokRad = (
     <div
       data-testid={SOKRAD_ANKARE}
@@ -250,124 +255,140 @@ export function Intresserade() {
     </div>
   );
 
-  if (!laddat) {
-    return (
-      <section className="flex flex-col gap-6">
-        {sidRam}
-        <div
-          data-testid={YTANS_ANKARE}
-          role="status"
-          aria-live="polite"
-          aria-busy="true"
-          // gap-6 (INTE gap-4, som stod här innan denna skiva) — samma
-          // avstånd som det laddade lägets container nedan. Padding flyttad
-          // FRÅN containern till varje barn (px-4), likaså speglat av det
-          // laddade läget, så `sokRad`s EGEN `px-4` inte dubbleras (32 px i
-          // stället för 16). Utan denna justering hade sökraden monterats
-          // på fel Y-position mot sin egen plats i laddat läge — se Final
-          // Summary för boundingBox-talen som bevisar att det INTE händer.
-          className="flex flex-col gap-6"
-        >
-          <span className="sr-only">Laddar intresserade…</span>
-          <div className="flex flex-col gap-1 px-4">
-            <Skeleton variant="text" className="w-40 text-3xl" />
-            <Skeleton variant="text" className="w-32 text-small" />
-          </div>
-          {sokRad}
-          {/* h-20 (80 px, INTE variantens generiska 3lh = 72 px): mätt mot
-              `KonvergensRad`s faktiska höjd (avatar + tre textrader olika
-              typografiskala + `pb-3` + kantlinje summerar till 80 px, inte
-              tre generiska line-boxar) — samma etablerade mönster som
-              `PersonDetail.tsx`/`EventDetail.tsx`/`AnmalanDetail.tsx`s
-              `h-XX`-överskrivningar av `listRow`-varianten. Utan denna rad
-              växer VARJE rad 8 px vid datalandning och skjuter alla rader
-              under den nedåt — boundingBox-beviset (TASK-416.8 AC #2) i
-              Final Summary visar 72→80 px innan denna rad fanns. */}
-          <div data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
-            <Skeleton variant="listRow" className="h-20" />
-            <Skeleton variant="listRow" className="h-20" />
-            <Skeleton variant="listRow" className="h-20" />
-          </div>
-        </div>
-      </section>
-    );
-  }
+  /** Rubriken — `null` i fel-läge, ANNARS `<header>` med den KONSTANTA
+   * `<h1>`-texten (beror aldrig på datan; renderas som riktig text redan i
+   * laddläget, aldrig som skeleton) och en TRÄFFANTALS-rad som växlar
+   * (skeleton i laddläge, äkta text i laddat läge).
+   *
+   * `isError ? null` är INTE en eftergift åt review-fixens princip — det är
+   * en LAGAD REGRESSION den introducerade. Första versionen av denna skiva
+   * höll `<header>` monterad i fel-läge också (bara träffantalsraden
+   * växlade), vilket råkade montera `<h1 ref={headingRef}>` i fel-läge för
+   * FÖRSTA gången någonsin. Den befintliga `useEffect`en nedan
+   * (`if (laddat && !announceRef.current) headingRef.current?.focus()`)
+   * skiljer INTE på lyckad hämtning och fel — `laddat` (`= !isPending`) blir
+   * sant för BÅDA. Diagnostik (TASK-416.8 runda 2, en markör-`evaluate` +
+   * `document.activeElement`-läsning) bevisade: DOM-noden för `sokRad`
+   * bevarades korrekt genom övergången (reconciliation-fixen fungerar) MEN
+   * fokus hoppade ändå till `<h1>` — inte för att `sokRad` tappade
+   * identitet, utan för att `<h1>` nyss blivit fokuserbar där den aldrig
+   * var det förut. `isError ? null` återställer den ENDA raden som
+   * faktiskt behöver ändras: `<header>` (och därmed `headingRef`s nod)
+   * unmountas i fel-läge precis som INNAN denna skiva, så `headingRef.
+   * current` är `null` när effekten kör (Reacts ref-cleanup sker i
+   * mutations-fasen, FÖRE passiva effekter) — `?.focus()` blir en säker
+   * no-op. Positionen (`rubrik`s syskon-plats i returträdet) är ändå FAST;
+   * det är bara VÄRDET på den positionen som får vara `null`, exakt som
+   * `datakropp` redan gör för andra tillstånd. */
+  const rubrik = isError ? null : (
+    <header className="flex flex-col gap-1 px-4">
+      <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-3xl">
+        Intresserade
+      </h1>
+      {!laddat ? (
+        <Skeleton variant="text" className="w-32 text-small" />
+      ) : (
+        // TRÄFFANTALET SOM ARTIG LIVE-REGION (TASK-374.1 AC #3). Formen är
+        // `DokumentYta.tsx`s "aria-live + aria-atomic UTAN role=status"
+        // (§ SAMMANFATTNINGEN, rad ~3436): `role="status"` implicerar SAMMA
+        // politeness och att sätta båda är den kända
+        // dubbelannonserings-fällan. Räknaren är redan en `<p>` (ARIA-roll
+        // "paragraph") — att LÅTA den rollen stå orörd och bara lägga till
+        // attributen håller `ariaSnapshot` byte-identisk (aria-live/
+        // aria-atomic renderas inte i Playwrights ariaSnapshot-yaml,
+        // verifierat mot samtliga incheckade referenser: noll
+        // `[live]`-annoteringar i `tests/visual/__aria__/`), medan
+        // skärmläsare ändå annonserar ändringen — `aria-live` fungerar
+        // oavsett roll (WAI-ARIA; samma tekniks precedent:
+        // `SegmentMailCompose.tsx` rad ~306).
+        <p className="text-small text-text-muted" aria-live="polite" aria-atomic="true">
+          {sok.trim()
+            ? `${synliga.length} träffar av ${intresserade.length} intresserade`
+            : `${intresserade.length} intresserade`}
+        </p>
+      )}
+    </header>
+  );
 
-  if (isError) {
-    return (
-      <section className="flex flex-col gap-6">
-        {sidRam}
-        <div data-testid={YTANS_ANKARE} className="flex flex-col gap-6">
-          {sokRad}
-          <div className="px-4">
-            <MessageBox intent="error" title="Kunde inte hämta intresserade">
-              {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
-            </MessageBox>
-          </div>
-        </div>
-      </section>
-    );
-  }
+  /** Den sr-only-annonseringen — EN fast syskon-position, innehållet
+   * (element-typ span/p, eller inget alls) får variera fritt: ingen
+   * fokus- eller inmatningsstat att bevara här, till skillnad från
+   * `sokRad`. */
+  const annonsering = !laddat ? (
+    <span className="sr-only">Laddar intresserade…</span>
+  ) : isError ? null : (
+    <p className="sr-only" role="status" aria-live="polite">
+      Intresserade laddade.
+    </p>
+  );
+
+  /** Datakroppen — DEN ENDA delen som växlar mellan tillstånden
+   * (review-beslutet, runda 2): skeleton / felbesked / tomt-läge / lista,
+   * alla på SAMMA fasta syskon-position sist i returträdet nedan. */
+  const datakropp = !laddat ? (
+    // h-20 (80 px, INTE variantens generiska 3lh = 72 px): mätt mot
+    // `KonvergensRad`s faktiska höjd (avatar + tre textrader olika
+    // typografiskala + `pb-3` + kantlinje summerar till 80 px, inte tre
+    // generiska line-boxar) — samma etablerade mönster som
+    // `PersonDetail.tsx`/`EventDetail.tsx`/`AnmalanDetail.tsx`s
+    // `h-XX`-överskrivningar av `listRow`-varianten. Utan denna rad växer
+    // VARJE rad 8 px vid datalandning och skjuter alla rader under den
+    // nedåt — boundingBox-beviset (TASK-416.8 AC #2) i Final Summary visar
+    // 72→80 px innan denna rad fanns.
+    <div data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
+      <Skeleton variant="listRow" className="h-20" />
+      <Skeleton variant="listRow" className="h-20" />
+      <Skeleton variant="listRow" className="h-20" />
+    </div>
+  ) : isError ? (
+    <div className="px-4">
+      <MessageBox intent="error" title="Kunde inte hämta intresserade">
+        {error instanceof Error ? error.message : 'Inget felmeddelande angavs.'}
+      </MessageBox>
+    </div>
+  ) : synliga.length === 0 ? (
+    <p className="px-4 text-small text-text-muted">
+      {sok.trim() ? 'Inga träffar på sökningen.' : 'Inga intresserade än.'}
+    </p>
+  ) : (
+    <ul data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
+      {synliga.map((person) => (
+        <KonvergensRad key={person.id} person={person} />
+      ))}
+    </ul>
+  );
 
   return (
     <section className="flex flex-col gap-6">
       {sidRam}
 
-      {/* Ankaret sitter på en NY, ren behållare — sidkromet (sidRam) står
-          kvar som SYSKON utanför den, precis som `AnmalningarSida.tsx`s
+      {/* ETT returträd, EN behållare — sidkromet (sidRam) står kvar som
+          SYSKON utanför den, precis som `AnmalningarSida.tsx`s
           `YTANS_ANKARE`-kommentar föreskriver: en granskare som scopar sin
-          `ariaSnapshot` hit ska mäta FORMEN, aldrig sidkromet. Behållaren är
-          en ren `<div>` (ARIA-roll "generic") — den syns aldrig i
-          `ariaSnapshot` (verifierat mot samtliga incheckade referenser under
-          `tests/visual/__aria__/`: noll "generic"-noder), och `gap-6` här
-          reproducerar exakt den rytm den ENDA tidigare flex-behållaren gav,
-          eftersom `role="status"`-raden nedan redan låg utanför flödet
-          (`sr-only` ⇒ `position: absolute`) och därför aldrig konsumerade en
-          egen gap-rad. Nästlingen ändrar alltså varken form eller layout —
-          se Final Summary för det uppmätta ariaSnapshot-beviset. */}
-      <div data-testid={YTANS_ANKARE} className="flex flex-col gap-6">
-        <p className="sr-only" role="status" aria-live="polite">
-          Intresserade laddade.
-        </p>
-
-        <header className="flex flex-col gap-1 px-4">
-          <h1 ref={headingRef} tabIndex={-1} className="font-semibold text-3xl">
-            Intresserade
-          </h1>
-          {/* TRÄFFANTALET SOM ARTIG LIVE-REGION (TASK-374.1 AC #3). Formen
-              är `DokumentYta.tsx`s "aria-live + aria-atomic UTAN role=status"
-              (§ SAMMANFATTNINGEN, rad ~3436): `role="status"` implicerar
-              SAMMA politeness och att sätta båda är den kända
-              dubbelannonserings-fällan. Räknaren är redan en `<p>` (ARIA-roll
-              "paragraph") — att LÅTA den rollen stå orörd och bara lägga till
-              attributen håller `ariaSnapshot` byte-identisk (aria-live/
-              aria-atomic renderas inte i Playwrights ariaSnapshot-yaml,
-              verifierat mot samtliga incheckade referenser: noll
-              `[live]`-annoteringar i `tests/visual/__aria__/`), medan
-              skärmläsare ändå annonserar ändringen — `aria-live` fungerar
-              oavsett roll (WAI-ARIA; samma tekniks precedent:
-              `SegmentMailCompose.tsx` rad ~306). Formen ändras alltså inte
-              (AC #1); annonseringen är ett rent DOM-attributtillägg. */}
-          <p className="text-small text-text-muted" aria-live="polite" aria-atomic="true">
-            {sok.trim()
-              ? `${synliga.length} träffar av ${intresserade.length} intresserade`
-              : `${intresserade.length} intresserade`}
-          </p>
-        </header>
-
+          `ariaSnapshot` hit ska mäta FORMEN, aldrig sidkromet. Behållaren
+          är en ren `<div>` (ARIA-roll "generic") — den syns aldrig i
+          `ariaSnapshot` (verifierat mot samtliga incheckade referenser
+          under `tests/visual/__aria__/`: noll "generic"-noder).
+          `role`/`aria-live`/`aria-busy` sätts bara i laddläget (Roselli-
+          mönstret: containern ÄR statuszonen då) — i fel-/laddat läge bär
+          i stället den inre `annonsering`-noden (eller `MessageBox`s
+          `role="alert"`) beskedet, så ingen dubbelannonsering uppstår.
+          De FYRA barnen nedan (`annonsering`, `rubrik`, `sokRad`,
+          `datakropp`) är FASTA SYSKON-POSITIONER som alltid finns med i
+          samma ordning — det är den strukturen, inte en `key`, som håller
+          `sokRad`s DOM-identitet (och därmed fokus + skriven text) intakt
+          genom VARJE tillståndsövergång (TASK-416.8 runda 2). */}
+      <div
+        data-testid={YTANS_ANKARE}
+        role={!laddat ? 'status' : undefined}
+        aria-live={!laddat ? 'polite' : undefined}
+        aria-busy={!laddat ? true : undefined}
+        className="flex flex-col gap-6"
+      >
+        {annonsering}
+        {rubrik}
         {sokRad}
-
-        {synliga.length === 0 ? (
-          <p className="px-4 text-small text-text-muted">
-            {sok.trim() ? 'Inga träffar på sökningen.' : 'Inga intresserade än.'}
-          </p>
-        ) : (
-          <ul data-testid={LISTKROPP_ANKARE} className="flex flex-col gap-3 px-4">
-            {synliga.map((person) => (
-              <KonvergensRad key={person.id} person={person} />
-            ))}
-          </ul>
-        )}
+        {datakropp}
       </div>
     </section>
   );
