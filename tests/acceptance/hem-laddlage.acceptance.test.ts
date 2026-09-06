@@ -662,7 +662,10 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
       expect(efter.nyaAnmRad).toEqual(under.nyaAnmRad);
 
       // Förfallna betalningars och Senaste aktivitets Y-koordinat förskjuts
-      // MÄTT (+41px resp. +112px i denna fixtur) av "Bekräfta alla"-knappen
+      // MÄTT (+41px resp. +112px, mätt vid 1280 px — review-fynd runda 2:
+      // talen är breddspecifika sedan testet parametriserades över
+      // viewport-matrisen, assertionerna nedan använder ALDRIG dessa tal,
+      // bara `utanY()`) av "Bekräfta alla"-knappen
       // som monteras under Nya anmälningars lista NÄR OCH ENDAST NÄR
       // `anmalningar.total > 0` blir känt — ett tillstånd som per definition
       // inte existerar förrän datat landat (`NyaAnmalningar.tsx`s sista gren).
@@ -686,10 +689,12 @@ test.describe('Hem — Lugnt laddläge (task-8.4)', () => {
       // id="hem-forfallna-paminna">`), ett element som INTE existerar i
       // pending-läget (den flata skeleton-containern har ingen gruppindelning
       // — antalet grupper är per definition okänt innan datat landat, samma
-      // resonemang som knapparna ovan). Mätt (denna fixtur): 782→877 px, en
-      // TREDJE, egen förskjutning utöver h2:ns +41. `utanY()` isolerar även
-      // här bredd/höjd/vänsterkant — den geometri skeleton-fixen FAKTISKT
-      // bevisar.
+      // resonemang som knapparna ovan). Mätt vid 1280 px: 782→877 px, en
+      // TREDJE, egen förskjutning utöver h2:ns +41 (breddspecifikt tal,
+      // review-fynd runda 2 — vid övriga tre viewports i matrisen är
+      // förskjutningen ett annat tal, av samma orsak). `utanY()` isolerar
+      // även här bredd/höjd/vänsterkant — den geometri skeleton-fixen
+      // FAKTISKT bevisar, oavsett vilket Y-tal förskjutningen råkar bli.
       expect(utanY(efter.forfallnaRad)).toEqual(utanY(under.forfallnaRad));
 
       // Rapporterbart spår per bredd (samma disciplin som Bevakningsradens

@@ -26,13 +26,26 @@ import type { useDashboardRegistrations } from './useDashboardData';
  * kortare än kolumnens 42 px och avgör alltså inte radens höjd. Den
  * högerställda platshållaren mot `{relTid}`-spannet är med av samma skäl som
  * `MailLogSkeletonRow`s fyra fält: `inskickad` sätts av varje anmälan
- * (`reg()`-fixturen), så relativ-tid är i praktiken TYPRADEN framåt. Bär
- * SAMMA `shrink-0 pl-2 text-caption`-klasser som `{relTid}`-spannet
- * (rad ~168/179) verbatim, inte bara samma bredd/storlek (review-fynd
- * runda 1, PR #2419: `pl-2` saknades — utan mätbar effekt på radens EGEN
- * boundingBox eftersom `flex-1`-namnkolumnen absorberar mellanskillnaden,
- * men en verklig avvikelse från den pixel-för-pixel-spegling docblocket
- * ovan påstår).
+ * (`reg()`-fixturen), så relativ-tid är i praktiken TYPRADEN framåt.
+ *
+ * OMSLAGET runt sista platshållaren (review-fynd runda 1+2, PR #2419):
+ * `Skeleton` renderar ett TOMT, självstängande element — bakgrunden
+ * (`bg-(--mm-skeleton-block)`) målas direkt på ELEMENTET SJÄLVT, och
+ * `box-sizing: border-box` (`base.css`) gör att en breddklass som `w-16`
+ * blir TOTALbredden. Ett `pl-2` satt direkt PÅ Skeleton-blocket (runda 1:s
+ * första försök) äter alltså 8 px av en innehållsbox som ändå är tom — den
+ * målade rektangeln fyller fortsatt hela 64 px från samma vänsterkant, till
+ * skillnad från den riktiga `{relTid}`-spannet (rad ~168/179), som saknar
+ * egen breddklass och därför FAKTISKT skjuts inåt av sitt `pl-2`. Den
+ * riktiga fixen är ett separat OMSLAG (`<span className="shrink-0 pl-2">`)
+ * runt en `Skeleton` UTAN egen `pl-2`, med bredden nedskalad
+ * (`w-14` = 56 px) så att omslagets `pl-2` (8 px) + den målade rektangelns
+ * 56 px tillsammans ger SAMMA yttre 64 px som förut — men nu sitter rektangeln
+ * FÖRSKJUTEN 8 px från omslagets vänsterkant, där den riktiga relTid-texten
+ * faktiskt hamnar, i stället för att fylla hela boxen. Radens EGEN yttre
+ * boundingBox (AC #1) är opåverkad i båda formerna, eftersom `flex-1`-
+ * namnkolumnen absorberar mellanskillnaden — mätt oförändrat i alla fyra
+ * viewports efter denna rättning.
  *
  * BREDDEN (568→545, 23 px för bred) satt INTE på raden själv: raden är ett
  * block-element utan egen breddklass och stretchar till sin FLEX-förälders
@@ -54,7 +67,9 @@ function NyaAnmalanSkeletonRad() {
         <Skeleton variant="text" className="w-2/5 text-body" />
         <Skeleton variant="text" className="w-1/3 text-caption" />
       </span>
-      <Skeleton variant="text" className="w-16 shrink-0 pl-2 text-caption" />
+      <span className="shrink-0 pl-2">
+        <Skeleton variant="text" className="w-14 text-caption" />
+      </span>
     </div>
   );
 }

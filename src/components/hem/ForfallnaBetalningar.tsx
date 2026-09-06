@@ -22,12 +22,20 @@ import type { useDashboardRegistrations } from './useDashboardData';
  * varken anatomin (avatar-cirkel + namn/avgiftstyp-kolumn) eller den riktiga
  * radens boundingBox (TASK-416.13:s mätning: {width:568,height:72} skelett
  * mot {width:545,height:66} riktig rad, samma defekt som Nya anmälningar).
- * Badgen utelämnas MEDVETET: den visas bara när `paminnelsedatum` är satt,
- * vilket per `forfallenGrupp()` ALDRIG händer för "Att påminna"-gruppen
- * (dess definition ÄR `paminnelseSkickadIso == null`). `InitialAvatar`-
- * platshållaren (`size-9 shrink-0 rounded-full`) + två staplade `Skeleton`-
- * textrader (`text-body`/`text-caption`, ingen gap) följer exakt samma
- * mönster och höjdräkning (66 px = `py-3` 24 px + kolumnens 42 px) som
+ * Badgen utelämnas MEDVETET, för BÅDA de grupper platshållaren speglar —
+ * inte bara "Att påminna" (rättat, review-fynd runda 2, PR #2419: en
+ * tidigare version motiverade utelämnandet enbart med "Att påminna"-
+ * gruppens `paminnelseSkickadIso == null`-definition, men "Väntar" har per
+ * `forfallenGrupp()` ALLTID `paminnelseSkickadIso` SATT och visar alltså
+ * badgen ALLTID — motiveringen täckte bara hälften av vad stycket påstod).
+ * Skälet badgen ändå kan utelämnas för båda är GEOMETRISKT, inte att den
+ * aldrig visas: badgen är en enkelrad (`text-caption` 0,75rem × line-height
+ * 1,5 = 18 px, plus `py-0.5` = 4 px ⇒ ≈22 px) i en `items-center`-rad vars
+ * höjd bestäms av den 42 px höga namnkolumnen — 66 px oavsett om badgen
+ * finns eller ej, se höjdräkningen nedan. `InitialAvatar`-platshållaren
+ * (`size-9 shrink-0 rounded-full`) + två staplade `Skeleton`-textrader
+ * (`text-body`/`text-caption`, ingen gap) följer exakt samma mönster och
+ * höjdräkning (66 px = `py-3` 24 px + kolumnens 42 px) som
  * `NyaAnmalanSkeletonRad` i `NyaAnmalningar.tsx` — samma docblock där för
  * hela räkningen.
  *
@@ -45,7 +53,9 @@ import type { useDashboardRegistrations } from './useDashboardData';
  * `hem-laddlage.acceptance.test.ts`) — en count-agnostisk, gruppokänd
  * skeleton kan strukturellt inte veta i förväg VILKEN grupp som kommer
  * landa först, på samma sätt som den redan bokförda "Bekräfta alla"/
- * "Att påminna"-rubrik-förskjutningen nedan. Klassad som samma sorts kant
+ * "Att påminna"-rubrik-förskjutningen (`utanY()`-kommentaren i
+ * `hem-laddlage.acceptance.test.ts`, INTE nedan i denna fil — rättad
+ * hänvisning, review-fynd runda 2). Klassad som samma sorts kant
  * som Hem-kortens tomläge (PRD TASK-416 § Öppna frågor, Marcus designval)
  * — ett KÄNT, avsiktligt icke-täckt scenario, inte ett fel denna skiva
  * åtgärdar. Se `backlog/tasks/task-416.18-*.md` § Implementation Notes för
