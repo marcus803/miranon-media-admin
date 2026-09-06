@@ -60,6 +60,15 @@ type Rad = {
   namn: string;
   summaInbetalt: number;
   gallandePris: number | null;
+  /**
+   * `null` = eventet har ingen anmälningsavgift alls. MÄTT UNDER BYGGET, och
+   * värt raden: med `gallandePris: null` men `anmalningsavgift: 1000` ger
+   * `harledBeloppsknappar` ÄNDÅ en avgifts-knapp (`avgiftKvar` är 1 000 och
+   * `kvar` är null, så villkoret `avgiftKvar === kvar` aldrig slår). Raden var
+   * alltså inte kandidatlös utan hade en kandidat — och hamnade i listan i
+   * stället för i "Behöver din hand". Båda fälten måste vara `null`.
+   */
+  anmalningsavgift?: number | null;
   deadlineSlutbetalning?: string;
   anmalanStatus?: string;
 };
@@ -91,7 +100,13 @@ const RADER: Rad[] = [
     anmalanStatus: 'Obekräftad',
   },
   { id: 'rec-402-8-c', namn: LANGT_NAMN, summaInbetalt: 0, gallandePris: 2500 },
-  { id: 'rec-402-8-d', namn: 'David Utan Pris', summaInbetalt: 0, gallandePris: null },
+  {
+    id: 'rec-402-8-d',
+    namn: 'David Utan Pris',
+    summaInbetalt: 0,
+    gallandePris: null,
+    anmalningsavgift: null,
+  },
 ];
 
 const IDS = RADER.map((r) => r.id).join(',');
@@ -110,7 +125,7 @@ function oppenBetalning(rad: Rad): Record<string, unknown> {
     anmalanStatus: rad.anmalanStatus ?? 'Bekräftad (mail skickat)',
     saknas: rad.gallandePris === null ? null : rad.gallandePris - rad.summaInbetalt,
     gallandePris: rad.gallandePris,
-    anmalningsavgift: 1000,
+    anmalningsavgift: rad.anmalningsavgift === undefined ? 1000 : rad.anmalningsavgift,
     summaInbetalt: rad.summaInbetalt,
     summaInbetaltSpegel: rad.summaInbetalt,
     spegelIFas: true,
@@ -199,10 +214,13 @@ test.describe('TASK-402.8 — pillsen bort och namnet klippt (AC #1, AC #2)', ()
       expect(klippt).toBe(true);
 
       // KORTETS HÖJD: identisk med ett kort vars namn får plats.
-      const langtKort = steget.getByRole('listitem').filter({ has: steget.getByTitle(LANGT_NAMN) });
-      const kortKort = steget
-        .getByRole('listitem')
-        .filter({ has: steget.getByTitle('Anna Avgift') });
+      //
+      // `hasText` OCH INTE `has: steget.getByTitle(...)`: ett `has`-filter
+      // matchar den inre lokatorn med LISTITEM som rot, inte med `steget` —
+      // en lokator rotad i `steget` matchar därför aldrig (mätt: locator
+      // timeout, inte ett falskt utfall).
+      const langtKort = steget.getByRole('listitem').filter({ hasText: LANGT_NAMN });
+      const kortKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
       const hogLangt = (await langtKort.boundingBox())?.height ?? 0;
       const hogKort = (await kortKort.boundingBox())?.height ?? 0;
       expect(hogLangt).toBeGreaterThan(0);
@@ -294,10 +312,18 @@ test.describe('TASK-402.8 — Sätt alla belopp (AC #3, AC #4)', () => {
     await steget.getByRole('button', { name: ALLTKNAPP }).click();
 
     // Öppna Annas kort, skriv ett eget belopp, tryck Klar.
-    await steget.getByRole('button', { name: 'Ändra belopp för Anna Avgift' }).click();
-    const beloppfalt = steget.getByRole('textbox', { name: 'Belopp i kronor' }).first();
+    //
+    // SCOPAT TILL HENNES KORT: David ligger i "Behöver din hand" med sitt
+    // formulär öppet från början, så både "Belopp i kronor" och "Klar" finns
+    // i TVÅ exemplar på sidan. Ett `.first()` hade råkat vara rätt här (DOM-
+    // ordningen sätter listan före hand-högen) och fel så fort ordningen
+    // ändras.
+    const annasKort = steget.getByRole('listitem').filter({ hasText: 'Anna Avgift' });
+    await annasKort.getByRole('button', { name: 'Ändra belopp för Anna Avgift' }).click();
+    const beloppfalt = annasKort.getByLabel('Belopp i kronor');
     await beloppfalt.fill('750');
-    await steget.getByRole('button', { name: 'Klar' }).first().click();
+    await beloppfalt.blur();
+    await annasKort.getByRole('button', { name: 'Klar' }).click();
     expect(await beloppFor(steget, 'Anna Avgift')).toBe('750kr');
 
     // Ett nytt tryck skriver över hennes handskrivna belopp — knappen är

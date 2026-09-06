@@ -3,9 +3,10 @@ id: TASK-402.8
 title: >-
   Skiva: Bekräftelsestegets form före stämpeln — pillsen bort ur korten, namnet
   klipps, beloppsknapparna Anmälningsavgift/Hela beloppet under listan
-status: To Do
+status: In Progress
 assignee: []
 created_date: '2026-09-06 09:24'
+updated_date: '2026-09-06 10:22'
 labels:
   - ready-for-agent
 dependencies:
@@ -22,11 +23,11 @@ Marcus prod-granskning av bekräftelsesteget 2026-09-06 (S121 resume 4, under 40
 
 ## Acceptance Criteria
 <!-- AC:BEGIN -->
-- [ ] #1 Pillsen Förfallen och Obekräftad renderas inte i bekräftelsestegets kort, varken ihopfällt eller öppet, inte heller i Behöver-din-hand-högen; inkorgens pills är oförändrade
-- [ ] #2 Ett namn längre än kortets utrymme klipps med ellips på en rad (test med ett 60-teckens namn på desktop 1440 och iPad 820); kortets höjd och övriga element är oförändrade; fullständigt namn nås via title-attribut eller sr-only
-- [ ] #3 Under listan finns 'Sätt alla belopp:' med knapparna Anmälningsavgift och Hela beloppet; ett tryck sätter varje markerad rads belopp till radens egen kandidat (avgiftKvar respektive kvar); rader utan kandidat och Behöver-din-hand-högen rörs inte; avstämningen och summaraden räknar om
-- [ ] #4 Appens förslag per rad står kvar tills en knapp trycks; per-rad-redigering efteråt fungerar som förut; knapparna nås med tangentbord, bär tydliga namn för skärmläsare och trycket annonseras i statusraden; axe-svep utan fel
-- [ ] #5 Nya facit-bilder för de berörda lägena och en AMENDERING-fil i tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/; ariaSnapshot-referenserna omtagna; api-pure-tester täcker sätt-alla-regeln inklusive rad utan kandidat
+- [x] #1 Pillsen Förfallen och Obekräftad renderas inte i bekräftelsestegets kort, varken ihopfällt eller öppet, inte heller i Behöver-din-hand-högen; inkorgens pills är oförändrade
+- [x] #2 Ett namn längre än kortets utrymme klipps med ellips på en rad (test med ett 60-teckens namn på desktop 1440 och iPad 820); kortets höjd och övriga element är oförändrade; fullständigt namn nås via title-attribut eller sr-only
+- [x] #3 Under listan finns 'Sätt alla belopp:' med knapparna Anmälningsavgift och Hela beloppet; ett tryck sätter varje markerad rads belopp till radens egen kandidat (avgiftKvar respektive kvar); rader utan kandidat och Behöver-din-hand-högen rörs inte; avstämningen och summaraden räknar om
+- [x] #4 Appens förslag per rad står kvar tills en knapp trycks; per-rad-redigering efteråt fungerar som förut; knapparna nås med tangentbord, bär tydliga namn för skärmläsare och trycket annonseras i statusraden; axe-svep utan fel
+- [x] #5 Nya facit-bilder för de berörda lägena och en AMENDERING-fil i tasks/sessions/bilagor/s121-bekraftelsesteget-konvergens/; ariaSnapshot-referenserna omtagna; api-pure-tester täcker sätt-alla-regeln inklusive rad utan kandidat
 - [ ] #6 Marcus har granskat den nya formen mot facit-bilderna på desktop 1440 och iPad 820 (ersätter 402.3 AC #10:s granskning på den gamla formen)
 <!-- AC:END -->
 

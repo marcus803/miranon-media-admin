@@ -12,16 +12,16 @@
       - text: Björn Sjöberg Markerad
       - button "Ändra belopp för Björn Sjöberg": /1 \d+ kr/
     - listitem:
-      - checkbox "Cecilia Malm Förfallen Markerad" [checked]
-      - text: Cecilia Malm Förfallen Markerad
+      - checkbox "Cecilia Malm Markerad" [checked]
+      - text: Cecilia Malm Markerad
       - button "Ändra belopp för Cecilia Malm": /1 \d+ kr/
     - listitem:
       - checkbox "David Ek Markerad" [checked]
       - text: David Ek Markerad
       - button "Ändra belopp för David Ek": /1 \d+ kr/
     - listitem:
-      - checkbox "Erik Holm Obekräftad Markerad" [checked]
-      - text: Erik Holm Obekräftad Markerad
+      - checkbox "Erik Holm Markerad" [checked]
+      - text: Erik Holm Markerad
       - button "Ändra belopp för Erik Holm": /1 \d+ kr/
     - listitem:
       - checkbox "Fatima Nouri Markerad" [checked]
@@ -47,6 +47,10 @@
       - checkbox "Johan Lund Markerad" [checked]
       - text: Johan Lund Markerad
       - button "Ändra belopp för Johan Lund": /1 \d+ kr/
+- text: "Sätt alla belopp:"
+- button "Sätt alla belopp till anmälningsavgiften"
+- button "Sätt alla belopp till hela beloppet"
+- status
 - term: 6 anmälningsavgifter
 - definition: /6 \d+ kr/
 - term: 4 slutbetalningar
