@@ -141,7 +141,7 @@
  * knappar.
  */
 import { useQuery } from '@tanstack/react-query';
-import { Link, useLocation } from '@tanstack/react-router';
+import { Link, useLocation, useNavigate } from '@tanstack/react-router';
 import {
   Check,
   ChevronDown,
@@ -2910,11 +2910,29 @@ function GranskningsSida({
  * `git log -p -- src/components/events/atgarder/AtgardsSida.tsx`).
  * ================================================================== */
 
+/**
+ * [TASK-402.5 AC #1] De MARKERADE personernas anmälnings-record-ID:n, i den
+ * kommaseparerade form `Bekraftelesteget`s `ids`-sökparameter kräver
+ * (`Bekraftelesteget.tsx` § "URVALET KOMMER UR `ids`" — samma nyckel
+ * `raderPerAnmalan`/`PanelBetalningar` ovan redan slår upp anmälningar på).
+ *
+ * EN REN HÄRLEDNING, INGEN EGEN MARKERINGSMEKANIK: mataren ÅTERANVÄNDER
+ * `mottagare` rakt av — samma markering `AtgardsMeny`/`MottagarYta` redan
+ * räknar på ("N av M … markerade") — i stället för att bygga en
+ * betalningsspecifik urvalsmodell vid sidan av. PRD § Routen och matarna:
+ * "Åtgärds-sidans markerade personer i ett event" är EN av de tre matarna,
+ * inte en fjärde markeringsform.
+ */
+function anmalningsIdsCsv(mottagare: readonly Registration[]): string {
+  return mottagare.map((r) => r.id).join(',');
+}
+
 /* ================================================================== *
  * SIDAN
  * ================================================================== */
 export function AtgardsSida({ eventId }: { eventId?: string }) {
   const dataSource = useDataSource();
+  const navigate = useNavigate();
   /* MARKERINGEN hon kom hit med (TASK-228, SKARP sedan denna skiva). Kommer
      hon från registret (eventdetaljens markera-läge → Åtgärder) levereras
      urvalet i navigeringens history-state, `mmAtgardsUrval` — ett
@@ -3174,10 +3192,42 @@ export function AtgardsSida({ eventId }: { eventId?: string }) {
                    per person, av anropsbudget-skäl (`PanelBetalningar`s
                    docblock § INBETALNINGARNA HÄMTAS FÖRST NÄR RADEN FÄLLS UT). */
                 eventId && (
-                  <BetalningsSkrivYta
-                    eventId={eventId}
-                    registreringar={alla.filter(arAktivAnmalan)}
-                  />
+                  <>
+                    {/* [TASK-402.5 AC #1] "Registrera inbetalning för N markerade"
+                        — mataren mot Bekräftelsesteget (PRD § Routen och
+                        matarna, berättelse 22). Döljs helt vid noll markerade:
+                        en synlig knapp utan verkan (`isDisabled`) hade varit en
+                        kontroll som ser ut som en kontroll men inte är det —
+                        samma bedömning Marcus GO 2026-09-01 redan gjorde för
+                        kryss-vertikalen (se `BetalningsSkrivYta` § FLAGG PÅ).
+
+                        GATAD på `betalningarPa()` genom att bara stå i DENNA
+                        gren (flagg-PÅ): routen `/mer/betalningar/registrera`
+                        redirectar till `/mer` när flaggan är av
+                        (`betalningar_.registrera.tsx` § `beforeLoad`) — en
+                        knapp i flagg-AV-världen hade lovat en resa som aldrig
+                        bär fram. */}
+                    {mottagare.length > 0 && (
+                      <div className="flex justify-end border-border border-b px-4 py-3">
+                        <Button
+                          intent="primary"
+                          size="sm"
+                          onPress={() =>
+                            navigate({
+                              to: '/mer/betalningar/registrera',
+                              search: { ids: anmalningsIdsCsv(mottagare) },
+                            })
+                          }
+                        >
+                          {`Registrera inbetalning för ${mottagare.length} markerade`}
+                        </Button>
+                      </div>
+                    )}
+                    <BetalningsSkrivYta
+                      eventId={eventId}
+                      registreringar={alla.filter(arAktivAnmalan)}
+                    />
+                  </>
                 )
               ) : (
                 <>
